@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import asyncio
 import os
+import re
 import signal
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 
 _KILL_DRAIN_TIMEOUT = 2  # seconds to wait for process to exit after SIGKILL
@@ -198,6 +200,101 @@ class LocalBackend:
         return FileEditResult(
             success=replacements_made > 0, replacements_made=replacements_made
         )
+
+    def file_list(self, path: str = ".") -> list[dict[str, Any]] | None:
+        """List directory entries within the workspace.
+
+        Args:
+            path: Relative path to the directory within the workspace (default '.').
+
+        Returns:
+            List of dicts with 'name', 'type' ('file'/'dir'), and 'size' (for files),
+            or None if the path is invalid, escapes the workspace, or is not a directory.
+        """
+        resolved = self._resolve_path(path)
+        if resolved is None or not resolved.is_dir():
+            return None
+
+        entries: list[dict[str, Any]] = []
+        for item in sorted(resolved.iterdir()):
+            if item.is_dir():
+                entries.append({"name": item.name, "type": "dir"})
+            else:
+                entries.append(
+                    {"name": item.name, "type": "file", "size": item.stat().st_size}
+                )
+        return entries
+
+    def file_glob(self, pattern: str, path: str = ".") -> list[str] | None:
+        """Match files using a glob pattern within the workspace.
+
+        Args:
+            pattern: Glob pattern (e.g. '*.py', '**/*.py').
+            path: Relative path to the base directory (default '.').
+
+        Returns:
+            List of posix-style relative paths matching the pattern,
+            or None if the base path is not found or escapes workspace.
+        """
+        resolved = self._resolve_path(path)
+        if resolved is None or not resolved.exists():
+            return None
+
+        matches = []
+        for match in sorted(resolved.glob(pattern)):
+            rel = match.relative_to(resolved)
+            matches.append(rel.as_posix())
+        return matches
+
+    def file_grep(self, pattern: str, path: str = ".") -> list[dict[str, Any]] | None:
+        """Search file contents with a regex pattern within the workspace.
+
+        Args:
+            pattern: Regular expression pattern to search for.
+            path: Relative path to a file or directory (default '.').
+                  If a file, searches that file.
+                  If a directory, searches recursively.
+
+        Returns:
+            List of dicts with 'file', 'line', and 'content' for each match.
+            Returns empty list if the pattern is invalid or has no matches.
+            Returns None if the path escapes the workspace.
+        """
+        resolved = self._resolve_path(path)
+        if resolved is None:
+            return None
+
+        try:
+            compiled = re.compile(pattern)
+        except re.error:
+            return []
+
+        results: list[dict[str, Any]] = []
+
+        def _search_file(file_path: Path) -> None:
+            try:
+                text = file_path.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                return
+            for line_num, line_content in enumerate(text.splitlines(), start=1):
+                if compiled.search(line_content):
+                    rel = file_path.relative_to(self.workspace_dir)
+                    results.append(
+                        {
+                            "file": rel.as_posix(),
+                            "line": line_num,
+                            "content": line_content,
+                        }
+                    )
+
+        if resolved.is_file():
+            _search_file(resolved)
+        elif resolved.is_dir():
+            for file_path in sorted(resolved.rglob("*")):
+                if file_path.is_file():
+                    _search_file(file_path)
+
+        return results
 
     def _resolve_working_dir(self, working_dir: str | None) -> Path:
         """Resolve working_dir and verify it is within workspace_dir."""

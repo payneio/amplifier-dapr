@@ -183,3 +183,114 @@ class TestFileEdit:
         """file_edit() returns None when the file does not exist."""
         result = backend.file_edit("ghost.txt", "old", "new")
         assert result is None
+
+
+class TestFileList:
+    """Tests for LocalBackend.file_list()."""
+
+    @pytest.fixture
+    def backend(self, tmp_path: Path) -> LocalBackend:
+        """Create a LocalBackend with a temporary workspace directory."""
+        return LocalBackend(workspace_dir=tmp_path)
+
+    @pytest.fixture
+    def populated_dir(self, tmp_path: Path) -> Path:
+        """Create a directory with known files and subdirectory."""
+        (tmp_path / "a.txt").write_text("file a\n")
+        (tmp_path / "b.txt").write_text("file b\n")
+        (tmp_path / "subdir").mkdir()
+        return tmp_path
+
+    def test_list_directory(self, backend: LocalBackend, populated_dir: Path) -> None:
+        """file_list() finds a.txt, b.txt, and subdir in the directory."""
+        result = backend.file_list(".")
+        assert result is not None
+        names = {entry["name"] for entry in result}
+        assert "a.txt" in names
+        assert "b.txt" in names
+        assert "subdir" in names
+
+    def test_list_entries_have_type(
+        self, backend: LocalBackend, populated_dir: Path
+    ) -> None:
+        """file_list() entries have type 'file' for files and 'dir' for directories."""
+        result = backend.file_list(".")
+        assert result is not None
+        by_name = {entry["name"]: entry for entry in result}
+        assert by_name["a.txt"]["type"] == "file"
+        assert by_name["subdir"]["type"] == "dir"
+
+    def test_list_nonexistent(self, backend: LocalBackend) -> None:
+        """file_list() returns None for a nonexistent path."""
+        result = backend.file_list("nonexistent_dir")
+        assert result is None
+
+
+class TestFileGlob:
+    """Tests for LocalBackend.file_glob()."""
+
+    @pytest.fixture
+    def backend(self, tmp_path: Path) -> LocalBackend:
+        """Create a LocalBackend with a temporary workspace directory."""
+        return LocalBackend(workspace_dir=tmp_path)
+
+    @pytest.fixture
+    def populated_dir(self, tmp_path: Path) -> Path:
+        """Create a directory with .py and .txt files including nested."""
+        (tmp_path / "main.py").write_text("def main(): pass\n")
+        (tmp_path / "readme.txt").write_text("readme\n")
+        nested = tmp_path / "pkg"
+        nested.mkdir()
+        (nested / "utils.py").write_text("def helper(): pass\n")
+        return tmp_path
+
+    def test_glob_pattern(self, backend: LocalBackend, populated_dir: Path) -> None:
+        """file_glob('*.py') finds .py files but not .txt files."""
+        result = backend.file_glob("*.py")
+        assert result is not None
+        assert any(p.endswith(".py") for p in result)
+        assert not any(p.endswith(".txt") for p in result)
+
+    def test_glob_recursive(self, backend: LocalBackend, populated_dir: Path) -> None:
+        """file_glob('**/*.py') finds nested .py files."""
+        result = backend.file_glob("**/*.py")
+        assert result is not None
+        # Should find both main.py and pkg/utils.py
+        assert len(result) >= 2
+        assert any("utils.py" in p for p in result)
+
+
+class TestFileGrep:
+    """Tests for LocalBackend.file_grep()."""
+
+    @pytest.fixture
+    def backend(self, tmp_path: Path) -> LocalBackend:
+        """Create a LocalBackend with a temporary workspace directory."""
+        return LocalBackend(workspace_dir=tmp_path)
+
+    @pytest.fixture
+    def populated_dir(self, tmp_path: Path) -> Path:
+        """Create files with known function definitions."""
+        (tmp_path / "funcs.py").write_text(
+            "def foo():\n    pass\n\ndef bar():\n    return 1\n"
+        )
+        (tmp_path / "notes.txt").write_text("no functions here\n")
+        return tmp_path
+
+    def test_grep_finds_matches(
+        self, backend: LocalBackend, populated_dir: Path
+    ) -> None:
+        """file_grep('def \\w+') finds 2 function definitions."""
+        result = backend.file_grep(r"def \w+")
+        assert result is not None
+        assert len(result) == 2
+        for match in result:
+            assert "file" in match
+            assert "line" in match
+            assert "content" in match
+
+    def test_grep_no_matches(self, backend: LocalBackend, populated_dir: Path) -> None:
+        """file_grep() returns empty list when pattern has no matches."""
+        result = backend.file_grep("THIS_PATTERN_WILL_NOT_MATCH_ANYTHING_XYZ")
+        assert result is not None
+        assert result == []

@@ -52,6 +52,26 @@ class FileEditRequest(BaseModel):
     replace_all: bool = False
 
 
+class FileListRequest(BaseModel):
+    """Request body for POST /files/list."""
+
+    path: str = "."
+
+
+class FileGlobRequest(BaseModel):
+    """Request body for POST /files/glob."""
+
+    pattern: str
+    path: str = "."
+
+
+class FileGrepRequest(BaseModel):
+    """Request body for POST /files/grep."""
+
+    pattern: str
+    path: str = "."
+
+
 def create_machine_app(workspace_dir: Path) -> FastAPI:
     """Create the svc-machine FastAPI application.
 
@@ -116,5 +136,31 @@ def create_machine_app(workspace_dir: Path) -> FastAPI:
             "success": result.success,
             "replacements_made": result.replacements_made,
         }
+
+    @app.post("/files/list")
+    def list_files(request: FileListRequest) -> dict:
+        """List directory entries within the workspace."""
+        entries = backend.file_list(request.path)
+        if entries is None:
+            raise HTTPException(
+                status_code=404, detail="Path not found or not a directory"
+            )
+        return {"entries": entries}
+
+    @app.post("/files/glob")
+    def glob_files(request: FileGlobRequest) -> dict:
+        """Match files using a glob pattern within the workspace."""
+        matches = backend.file_glob(request.pattern, request.path)
+        if matches is None:
+            raise HTTPException(status_code=404, detail="Base path not found")
+        return {"matches": matches}
+
+    @app.post("/files/grep")
+    def grep_files(request: FileGrepRequest) -> dict:
+        """Search file contents with a regex pattern within the workspace."""
+        matches = backend.file_grep(request.pattern, request.path)
+        if matches is None:
+            raise HTTPException(status_code=404, detail="Path not found")
+        return {"matches": matches}
 
     return app
