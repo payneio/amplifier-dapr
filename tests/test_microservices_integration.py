@@ -90,11 +90,13 @@ class TestServiceContracts:
 class TestEndToEndExecution:
     """End-to-end tests verifying the full svc-bash -> svc-machine -> subprocess chain."""
 
-    async def test_bash_echo_via_machine(self, workspace: Path) -> None:
-        """BashTool routes 'echo hello from bash' through the machine service in-process."""
-        machine_app = create_machine_app(workspace)
-        machine_client = TestClient(machine_app)
+    def _make_patched_tool(self, workspace: Path) -> tuple[BashTool, Any]:
+        """Return (tool, patcher) with _call_machine_exec wired to a TestClient.
 
+        The patcher is a context manager; use it with `with patcher:` around the
+        async tool.execute() call so the real HTTP layer is bypassed in-process.
+        """
+        machine_client = TestClient(create_machine_app(workspace))
         tool = BashTool(machine_base_url="http://fake-machine:8080")
 
         async def _fake_call(command: str, timeout: int = 30) -> dict[str, Any]:
@@ -104,7 +106,12 @@ class TestEndToEndExecution:
             resp.raise_for_status()
             return resp.json()  # type: ignore[no-any-return]
 
-        with patch.object(tool, "_call_machine_exec", new=_fake_call):
+        return tool, patch.object(tool, "_call_machine_exec", new=_fake_call)
+
+    async def test_bash_echo_via_machine(self, workspace: Path) -> None:
+        """BashTool routes 'echo hello from bash' through the machine service in-process."""
+        tool, patcher = self._make_patched_tool(workspace)
+        with patcher:
             result = await tool.execute({"command": "echo hello from bash"})
 
         assert result.success is True
@@ -113,19 +120,8 @@ class TestEndToEndExecution:
 
     async def test_bash_reads_workspace_file(self, workspace: Path) -> None:
         """BashTool can cat hello.txt via the machine service in-process."""
-        machine_app = create_machine_app(workspace)
-        machine_client = TestClient(machine_app)
-
-        tool = BashTool(machine_base_url="http://fake-machine:8080")
-
-        async def _fake_call(command: str, timeout: int = 30) -> dict[str, Any]:
-            resp = machine_client.post(
-                "/exec", json={"command": command, "timeout": timeout}
-            )
-            resp.raise_for_status()
-            return resp.json()  # type: ignore[no-any-return]
-
-        with patch.object(tool, "_call_machine_exec", new=_fake_call):
+        tool, patcher = self._make_patched_tool(workspace)
+        with patcher:
             result = await tool.execute({"command": "cat hello.txt"})
 
         assert result.success is True
