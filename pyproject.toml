@@ -36,7 +36,12 @@ packages = ["src/amplifier_ipc"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
-pythonpath = ["src"]
+pythonpath = [
+    "src",
+    "amplifier-service-sdk/src",
+    "services/svc-machine/src",
+    "services/svc-bash/src",
+]
 markers = [
     "slow: marks tests as slow-running (requires real service subprocesses)",
 ]
@@ -46,4 +51,10 @@ amplifier-ipc-protocol = { path = "./amplifier-ipc-protocol" }
 
 [tool.pyright]
 pythonVersion = "3.11"
-extraPaths = ["src", "amplifier-ipc-protocol/src"]
+extraPaths = [
+    "src",
+    "amplifier-ipc-protocol/src",
+    "amplifier-service-sdk/src",
+    "services/svc-machine/src",
+    "services/svc-bash/src",
+]
