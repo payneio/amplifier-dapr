@@ -37,9 +37,7 @@ class TestExec:
         """exec() kills the process and returns exit_code=124 on timeout."""
         result = await backend.exec("sleep 60", timeout=1)
         assert result.exit_code == 124
-        assert (
-            "timed out" in result.stdout.lower() or "timed out" in result.stderr.lower()
-        )
+        assert result.stdout == "Command timed out"
 
     async def test_working_dir(self, backend: LocalBackend, tmp_path: Path) -> None:
         """exec() runs command in the specified working directory."""

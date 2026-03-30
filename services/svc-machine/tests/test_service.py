@@ -35,6 +35,17 @@ class TestExecEndpoint:
         response = client.post("/exec", json={})
         assert response.status_code == 422
 
+    def test_working_dir_outside_workspace_returns_422(
+        self, client: TestClient
+    ) -> None:
+        """POST /exec returns 422 with error detail when working_dir escapes workspace."""
+        response = client.post(
+            "/exec",
+            json={"command": "echo hi", "working_dir": "/etc"},
+        )
+        assert response.status_code == 422
+        assert "outside workspace" in response.json()["detail"]
+
 
 class TestHealthz:
     """Tests for GET /healthz endpoint."""

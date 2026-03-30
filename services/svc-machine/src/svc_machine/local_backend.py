@@ -9,6 +9,9 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
+_KILL_DRAIN_TIMEOUT = 2  # seconds to wait for process to exit after SIGKILL
+
+
 @dataclass
 class ExecResult:
     """Result of a subprocess execution."""
@@ -68,7 +71,7 @@ class LocalBackend:
                 pass
             # Drain any remaining output
             try:
-                await asyncio.wait_for(process.wait(), timeout=2)
+                await asyncio.wait_for(process.wait(), timeout=_KILL_DRAIN_TIMEOUT)
             except asyncio.TimeoutError:
                 pass
             return ExecResult(

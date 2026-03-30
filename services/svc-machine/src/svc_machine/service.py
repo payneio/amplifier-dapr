@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
 from amplifier_service_sdk.service import ServiceConfig, create_app
@@ -48,11 +48,14 @@ def create_machine_app(workspace_dir: Path) -> FastAPI:
     @app.post("/exec")
     async def exec_command(request: ExecRequest) -> ExecResponse:
         """Execute a shell command within the workspace directory."""
-        result = await backend.exec(
-            command=request.command,
-            timeout=request.timeout,
-            working_dir=request.working_dir,
-        )
+        try:
+            result = await backend.exec(
+                command=request.command,
+                timeout=request.timeout,
+                working_dir=request.working_dir,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
         return ExecResponse(
             stdout=result.stdout,
             stderr=result.stderr,
