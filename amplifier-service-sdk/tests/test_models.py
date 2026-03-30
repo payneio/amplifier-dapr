@@ -177,7 +177,7 @@ class TestProviderResponse:
             usage={"input_tokens": 10, "output_tokens": 20},
         )
         assert resp.content == "Hello there"
-        assert len(resp.tool_calls) == 1
+        assert resp.tool_calls == [{"name": "search", "input": {}}]
         assert resp.usage == {"input_tokens": 10, "output_tokens": 20}
 
     def test_optional_fields_default_none(self):
