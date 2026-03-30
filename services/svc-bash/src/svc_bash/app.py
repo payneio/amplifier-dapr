@@ -54,3 +54,6 @@ def create_bash_app(machine_base_url: str | None = None) -> FastAPI:
         return result.model_dump()
 
     return app
+
+
+app = create_bash_app()

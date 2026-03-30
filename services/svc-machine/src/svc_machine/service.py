@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
@@ -164,3 +165,7 @@ def create_machine_app(workspace_dir: Path) -> FastAPI:
         return {"matches": matches}
 
     return app
+
+
+_workspace = Path(os.environ.get("WORKSPACE_DIR", "/workspace"))
+app = create_machine_app(workspace_dir=_workspace)

@@ -6,10 +6,22 @@ from typing import Any
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from svc_bash.app import create_bash_app
 from svc_bash.tool import BashTool
+
+
+class TestModuleLevelApp:
+    """Tests for the module-level app object in svc_bash.app."""
+
+    def test_module_exposes_app(self) -> None:
+        """svc_bash.app must expose a module-level FastAPI 'app' object."""
+        from svc_bash import app as app_module  # noqa: PLC0415
+
+        assert hasattr(app_module, "app"), "app.py must define a module-level 'app'"
+        assert isinstance(app_module.app, FastAPI)
 
 
 class TestBashTool:

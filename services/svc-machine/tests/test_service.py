@@ -3,9 +3,21 @@
 from pathlib import Path
 
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from svc_machine.service import create_machine_app
+
+
+class TestModuleLevelApp:
+    """Tests for the module-level app object."""
+
+    def test_module_exposes_app(self) -> None:
+        """svc_machine.service must expose a module-level FastAPI 'app' object."""
+        from svc_machine import service  # noqa: PLC0415
+
+        assert hasattr(service, "app"), "service.py must define a module-level 'app'"
+        assert isinstance(service.app, FastAPI)
 
 
 @pytest.fixture
