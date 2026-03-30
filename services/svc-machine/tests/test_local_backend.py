@@ -4,7 +4,12 @@ from pathlib import Path
 
 import pytest
 
-from svc_machine.local_backend import ExecResult, LocalBackend
+from svc_machine.local_backend import (
+    ExecResult,
+    FileEditResult,
+    FileReadResult,
+    LocalBackend,
+)
 
 
 class TestExec:
@@ -54,3 +59,127 @@ class TestExec:
         """exec() raises ValueError when working_dir is outside workspace_dir."""
         with pytest.raises(ValueError, match="outside workspace"):
             await backend.exec("echo hi", working_dir="/etc")
+
+
+class TestFileRead:
+    """Tests for LocalBackend.file_read()."""
+
+    @pytest.fixture
+    def backend(self, tmp_path: Path) -> LocalBackend:
+        """Create a LocalBackend with a temporary workspace directory."""
+        return LocalBackend(workspace_dir=tmp_path)
+
+    def test_read_file(self, backend: LocalBackend, tmp_path: Path) -> None:
+        """file_read() returns content and total_lines for a 3-line file."""
+        test_file = tmp_path / "test.txt"
+        test_file.write_text("line1\nline2\nline3\n")
+        result = backend.file_read("test.txt")
+        assert result is not None
+        assert isinstance(result, FileReadResult)
+        assert result.total_lines == 3
+        assert "line1" in result.content
+        assert "line2" in result.content
+        assert "line3" in result.content
+
+    def test_read_with_offset_and_limit(
+        self, backend: LocalBackend, tmp_path: Path
+    ) -> None:
+        """file_read() respects 1-based offset and line limit."""
+        test_file = tmp_path / "test.txt"
+        test_file.write_text("line1\nline2\nline3\nline4\nline5\n")
+        result = backend.file_read("test.txt", offset=2, limit=2)
+        assert result is not None
+        assert "line2" in result.content
+        assert "line3" in result.content
+        assert "line1" not in result.content
+        assert "line4" not in result.content
+
+    def test_read_nonexistent(self, backend: LocalBackend) -> None:
+        """file_read() returns None for a nonexistent file."""
+        result = backend.file_read("nonexistent.txt")
+        assert result is None
+
+    def test_read_path_traversal(self, backend: LocalBackend) -> None:
+        """file_read() returns None when path escapes the workspace."""
+        result = backend.file_read("../../../etc/passwd")
+        assert result is None
+
+
+class TestFileWrite:
+    """Tests for LocalBackend.file_write()."""
+
+    @pytest.fixture
+    def backend(self, tmp_path: Path) -> LocalBackend:
+        """Create a LocalBackend with a temporary workspace directory."""
+        return LocalBackend(workspace_dir=tmp_path)
+
+    def test_write_new_file(self, backend: LocalBackend, tmp_path: Path) -> None:
+        """file_write() creates a new file with given content."""
+        result = backend.file_write("newfile.txt", "hello world\n")
+        assert result is True
+        assert (tmp_path / "newfile.txt").read_text() == "hello world\n"
+
+    def test_write_overwrites(self, backend: LocalBackend, tmp_path: Path) -> None:
+        """file_write() overwrites an existing file."""
+        test_file = tmp_path / "existing.txt"
+        test_file.write_text("old content\n")
+        result = backend.file_write("existing.txt", "new content\n")
+        assert result is True
+        assert test_file.read_text() == "new content\n"
+
+    def test_write_creates_parent_dirs(
+        self, backend: LocalBackend, tmp_path: Path
+    ) -> None:
+        """file_write() creates intermediate parent directories."""
+        result = backend.file_write("subdir/nested/file.txt", "data\n")
+        assert result is True
+        assert (tmp_path / "subdir" / "nested" / "file.txt").read_text() == "data\n"
+
+    def test_write_path_traversal(self, backend: LocalBackend) -> None:
+        """file_write() returns False when path escapes workspace."""
+        result = backend.file_write("../../../tmp/evil.txt", "bad content")
+        assert result is False
+
+
+class TestFileEdit:
+    """Tests for LocalBackend.file_edit()."""
+
+    @pytest.fixture
+    def backend(self, tmp_path: Path) -> LocalBackend:
+        """Create a LocalBackend with a temporary workspace directory."""
+        return LocalBackend(workspace_dir=tmp_path)
+
+    def test_edit_replace(self, backend: LocalBackend, tmp_path: Path) -> None:
+        """file_edit() replaces first occurrence and returns replacements_made=1."""
+        test_file = tmp_path / "test.txt"
+        test_file.write_text("foo bar foo\n")
+        result = backend.file_edit("test.txt", "foo", "baz")
+        assert result is not None
+        assert isinstance(result, FileEditResult)
+        assert result.replacements_made == 1
+        assert result.success is True
+        assert test_file.read_text() == "baz bar foo\n"
+
+    def test_edit_replace_all(self, backend: LocalBackend, tmp_path: Path) -> None:
+        """file_edit() with replace_all=True replaces all occurrences."""
+        test_file = tmp_path / "test.txt"
+        test_file.write_text("foo bar foo\n")
+        result = backend.file_edit("test.txt", "foo", "baz", replace_all=True)
+        assert result is not None
+        assert result.replacements_made == 2
+        assert result.success is True
+        assert test_file.read_text() == "baz bar baz\n"
+
+    def test_edit_no_match(self, backend: LocalBackend, tmp_path: Path) -> None:
+        """file_edit() returns replacements_made=0 when old_string not found."""
+        test_file = tmp_path / "test.txt"
+        test_file.write_text("hello world\n")
+        result = backend.file_edit("test.txt", "nonexistent", "replacement")
+        assert result is not None
+        assert result.replacements_made == 0
+        assert result.success is False
+
+    def test_edit_nonexistent_file(self, backend: LocalBackend) -> None:
+        """file_edit() returns None when the file does not exist."""
+        result = backend.file_edit("ghost.txt", "old", "new")
+        assert result is None
