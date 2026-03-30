@@ -219,6 +219,8 @@ class TestFileList:
         by_name = {entry["name"]: entry for entry in result}
         assert by_name["a.txt"]["type"] == "file"
         assert by_name["subdir"]["type"] == "dir"
+        assert "size" in by_name["a.txt"]
+        assert isinstance(by_name["a.txt"]["size"], int)
 
     def test_list_nonexistent(self, backend: LocalBackend) -> None:
         """file_list() returns None for a nonexistent path."""

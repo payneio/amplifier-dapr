@@ -237,7 +237,7 @@ class LocalBackend:
             or None if the base path is not found or escapes workspace.
         """
         resolved = self._resolve_path(path)
-        if resolved is None or not resolved.exists():
+        if resolved is None or not resolved.is_dir():
             return None
 
         matches = []
