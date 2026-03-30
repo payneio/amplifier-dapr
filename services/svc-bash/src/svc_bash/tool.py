@@ -8,6 +8,8 @@ import httpx
 
 from amplifier_service_sdk.models import ToolResult
 
+_DEFAULT_TIMEOUT_SECONDS = 30
+
 
 class BashTool:
     """Tool that forwards bash command execution to svc-machine over HTTP."""
@@ -23,7 +25,7 @@ class BashTool:
             },
             "timeout": {
                 "type": "integer",
-                "default": 30,
+                "default": _DEFAULT_TIMEOUT_SECONDS,
                 "description": "Command timeout in seconds",
             },
             "run_in_background": {
@@ -60,7 +62,7 @@ class BashTool:
                 error={"message": "command is required"},
             )
 
-        timeout = int(input.get("timeout", 30))
+        timeout = int(input.get("timeout", _DEFAULT_TIMEOUT_SECONDS))
 
         machine_result = await self._call_machine_exec(command, timeout)
 
@@ -75,7 +77,7 @@ class BashTool:
         )
 
     async def _call_machine_exec(
-        self, command: str, timeout: int = 30
+        self, command: str, timeout: int = _DEFAULT_TIMEOUT_SECONDS
     ) -> dict[str, Any]:
         """POST to the machine service /exec endpoint.
 
@@ -86,6 +88,7 @@ class BashTool:
         Returns:
             Parsed JSON response dict from the machine service.
         """
+        # run_in_background is declared in the schema for future use but not yet forwarded
         http_timeout = timeout + 10
         async with httpx.AsyncClient(timeout=http_timeout) as client:
             response = await client.post(

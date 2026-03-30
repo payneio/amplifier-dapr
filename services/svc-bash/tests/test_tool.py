@@ -40,9 +40,11 @@ class TestBashTool:
 
     @pytest.mark.asyncio
     async def test_execute_missing_command(self, tool: BashTool) -> None:
-        """execute() with empty input returns success=False."""
+        """execute() with empty input returns success=False with descriptive error."""
         result = await tool.execute({})
         assert result.success is False
+        assert result.error is not None
+        assert "command" in result.error["message"]
 
     @pytest.mark.asyncio
     async def test_execute_machine_failure(self, tool: BashTool) -> None:

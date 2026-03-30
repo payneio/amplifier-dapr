@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from typing import Any
 
 from fastapi import FastAPI
 
@@ -47,7 +48,7 @@ def create_bash_app(machine_base_url: str | None = None) -> FastAPI:
     app = create_app(config)
 
     @app.post("/tools/bash/execute")
-    async def execute_bash(request: ToolRequest) -> dict:
+    async def execute_bash(request: ToolRequest) -> dict[str, Any]:
         """Execute a bash command via the machine service."""
         result = await tool.execute(request.input)
         return result.model_dump()
