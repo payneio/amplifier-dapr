@@ -64,7 +64,18 @@ class BashTool:
 
         timeout = int(input.get("timeout", _DEFAULT_TIMEOUT_SECONDS))
 
-        machine_result = await self._call_machine_exec(command, timeout)
+        try:
+            machine_result = await self._call_machine_exec(command, timeout)
+        except httpx.HTTPStatusError as exc:
+            return ToolResult(
+                success=False,
+                error={"message": f"machine service error: {exc.response.status_code}"},
+            )
+        except httpx.RequestError as exc:
+            return ToolResult(
+                success=False,
+                error={"message": f"machine service unreachable: {exc}"},
+            )
 
         exit_code: int = machine_result.get("exit_code", 1)
         return ToolResult(

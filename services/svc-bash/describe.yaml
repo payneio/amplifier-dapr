@@ -11,7 +11,7 @@ tools:
           description: Shell command to execute
         timeout:
           type: integer
-          default: 30
+          default: 30  # must stay in sync with _DEFAULT_TIMEOUT_SECONDS in tool.py
           description: Command timeout in seconds
         run_in_background:
           type: boolean

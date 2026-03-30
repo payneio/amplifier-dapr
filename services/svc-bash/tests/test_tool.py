@@ -62,6 +62,41 @@ class TestBashTool:
         assert result.success is False
         assert result.output is not None
         assert result.output["returncode"] == 127
+        assert result.output["stderr"] == "command not found"
+
+    @pytest.mark.asyncio
+    async def test_execute_http_status_error_returns_structured_result(
+        self, tool: BashTool
+    ) -> None:
+        """execute() returns success=False with structured error on HTTP status error."""
+        import httpx
+
+        exc = httpx.HTTPStatusError(
+            "Server Error",
+            request=httpx.Request("POST", "http://fake-machine:8080/exec"),
+            response=httpx.Response(500),
+        )
+        with patch.object(tool, "_call_machine_exec", new=AsyncMock(side_effect=exc)):
+            result = await tool.execute({"command": "echo hello"})
+
+        assert result.success is False
+        assert result.error is not None
+        assert "500" in result.error["message"]
+
+    @pytest.mark.asyncio
+    async def test_execute_request_error_returns_structured_result(
+        self, tool: BashTool
+    ) -> None:
+        """execute() returns success=False with structured error when machine is unreachable."""
+        import httpx
+
+        exc = httpx.ConnectError("Connection refused")
+        with patch.object(tool, "_call_machine_exec", new=AsyncMock(side_effect=exc)):
+            result = await tool.execute({"command": "echo hello"})
+
+        assert result.success is False
+        assert result.error is not None
+        assert "unreachable" in result.error["message"]
 
 
 class TestBashApp:
