@@ -52,7 +52,7 @@ class SessionInfo(BaseModel):
 # Default services list
 # ---------------------------------------------------------------------------
 
-#: Phase 3a service app-ids discovered when TurnRequest.services is empty.
+#: Phase 3a + 3b service app-ids discovered when TurnRequest.services is empty.
 DEFAULT_SERVICES: list[str] = [
     "svc-bash",
     "svc-filesystem",
@@ -63,6 +63,12 @@ DEFAULT_SERVICES: list[str] = [
     "svc-modes",
     "svc-mock-provider",
     "svc-providers",
+    # Phase 3b: delegation and hook services
+    "svc-delegation",
+    "svc-hooks-approval",
+    "svc-hooks-routing",
+    "svc-hooks-async",
+    "svc-hooks-shell",
 ]
 
 

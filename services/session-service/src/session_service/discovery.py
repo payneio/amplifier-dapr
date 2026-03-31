@@ -50,6 +50,8 @@ def build_routing_table(
     tools: dict[str, str] = {}
     providers: dict[str, str] = {}
     hooks: dict[str, list[str]] = {}
+    hook_endpoints: dict[str, str] = {}
+    hook_priorities: dict[str, Any] = {}
     tool_specs: list[dict[str, Any]] = []
 
     for app_id, describe in describe_results.items():
@@ -67,17 +69,31 @@ def build_routing_table(
                 providers[name] = app_id
 
         # Map hooks: expand events list -> each event -> [app_id, ...]
+        # Only sync hooks (mode == 'sync' or no mode) are added to the routing table.
+        # Async hooks (mode == 'async') subscribe via Dapr pub/sub directly — skip them.
         for hook in describe.get("hooks", []):
+            mode: str = hook.get("mode", "sync")
+            if mode == "async":
+                continue
+
+            hook_name: str = hook.get("name", "")
             events: list[str] = hook.get("events", [])
             for event in events:
                 if event not in hooks:
                     hooks[event] = []
                 hooks[event].append(app_id)
 
+            # Register the endpoint and priority for this sync hook service
+            if hook_name:
+                hook_endpoints[app_id] = f"hooks/{hook_name}/invoke"
+            hook_priorities[app_id] = hook.get("priority", 0)
+
     return {
         "tools": tools,
         "providers": providers,
         "hooks": hooks,
+        "hook_endpoints": hook_endpoints,
+        "hook_priorities": hook_priorities,
         "_tool_specs": tool_specs,
         "context": context_app_id,
     }
