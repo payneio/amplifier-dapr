@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -176,7 +176,9 @@ class HookRegistration(BaseModel):
     name: str
     events: list[str] = Field(default_factory=list)
     priority: int = 50
-    mode: str = "sync"  # 'sync' = pre-hook blocking, 'async' = pub/sub subscriber
+    mode: Literal["sync", "async"] = (
+        "sync"  # 'sync' = pre-hook blocking, 'async' = pub/sub subscriber
+    )
 
 
 class DaprSubscription(BaseModel):

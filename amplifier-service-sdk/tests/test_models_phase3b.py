@@ -2,6 +2,8 @@
 
 import json
 
+import pytest
+
 from amplifier_service_sdk.models import (
     DaprSubscription,
     DescribeResponse,
@@ -77,6 +79,11 @@ class TestHookRegistration:
         assert recovered.events == reg.events
         assert recovered.priority == reg.priority
         assert recovered.mode == reg.mode
+
+    def test_invalid_mode_rejected(self):
+        """mode only accepts 'sync' or 'async'; any other value is a validation error."""
+        with pytest.raises(Exception):
+            HookRegistration(name="my-hook", mode="fire_and_forget")  # type: ignore[arg-type]
 
 
 class TestRoutingTableExtensions:
