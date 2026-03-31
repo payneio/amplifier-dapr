@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Any
+from unittest.mock import AsyncMock, patch
 
 import httpx
 import pytest
@@ -636,4 +637,68 @@ class TestToolDispatchEdgeCases:
         ), (
             f"Expected tool result message to contain 'error', "
             f"got: {context_tool_messages}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# TestProviderRetry
+# ---------------------------------------------------------------------------
+
+
+class TestProviderRetry:
+    """Provider dispatch retries on transient failures with exponential backoff."""
+
+    @pytest.mark.asyncio
+    async def test_retries_on_transient_failure(self) -> None:
+        """Provider raises ConnectionError on first call, succeeds on second; invoke_call_count==2."""
+        dapr = _make_dapr()
+        invoke_call_count = 0
+
+        async def mock_invoke(
+            app_id: str, method: str, data: dict[str, Any], **kwargs: Any
+        ) -> dict[str, Any]:
+            nonlocal invoke_call_count
+
+            if app_id == "svc-provider-mock" and "complete" in method:
+                invoke_call_count += 1
+                if invoke_call_count == 1:
+                    raise ConnectionError("transient network failure")
+                return {
+                    "content": "Recovered after retry",
+                    "tool_calls": None,
+                    "usage": None,
+                    "stop_reason": "end_turn",
+                }
+
+            return {"ok": True}
+
+        async def mock_invoke_get(
+            app_id: str, method: str, **kwargs: Any
+        ) -> dict[str, Any]:
+            return {"messages": [{"role": "user", "content": "Hello"}]}
+
+        async def mock_publish(*args: Any, **kwargs: Any) -> None:
+            pass
+
+        dapr.invoke = mock_invoke  # type: ignore[method-assign]
+        dapr.invoke_get = mock_invoke_get  # type: ignore[method-assign]
+        dapr.publish = mock_publish  # type: ignore[method-assign]
+
+        orch = Orchestrator(dapr=dapr)
+
+        with patch(
+            "svc_orchestrator.orchestrator.asyncio.sleep", new_callable=AsyncMock
+        ):
+            result_text, _ = await orch.execute(
+                system_prompt="You are a helpful assistant.",
+                messages=[Message(role="user", content="Hello")],
+                config={"provider": "mock"},
+                routing_table=_routing_table(),
+                session_id="session-retry-1",
+            )
+
+        assert "Recovered" in result_text
+        assert invoke_call_count == 2, (
+            f"Expected 2 provider invoke calls (1 failed + 1 succeeded), "
+            f"got {invoke_call_count}"
         )
