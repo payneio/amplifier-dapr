@@ -6,6 +6,7 @@ import logging
 from pathlib import Path
 from typing import Any, Literal
 
+import yaml
 from amplifier_service_sdk.models import HookResult
 
 logger = logging.getLogger(__name__)
@@ -17,12 +18,11 @@ def load_matrix_from_file(path: Path) -> dict:
     Returns an empty dict if the file is not found or cannot be parsed.
     """
     try:
-        import yaml
-
         with open(path) as f:
             data = yaml.safe_load(f)
         return data if isinstance(data, dict) else {}
     except Exception:
+        logger.warning("Failed to load routing matrix from %s", path)
         return {}
 
 
