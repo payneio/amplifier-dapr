@@ -48,7 +48,7 @@ def create_approval_hook_app(config: dict[str, Any] | None = None) -> FastAPI:
         return result.model_dump()
 
     @application.get("/dapr/subscribe")
-    async def dapr_subscribe() -> list:
+    async def dapr_subscribe() -> list[dict]:
         return []
 
     return application

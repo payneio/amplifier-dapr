@@ -68,6 +68,8 @@ def test_dapr_subscribe_returns_empty_list(client):
 # --- Test 6: module exposes app ---
 def test_module_exposes_app():
     from svc_hooks_approval import app as module
+
     assert hasattr(module, "app")
     from fastapi import FastAPI
+
     assert isinstance(module.app, FastAPI)

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import fnmatch
-from typing import Any
+from typing import Any, Literal
 
 from amplifier_service_sdk.models import HookResult
 
@@ -14,7 +14,7 @@ class ApprovalHook:
     name: str = "approval"
     events: list[str] = ["tool:pre"]
     priority: int = 5
-    mode: str = "sync"
+    mode: Literal["sync", "async"] = "sync"
 
     def __init__(self, config: dict[str, Any]) -> None:
         self.deny_tools: list[str] = config.get("deny_tools", [])
