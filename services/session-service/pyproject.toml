@@ -1,0 +1,40 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "session-service"
+version = "0.1.0"
+description = "Amplifier session service — manages conversation sessions with Dapr-backed orchestration"
+requires-python = ">=3.11"
+dependencies = [
+    "amplifier-service-sdk",
+    "httpx>=0.27",
+    "pyyaml>=6.0",
+]
+
+[tool.uv.sources]
+amplifier-service-sdk = { path = "../../amplifier-service-sdk" }
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/session_service"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.pyright]
+pythonVersion = "3.11"
+extraPaths = ["src"]
+venvPath = "."
+venv = ".venv"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "pyright>=1.1",
+    "ruff>=0.4",
+    "httpx>=0.28.1",
+]

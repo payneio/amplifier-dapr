@@ -1,0 +1,155 @@
+"""FastAPI app factory for session-service — manages conversation sessions via Dapr."""
+
+from __future__ import annotations
+
+import os
+from typing import Any
+
+import httpx
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+
+from amplifier_service_sdk.models import Message, RoutingTable
+from amplifier_service_sdk.service import ServiceConfig, create_app
+
+from session_service.content import assemble_system_prompt
+from session_service.discovery import discover_services
+from session_service.state import load_transcript, save_transcript
+
+
+# ---------------------------------------------------------------------------
+# Request / Response models
+# ---------------------------------------------------------------------------
+
+
+class TurnRequest(BaseModel):
+    """Request model for POST /sessions/{id}/turn."""
+
+    prompt: str
+    workspace_content: dict[str, str] = {}
+    agent_ref: str = "default"
+    services: list[str] = []
+    provider_name: str = "mock"
+
+
+class TurnResponse(BaseModel):
+    """Response model for POST /sessions/{id}/turn."""
+
+    session_id: str
+    result: str
+    messages: list[Message]
+
+
+class SessionInfo(BaseModel):
+    """Response model for GET /sessions/{id}."""
+
+    session_id: str
+    status: str
+    turn_count: int
+
+
+# ---------------------------------------------------------------------------
+# In-memory session store
+# ---------------------------------------------------------------------------
+
+_sessions: dict[str, dict[str, Any]] = {}
+
+
+# ---------------------------------------------------------------------------
+# App factory
+# ---------------------------------------------------------------------------
+
+
+def create_session_app(dapr_url: str | None = None) -> FastAPI:
+    """Create the session-service FastAPI application.
+
+    Registers SDK standard endpoints (/healthz, /describe) and session
+    management endpoints (/sessions/{id}/turn, /sessions/{id}).
+
+    Args:
+        dapr_url: Base URL of the Dapr HTTP sidecar. Defaults to
+                  http://localhost:{DAPR_HTTP_PORT} using the environment variable,
+                  falling back to http://localhost:3500.
+
+    Returns:
+        Configured FastAPI application.
+    """
+    config = ServiceConfig(name="session-service")
+    app = create_app(config)
+
+    if dapr_url is None:
+        port = os.environ.get("DAPR_HTTP_PORT", "3500")
+        dapr_url = f"http://localhost:{port}"
+
+    _dapr_url = dapr_url
+
+    @app.post("/sessions/{session_id}/turn")
+    async def turn(session_id: str, request: TurnRequest) -> dict[str, Any]:
+        """Execute a conversation turn within a session."""
+        # Create session if it doesn't exist
+        if session_id not in _sessions:
+            _sessions[session_id] = {"turn_count": 0, "status": "active"}
+
+        # Discover services and build routing table
+        routing_table: RoutingTable = discover_services(request.services)
+
+        # Assemble the system prompt from workspace content
+        system_prompt: str = assemble_system_prompt(
+            request.workspace_content, request.agent_ref
+        )
+
+        # Load existing transcript
+        transcript: list[Message] = load_transcript(session_id)
+
+        # Add user message to transcript
+        transcript.append(Message(role="user", content=request.prompt))
+
+        # Invoke orchestrator via Dapr service invocation
+        invoke_url = (
+            f"{_dapr_url}/v1.0/invoke/svc-orchestrator/method/orchestrator/execute"
+        )
+        payload = {
+            "system_prompt": system_prompt,
+            "messages": [m.model_dump() for m in transcript],
+            "config": {"provider_name": request.provider_name},
+            "routing_table": routing_table.model_dump(),
+            "session_id": session_id,
+        }
+        async with httpx.AsyncClient() as client:
+            response = await client.post(invoke_url, json=payload, timeout=120.0)
+            response.raise_for_status()
+            orch_result: dict[str, Any] = response.json()
+
+        result_text: str = orch_result.get("result", "")
+        result_messages: list[dict[str, Any]] = orch_result.get("messages", [])
+        messages = [Message(**m) for m in result_messages]
+
+        # Save transcript
+        save_transcript(session_id, messages)
+
+        # Increment turn count
+        _sessions[session_id]["turn_count"] += 1
+
+        return TurnResponse(
+            session_id=session_id,
+            result=result_text,
+            messages=messages,
+        ).model_dump()
+
+    @app.get("/sessions/{session_id}")
+    async def session_info(session_id: str) -> dict[str, Any]:
+        """Return session metadata."""
+        if session_id not in _sessions:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        session = _sessions[session_id]
+        return SessionInfo(
+            session_id=session_id,
+            status=session["status"],
+            turn_count=session["turn_count"],
+        ).model_dump()
+
+    return app
+
+
+app = create_session_app()
