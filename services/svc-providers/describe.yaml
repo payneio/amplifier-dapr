@@ -1,0 +1,4 @@
+name: svc-providers
+providers:
+  - name: anthropic
+    description: Anthropic Claude provider
