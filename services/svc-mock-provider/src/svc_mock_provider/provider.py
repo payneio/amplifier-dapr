@@ -15,13 +15,6 @@ from amplifier_service_sdk import (
 
 _INPUT_TOKENS = 50
 
-_SCHEMA_TYPE_DEFAULTS: dict[str, Any] = {
-    "string": "mock_{name}_value",
-    "integer": 1,
-    "number": 1,
-    "boolean": False,
-}
-
 
 def _default_args_for_tool(tool: ToolCapability) -> dict[str, Any]:
     """Generate sensible default arguments from a tool's input_schema."""
