@@ -2,8 +2,6 @@
 
 import json
 
-import pytest
-
 from amplifier_service_sdk.models import (
     DaprSubscription,
     DescribeResponse,
