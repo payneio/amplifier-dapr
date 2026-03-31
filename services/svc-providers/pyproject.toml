@@ -10,6 +10,7 @@ requires-python = ">=3.11"
 dependencies = [
     "amplifier-service-sdk",
     "anthropic>=0.40",
+    "openai>=1.50",
 ]
 
 [tool.uv.sources]

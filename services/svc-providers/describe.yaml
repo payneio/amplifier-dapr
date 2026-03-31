@@ -2,3 +2,7 @@ name: svc-providers
 providers:
   - name: anthropic
     description: Anthropic Claude provider
+  - name: openai
+    description: OpenAI provider
+  - name: azure-openai
+    description: Azure OpenAI provider
