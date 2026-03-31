@@ -1,0 +1,365 @@
+# Git Repo References
+#
+# Local clones in ./related-projects/ and upstream repos used for service migrations.
+# Services were migrated on 2026-03-20.
+#
+# source_type:
+#   local  — pinned in ./related-projects/
+#   gh     — commit resolved via GitHub API (no local clone)
+#   none   — no upstream repo
+
+# Amplifier Platform
+amplifier:
+  service: amplifier-amplifier
+  source: https://github.com/microsoft/amplifier
+  branch: main
+  head: 78c04fa5ae21d3c59f0ca658e212b45bbe8a4f54
+  last_updated: "2026-03-17T11:09:41-07:00"
+  source_type: local
+
+amplifier-core:
+  service: amplifier-core
+  source: https://github.com/microsoft/amplifier-core
+  branch: main
+  head: 7a99cbbcb6b191872e9ffd5cf4beed18a59511c2
+  last_updated: "2026-03-16T07:14:05-07:00"
+  source_type: local
+
+amplifier-foundation:
+  service: amplifier-foundation
+  source: https://github.com/microsoft/amplifier-foundation
+  branch: main
+  head: c2fdf5a2506eb4d12519703bf30005f98c2cfb17
+  last_updated: "2026-03-16T07:19:21-07:00"
+  source_type: local
+
+amplifier-app-cli:
+  service: null  # reference only
+  source: https://github.com/microsoft/amplifier-app-cli
+  branch: main
+  head: 1d84e62fa5d8a85d5a1a3a9306731de7fc773878
+  last_updated: "2026-03-13T23:54:26-07:00"
+  source_type: local
+
+# Bundles → Content Services
+amplifier-bundle-browser-tester:
+  service: amplifier-browser-tester
+  source: https://github.com/microsoft/amplifier-bundle-browser-tester
+  branch: main
+  head: 728beebcf323729e4e6664ee74d2e2d68c4bfb97
+  last_updated: "2026-03-01T23:07:37Z"
+  source_type: gh
+
+amplifier-bundle-design-intelligence:
+  service: amplifier-design-intelligence
+  source: https://github.com/microsoft/amplifier-bundle-design-intelligence
+  branch: main
+  head: 0d34c6bc55cf1ebde7ba913a0ef91d120ae3bfb5
+  last_updated: "2026-03-04T16:34:54Z"
+  source_type: gh
+
+amplifier-bundle-recipes:
+  service: amplifier-recipes
+  source: https://github.com/microsoft/amplifier-bundle-recipes
+  branch: main
+  head: 5ec95cb727794ebb1198d2495a08967a86a26b84
+  last_updated: "2026-03-19T04:51:09Z"
+  source_type: gh
+
+amplifier-bundle-routing-matrix:
+  service: amplifier-routing-matrix
+  source: https://github.com/microsoft/amplifier-bundle-routing-matrix
+  branch: main
+  head: 54a90ba861e5b937d0fc6f46703d55837cc2ccac
+  last_updated: "2026-03-08T07:44:44-07:00"
+  source_type: local
+
+amplifier-bundle-skills:
+  service: amplifier-skills
+  source: https://github.com/microsoft/amplifier-bundle-skills
+  branch: main
+  head: 573a75d5e843ec237734f517d17ae97c8089c2ba
+  last_updated: "2026-03-20T18:37:50Z"
+  source_type: gh
+
+amplifier-bundle-superpowers:
+  service: amplifier-superpowers
+  source: https://github.com/microsoft/amplifier-bundle-superpowers
+  branch: main
+  head: d39cf85e201b907efbabb67c212c279cff2ce9ac
+  last_updated: "2026-03-14T13:26:52Z"
+  source_type: gh
+
+# Orchestrators → services/amplifier-foundation
+amplifier-module-loop-basic:
+  service: amplifier-foundation
+  source: https://github.com/microsoft/amplifier-module-loop-basic
+  branch: main
+  head: 783b031e75cd425a2069855ad7f619781484c874
+  last_updated: "2026-03-20T15:14:27Z"
+  source_type: gh
+
+amplifier-module-loop-streaming:
+  service: amplifier-foundation
+  source: https://github.com/microsoft/amplifier-module-loop-streaming
+  branch: main
+  head: 9e4ce6b188b20116478a2707cd6f4984f71c1c1c
+  last_updated: "2026-03-20T15:14:27Z"
+  source_type: gh
+
+amplifier-module-loop-events:
+  service: amplifier-foundation
+  source: https://github.com/microsoft/amplifier-module-loop-events
+  branch: main
+  head: 83088fd32d899790cdf141c97b5edd50949d34c1
+  last_updated: "2026-03-20T15:14:27Z"
+  source_type: gh
+
+# Context Managers → services/amplifier-foundation
+amplifier-module-context-simple:
+  service: amplifier-foundation
+  source: https://github.com/microsoft/amplifier-module-context-simple
+  branch: main
+  head: f061c10578170dfea798c065408a30610cfb8b07
+  last_updated: "2026-03-04T07:39:28-08:00"
+  source_type: local
+
+amplifier-module-context-persistent:
+  service: amplifier-foundation
+  source: https://github.com/microsoft/amplifier-module-context-persistent
+  branch: main
+  head: dbfdeeb1576f06099b0dd9de1b3855146f1166ef
+  last_updated: "2026-03-02T00:56:38Z"
+  source_type: gh
+
+# Providers → services/amplifier-providers
+amplifier-module-provider-anthropic:
+  service: amplifier-providers
+  source: https://github.com/microsoft/amplifier-module-provider-anthropic
+  branch: main
+  head: dbb462031de92f62c0a5e1f0c5d1491d64468b59
+  last_updated: "2026-03-06T15:11:07Z"
+  source_type: gh
+
+amplifier-module-provider-openai:
+  service: amplifier-providers
+  source: https://github.com/microsoft/amplifier-module-provider-openai
+  branch: main
+  head: 0ae0c8a9ce44a8c4119da0ef4da7b050a110477a
+  last_updated: "2026-03-06T22:24:42-08:00"
+  source_type: local
+
+amplifier-module-provider-azure-openai:
+  service: amplifier-providers
+  source: https://github.com/microsoft/amplifier-module-provider-azure-openai
+  branch: main
+  head: d94f6314d8ca6384b4150299c9f73db160fadeef
+  last_updated: "2026-03-06T22:25:20-08:00"
+  source_type: local
+
+amplifier-module-provider-gemini:
+  service: amplifier-providers
+  source: https://github.com/microsoft/amplifier-module-provider-gemini
+  branch: main
+  head: b3b2806000233b947ee792bd1546a1b5ce8b7a08
+  last_updated: "2026-03-06T07:11:16-08:00"
+  source_type: local
+
+amplifier-module-provider-vllm:
+  service: amplifier-providers
+  source: https://github.com/microsoft/amplifier-module-provider-vllm
+  branch: main
+  head: 62411f127ea732a6f398d1a7cebebe5e1c99233c
+  last_updated: "2026-03-06T12:05:33-08:00"
+  source_type: local
+
+amplifier-module-provider-ollama:
+  service: amplifier-providers
+  source: https://github.com/microsoft/amplifier-module-provider-ollama
+  branch: main
+  head: 826259d64c961912159b3df4dcd9f70d8c8c7feb
+  last_updated: "2026-03-06T07:10:30-08:00"
+  source_type: local
+
+amplifier-module-provider-github-copilot:
+  service: amplifier-providers
+  source: https://github.com/microsoft/amplifier-module-provider-github-copilot
+  branch: main
+  head: 54a4439f7cffad8fea3825513bebcdc71aa0c8d7
+  last_updated: "2026-03-10T17:11:16-07:00"
+  source_type: local
+
+amplifier-module-provider-mock:
+  service: amplifier-providers
+  source: https://github.com/microsoft/amplifier-module-provider-mock
+  branch: main
+  head: 6cede8bbefd97715a49621f46e0242ecb21c891c
+  last_updated: "2026-02-28T12:55:28-08:00"
+  source_type: local
+
+# Tools → services/amplifier-foundation (+ services/amplifier-filesystem)
+amplifier-module-tool-bash:
+  service: amplifier-foundation
+  source: https://github.com/microsoft/amplifier-module-tool-bash
+  branch: main
+  head: 9a9068526eaa8db80b07a8b53424e099cd08517d
+  last_updated: "2026-02-18T19:21:01-08:00"
+  source_type: local
+
+amplifier-module-tool-filesystem:
+  service:
+    - amplifier-foundation
+    - amplifier-filesystem
+  source: https://github.com/microsoft/amplifier-module-tool-filesystem
+  branch: main
+  head: 355fa417ca37ea6475a2d7a4aea6ff037f800eea
+  last_updated: "2026-02-17T05:35:49-08:00"
+  source_type: local
+
+amplifier-module-tool-web:
+  service: amplifier-foundation
+  source: https://github.com/microsoft/amplifier-module-tool-web
+  branch: main
+  head: 26b6d9030ed0d6c21a4d3a2f77cf59ce99a7cece
+  last_updated: "2026-02-17T05:35:48-08:00"
+  source_type: local
+
+amplifier-module-tool-search:
+  service: amplifier-foundation
+  source: https://github.com/microsoft/amplifier-module-tool-search
+  branch: main
+  head: b5d7092f64362160ba547820a349bb4ee908c06c
+  last_updated: "2026-02-17T13:35:48Z"
+  source_type: gh
+
+amplifier-module-tool-task:
+  service: amplifier-foundation
+  source: https://github.com/microsoft/amplifier-module-tool-task
+  branch: main
+  head: 3093433c18f05d74a6ba8ff8b201bf293e29c8d5
+  last_updated: "2026-02-17T13:35:48Z"
+  source_type: gh
+
+amplifier-module-tool-todo:
+  service: amplifier-foundation
+  source: https://github.com/microsoft/amplifier-module-tool-todo
+  branch: main
+  head: 483c5a878bbbe2d6fd33ab81a54c9bd6a28be4a9
+  last_updated: "2025-12-17T16:34:48-08:00"
+  source_type: local
+
+amplifier-module-tool-skills:
+  service: amplifier-foundation
+  source: https://github.com/microsoft/amplifier-module-tool-skills
+  branch: main
+  head: 76797b877f9dbe4bce1981dd12d00b3d77c5b6b1
+  last_updated: "2026-02-19T08:55:30-08:00"
+  source_type: local
+
+amplifier-module-tool-mcp:
+  service: amplifier-foundation
+  source: https://github.com/microsoft/amplifier-module-tool-mcp
+  branch: main
+  head: 94aec17b3e591f1bb03998c6de0476d4e9edec1b
+  last_updated: "2026-02-17T13:35:48Z"
+  source_type: gh
+
+amplifier-module-tool-slash-command:
+  service: amplifier-foundation
+  source: https://github.com/microsoft/amplifier-module-tool-slash-command
+  branch: main
+  head: ab5d3c6d3a36a21a9509977ba95dac6f566cb0a3
+  last_updated: "2026-03-20T17:27:12Z"
+  source_type: gh
+
+# Hooks → services/amplifier-foundation
+amplifier-module-hooks-logging:
+  service: amplifier-foundation
+  source: https://github.com/microsoft/amplifier-module-hooks-logging
+  branch: main
+  head: b11b2e2cae5c916c0cfd0ff29576a0df7fd92f64
+  last_updated: "2026-03-06T15:34:57Z"
+  source_type: gh
+
+amplifier-module-hooks-redaction:
+  service: amplifier-foundation
+  source: https://github.com/microsoft/amplifier-module-hooks-redaction
+  branch: main
+  head: 15f95e53b2c7d1b7e908a724e821bdc257376665
+  last_updated: "2026-02-23T16:06:50+00:00"
+  source_type: local
+
+amplifier-module-hooks-approval:
+  service: amplifier-foundation
+  source: https://github.com/microsoft/amplifier-module-hooks-approval
+  branch: main
+  head: 5c6fff9a886bcc1895252b00dd1a525bf93649b9
+  last_updated: "2026-01-20T02:18:09Z"
+  source_type: gh
+
+amplifier-module-hooks-backup:
+  service: amplifier-foundation
+  source: https://github.com/microsoft/amplifier-module-hooks-backup
+  branch: main
+  head: 73822a5a466a6909239e35046842aface49843f4
+  last_updated: "2025-12-18T00:34:48Z"
+  source_type: gh
+
+amplifier-module-hooks-streaming-ui:
+  service: amplifier-foundation
+  source: https://github.com/microsoft/amplifier-module-hooks-streaming-ui
+  branch: main
+  head: 704b9788f02d4ca435d24276c0cb91dc26b9edd4
+  last_updated: "2026-03-20T15:14:27Z"
+  source_type: gh
+
+amplifier-module-hooks-status-context:
+  service: amplifier-foundation
+  source: https://github.com/microsoft/amplifier-module-hooks-status-context
+  branch: main
+  head: 7220b5d7107bb678f0b38f106825317f8d2797b5
+  last_updated: "2026-01-25T18:05:15-08:00"
+  source_type: local
+
+amplifier-module-hooks-todo-reminder:
+  service: amplifier-foundation
+  source: https://github.com/microsoft/amplifier-module-hooks-todo-reminder
+  branch: main
+  head: 3dff9d1ec4919c3b550319712b8b30477a1905ba
+  last_updated: "2026-01-03T11:24:02-08:00"
+  source_type: local
+
+amplifier-module-hooks-scheduler-cost-aware:
+  service: amplifier-foundation
+  source: https://github.com/microsoft/amplifier-module-hooks-scheduler-cost-aware
+  branch: main
+  head: b0cb80c54e97dc758e37de960929b528f19953f8
+  last_updated: "2026-01-09T23:11:05Z"
+  source_type: gh
+
+amplifier-module-hooks-scheduler-heuristic:
+  service: amplifier-foundation
+  source: https://github.com/microsoft/amplifier-module-hooks-scheduler-heuristic
+  branch: main
+  head: 9bdf9c4826fe832cad01bfd5a4aaafc52c453d74
+  last_updated: "2026-01-09T23:10:30Z"
+  source_type: gh
+
+amplifier-module-hook-shell:
+  service: amplifier-foundation
+  source: https://github.com/microsoft/amplifier-module-hook-shell
+  branch: main
+  head: a030cc685dbb6d33cafaaf196c6ac0185ff43f65
+  last_updated: "2026-03-02T00:56:31Z"
+  source_type: gh
+
+# Services without upstream
+amplifier-modes:
+  service: amplifier-modes
+  source: null  # custom — mode hook/tool, not from a single upstream repo
+  source_type: none
+
+amplifier-system-design-intelligence:
+  service: amplifier-system-design-intelligence
+  source: null  # new, created 2026-03-24
+  source_type: none
