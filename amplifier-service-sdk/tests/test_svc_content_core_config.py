@@ -59,7 +59,7 @@ class TestDescribeYaml:
         config = load_config_from_yaml(DESCRIBE_YAML)
 
         assert config.content_dir is not None, "content_dir should not be None"
-        assert config.content_dir.name == "content", (
+        assert Path(config.content_dir).name == "content", (
             f"Expected content_dir to end in 'content', got {config.content_dir}"
         )
 

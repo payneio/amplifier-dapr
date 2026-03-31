@@ -8,7 +8,7 @@ from typing import Any
 
 import yaml
 
-from amplifier_service_sdk.models import ToolCapability
+from amplifier_service_sdk.models import HookRegistration, ToolCapability
 from amplifier_service_sdk.service import ServiceConfig, create_app
 
 
@@ -25,14 +25,16 @@ def load_config_from_yaml(config_path: Path) -> ServiceConfig:
     name: str = raw["name"]
     version: str = raw.get("version", "0.1.0")
 
-    content_dir: Path | None = None
+    content_dir: str | None = None
     if "content_dir" in raw and raw["content_dir"] is not None:
-        content_dir = (config_path.parent / raw["content_dir"]).resolve()
+        content_dir = str((config_path.parent / raw["content_dir"]).resolve())
 
     tools: list[ToolCapability] = [
         ToolCapability.model_validate(t) for t in raw.get("tools") or []
     ]
-    hooks: list[dict[str, Any]] = raw.get("hooks") or []
+    hooks: list[HookRegistration] = [
+        HookRegistration.model_validate(h) for h in raw.get("hooks") or []
+    ]
     providers: list[dict[str, Any]] = raw.get("providers") or []
 
     return ServiceConfig(

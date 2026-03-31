@@ -26,7 +26,7 @@ class ServiceConfig(BaseModel):
     hooks: list[HookRegistration] = Field(default_factory=list)
     providers: list[dict[str, Any]] = Field(default_factory=list)
     content_paths: list[str] = Field(default_factory=list)
-    content_dir: Path | None = None
+    content_dir: str | None = None
 
 
 def create_app(config: ServiceConfig) -> FastAPI:
@@ -42,7 +42,7 @@ def create_app(config: ServiceConfig) -> FastAPI:
     # Build optional content manager once at startup
     content_manager: ContentManager | None = None
     if config.content_dir is not None:
-        content_manager = ContentManager(config.content_dir)
+        content_manager = ContentManager(Path(config.content_dir))
 
     # ------------------------------------------------------------------
     # GET /healthz

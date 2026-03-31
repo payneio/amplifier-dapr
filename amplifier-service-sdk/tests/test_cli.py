@@ -77,5 +77,5 @@ class TestLoadConfigFromYaml:
         config = load_config_from_yaml(config_file)
 
         assert config.content_dir is not None
-        assert config.content_dir.exists()
-        assert config.content_dir == tmp_path / "context"
+        assert Path(config.content_dir).exists()
+        assert config.content_dir == str(tmp_path / "context")

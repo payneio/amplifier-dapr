@@ -26,7 +26,7 @@ def content_dir(tmp_path: Path) -> Path:
 @pytest.fixture
 def basic_config(content_dir: Path) -> ServiceConfig:
     """Minimal config pointing at the temp content directory."""
-    return ServiceConfig(name="svc-test", content_dir=content_dir)
+    return ServiceConfig(name="svc-test", content_dir=str(content_dir))
 
 
 @pytest.fixture
@@ -37,7 +37,9 @@ def config_with_tools(content_dir: Path) -> ServiceConfig:
         description="Echoes the input back",
         input_schema={"type": "object", "properties": {"text": {"type": "string"}}},
     )
-    return ServiceConfig(name="svc-test", content_dir=content_dir, tools=[echo_tool])
+    return ServiceConfig(
+        name="svc-test", content_dir=str(content_dir), tools=[echo_tool]
+    )
 
 
 # ---------------------------------------------------------------------------
