@@ -2,30 +2,31 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel, Field
 
 from amplifier_service_sdk.content import ContentManager
 from amplifier_service_sdk.models import (
     DescribeResponse,
     HealthResponse,
+    HookRegistration,
     ToolCapability,
 )
 
 
-@dataclass
-class ServiceConfig:
+class ServiceConfig(BaseModel):
     """Configuration for an Amplifier-compatible FastAPI service."""
 
     name: str
     version: str = "0.1.0"
+    tools: list[ToolCapability] = Field(default_factory=list)
+    hooks: list[HookRegistration] = Field(default_factory=list)
+    providers: list[dict[str, Any]] = Field(default_factory=list)
+    content_paths: list[str] = Field(default_factory=list)
     content_dir: Path | None = None
-    tools: list[ToolCapability] = field(default_factory=list)
-    hooks: list[dict[str, Any]] = field(default_factory=list)
-    providers: list[dict[str, Any]] = field(default_factory=list)
 
 
 def create_app(config: ServiceConfig) -> FastAPI:

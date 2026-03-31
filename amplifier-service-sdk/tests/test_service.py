@@ -6,6 +6,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from amplifier_service_sdk import ToolCapability
+from amplifier_service_sdk.models import HookRegistration
 from amplifier_service_sdk.service import ServiceConfig, create_app
 
 
@@ -122,3 +123,46 @@ class TestContentEndpoint:
         client = TestClient(app)
         response = client.get("/content/../../etc/passwd")
         assert response.status_code in (403, 404)
+
+
+# ---------------------------------------------------------------------------
+# TestHookRegistration in ServiceConfig
+# ---------------------------------------------------------------------------
+
+
+class TestServiceConfigHooks:
+    def test_service_config_accepts_hooks(self) -> None:
+        """ServiceConfig is a Pydantic BaseModel that accepts HookRegistration list."""
+        from pydantic import BaseModel
+
+        hooks = [
+            HookRegistration(name="pre-tool", events=["tool_call"], priority=10),
+            HookRegistration(name="post-response", events=["response"], mode="async"),
+        ]
+        config = ServiceConfig(name="hook-svc", hooks=hooks)
+        # ServiceConfig must be a Pydantic BaseModel (not a dataclass)
+        assert isinstance(config, BaseModel), (
+            "ServiceConfig must be a pydantic BaseModel"
+        )
+        assert len(config.hooks) == 2
+        assert config.hooks[0].name == "pre-tool"
+        assert config.hooks[1].name == "post-response"
+        # hooks must be HookRegistration instances, not raw dicts
+        assert isinstance(config.hooks[0], HookRegistration)
+
+    def test_describe_endpoint_includes_hooks(self) -> None:
+        """GET /describe returns hooks list with correct names."""
+        hooks = [
+            HookRegistration(name="pre-tool", events=["tool_call"]),
+            HookRegistration(name="post-response", events=["response"], mode="async"),
+        ]
+        config = ServiceConfig(name="hook-svc", hooks=hooks)
+        app = create_app(config)
+        client = TestClient(app)
+        response = client.get("/describe")
+        assert response.status_code == 200
+        data = response.json()
+        assert "hooks" in data
+        hook_names = [h["name"] for h in data["hooks"]]
+        assert "pre-tool" in hook_names
+        assert "post-response" in hook_names
