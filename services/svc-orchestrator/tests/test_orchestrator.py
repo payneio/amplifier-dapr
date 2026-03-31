@@ -976,3 +976,274 @@ class TestOrchestratorPostHookPublish:
         assert "tool.post" in published_topics, (
             f"Expected 'tool.post' in published topics, got: {published_topics}"
         )
+
+
+# ---------------------------------------------------------------------------
+# TestOrchestratorProviderRequestHook
+# ---------------------------------------------------------------------------
+
+
+class TestOrchestratorProviderRequestHook:
+    """dispatch_pre is called with 'provider:request' before each provider call."""
+
+    @pytest.mark.asyncio
+    async def test_provider_request_hook_called_before_each_provider_call(
+        self,
+    ) -> None:
+        """dispatch_pre is called with 'provider:request' before each provider call."""
+        dapr = _make_dapr()
+        hook_call_events: list[str] = []
+        provider_call_count = 0
+
+        async def mock_invoke(
+            app_id: str, method: str, data: dict[str, Any], **kwargs: Any
+        ) -> dict[str, Any]:
+            nonlocal provider_call_count
+
+            # Hook service — record the event name from the payload
+            if app_id == "svc-request-hook":
+                hook_call_events.append(data.get("event", ""))
+                return {"action": "CONTINUE", "reason": None, "data": None}
+
+            if app_id == "svc-provider-mock" and "complete" in method:
+                provider_call_count += 1
+                if provider_call_count == 1:
+                    return {
+                        "content": None,
+                        "tool_calls": [
+                            {
+                                "id": "call-1",
+                                "name": "bash",
+                                "arguments": {"cmd": "echo hi"},
+                            }
+                        ],
+                        "usage": None,
+                        "stop_reason": "tool_use",
+                    }
+                else:
+                    return {
+                        "content": "Done.",
+                        "tool_calls": None,
+                        "usage": None,
+                        "stop_reason": "end_turn",
+                    }
+
+            if app_id == "svc-bash" and "tools/bash/execute" in method:
+                return {"output": "hi", "success": True}
+
+            return {"ok": True}
+
+        async def mock_invoke_get(
+            app_id: str, method: str, **kwargs: Any
+        ) -> dict[str, Any]:
+            return {"messages": [{"role": "user", "content": "run bash"}]}
+
+        async def mock_publish(*args: Any, **kwargs: Any) -> None:
+            pass
+
+        dapr.invoke = mock_invoke  # type: ignore[method-assign]
+        dapr.invoke_get = mock_invoke_get  # type: ignore[method-assign]
+        dapr.publish = mock_publish  # type: ignore[method-assign]
+
+        routing = _routing_table_with_hooks(
+            tools={"bash": "svc-bash"},
+            hooks={"provider:request": ["svc-request-hook"]},
+        )
+        orch = Orchestrator(dapr=dapr)
+
+        result_text, _ = await orch.execute(
+            system_prompt="Be helpful.",
+            messages=[Message(role="user", content="run bash")],
+            config={"provider": "mock"},
+            routing_table=routing,
+            session_id="session-provider-hook-1",
+        )
+
+        assert result_text == "Done."
+        # provider:request hook should have been called once per provider call (2 total)
+        assert hook_call_events.count("provider:request") == 2, (
+            f"Expected 'provider:request' hook called 2 times, got: {hook_call_events}"
+        )
+
+    @pytest.mark.asyncio
+    async def test_provider_request_hook_inject_context_prepends_system_prompt(
+        self,
+    ) -> None:
+        """When hook returns INJECT_CONTEXT, injection is prepended to system_prompt in ChatRequest."""
+        dapr = _make_dapr()
+        captured_chat_requests: list[dict[str, Any]] = []
+
+        async def mock_invoke(
+            app_id: str, method: str, data: dict[str, Any], **kwargs: Any
+        ) -> dict[str, Any]:
+            # Hook service — inject context
+            if app_id == "svc-inject-hook":
+                return {
+                    "action": "INJECT_CONTEXT",
+                    "reason": None,
+                    "data": {
+                        "context_injection": "INJECTED_CONTEXT",
+                        "ephemeral": True,
+                    },
+                }
+
+            if app_id == "svc-provider-mock" and "complete" in method:
+                # Capture the ChatRequest to verify system prompt
+                captured_chat_requests.append(data)
+                return {
+                    "content": "Done.",
+                    "tool_calls": None,
+                    "usage": None,
+                    "stop_reason": "end_turn",
+                }
+
+            return {"ok": True}
+
+        async def mock_invoke_get(
+            app_id: str, method: str, **kwargs: Any
+        ) -> dict[str, Any]:
+            return {"messages": [{"role": "user", "content": "hello"}]}
+
+        async def mock_publish(*args: Any, **kwargs: Any) -> None:
+            pass
+
+        dapr.invoke = mock_invoke  # type: ignore[method-assign]
+        dapr.invoke_get = mock_invoke_get  # type: ignore[method-assign]
+        dapr.publish = mock_publish  # type: ignore[method-assign]
+
+        routing = _routing_table_with_hooks(
+            hooks={"provider:request": ["svc-inject-hook"]},
+        )
+        orch = Orchestrator(dapr=dapr)
+
+        await orch.execute(
+            system_prompt="BASE_PROMPT",
+            messages=[Message(role="user", content="hello")],
+            config={"provider": "mock"},
+            routing_table=routing,
+            session_id="session-inject-1",
+        )
+
+        assert len(captured_chat_requests) == 1
+        system_in_request = captured_chat_requests[0].get("system", "")
+        assert system_in_request.startswith("INJECTED_CONTEXT\n\n"), (
+            f"Expected system to start with injection, got: {system_in_request!r}"
+        )
+        assert "BASE_PROMPT" in system_in_request, (
+            f"Expected base prompt in system, got: {system_in_request!r}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# TestOrchestratorSessionEvents
+# ---------------------------------------------------------------------------
+
+
+class TestOrchestratorSessionEvents:
+    """'session.start' and 'session.end' are published when execute() runs."""
+
+    @pytest.mark.asyncio
+    async def test_session_start_and_end_published(self) -> None:
+        """'session.start' and 'session.end' appear in published_topics after execute()."""
+        dapr = _make_dapr()
+        published_topics: list[str] = []
+
+        async def mock_invoke(
+            app_id: str, method: str, data: dict[str, Any], **kwargs: Any
+        ) -> dict[str, Any]:
+            if app_id == "svc-provider-mock" and "complete" in method:
+                return {
+                    "content": "Hello!",
+                    "tool_calls": None,
+                    "usage": None,
+                    "stop_reason": "end_turn",
+                }
+            return {"ok": True}
+
+        async def mock_invoke_get(
+            app_id: str, method: str, **kwargs: Any
+        ) -> dict[str, Any]:
+            return {"messages": [{"role": "user", "content": "Hello"}]}
+
+        async def mock_publish(
+            pubsub: str, topic: str, data: Any, **kwargs: Any
+        ) -> None:
+            published_topics.append(topic)
+
+        dapr.invoke = mock_invoke  # type: ignore[method-assign]
+        dapr.invoke_get = mock_invoke_get  # type: ignore[method-assign]
+        dapr.publish = mock_publish  # type: ignore[method-assign]
+
+        orch = Orchestrator(dapr=dapr)
+        result_text, _ = await orch.execute(
+            system_prompt="Be helpful.",
+            messages=[Message(role="user", content="Hello")],
+            config={"provider": "mock"},
+            routing_table=_routing_table(),
+            session_id="session-events-1",
+        )
+
+        assert result_text == "Hello!"
+        assert "session.start" in published_topics, (
+            f"Expected 'session.start' in published topics, got: {published_topics}"
+        )
+        assert "session.end" in published_topics, (
+            f"Expected 'session.end' in published topics, got: {published_topics}"
+        )
+
+    @pytest.mark.asyncio
+    async def test_session_start_published_before_provider_calls(self) -> None:
+        """'session.start' is published at the very beginning (before any provider call)."""
+        dapr = _make_dapr()
+        event_order: list[str] = []
+
+        async def mock_invoke(
+            app_id: str, method: str, data: dict[str, Any], **kwargs: Any
+        ) -> dict[str, Any]:
+            if app_id == "svc-provider-mock" and "complete" in method:
+                event_order.append("provider_call")
+                return {
+                    "content": "Done.",
+                    "tool_calls": None,
+                    "usage": None,
+                    "stop_reason": "end_turn",
+                }
+            return {"ok": True}
+
+        async def mock_invoke_get(
+            app_id: str, method: str, **kwargs: Any
+        ) -> dict[str, Any]:
+            return {"messages": [{"role": "user", "content": "Hello"}]}
+
+        async def mock_publish(
+            pubsub: str, topic: str, data: Any, **kwargs: Any
+        ) -> None:
+            if topic in ("session.start", "session.end"):
+                event_order.append(topic)
+
+        dapr.invoke = mock_invoke  # type: ignore[method-assign]
+        dapr.invoke_get = mock_invoke_get  # type: ignore[method-assign]
+        dapr.publish = mock_publish  # type: ignore[method-assign]
+
+        orch = Orchestrator(dapr=dapr)
+        await orch.execute(
+            system_prompt="Be helpful.",
+            messages=[Message(role="user", content="Hello")],
+            config={"provider": "mock"},
+            routing_table=_routing_table(),
+            session_id="session-events-2",
+        )
+
+        # session.start must come before any provider call
+        # session.end must come after all provider calls
+        assert "session.start" in event_order
+        assert "session.end" in event_order
+        start_idx = event_order.index("session.start")
+        end_idx = event_order.index("session.end")
+        provider_idx = event_order.index("provider_call")
+        assert start_idx < provider_idx, (
+            f"Expected session.start before provider_call, got order: {event_order}"
+        )
+        assert provider_idx < end_idx, (
+            f"Expected provider_call before session.end, got order: {event_order}"
+        )

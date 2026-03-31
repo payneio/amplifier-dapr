@@ -80,6 +80,9 @@ class Orchestrator:
         for msg in messages:
             await self._context_add_message(context_app_id, msg.model_dump())
 
+        # Publish session:start event (best-effort)
+        await self._hooks.dispatch_post("session:start", {"session_id": session_id})
+
         # ------------------------------------------------------------------
         # Convert tool definitions from config to ToolCapability objects
         # ------------------------------------------------------------------
@@ -107,11 +110,23 @@ class Orchestrator:
             context_msgs = await self._context_get_messages(context_app_id)
             chat_messages = [Message(**m) for m in context_msgs]
 
+            # Dispatch provider:request pre-hook (may inject additional context)
+            pre_result = await self._hooks.dispatch_pre(
+                "provider:request",
+                {"session_id": session_id, "iteration": iteration},
+                routing_table,
+            )
+            effective_system = system_prompt
+            if pre_result.action == "INJECT_CONTEXT":
+                injection = (pre_result.data or {}).get("context_injection", "")
+                if injection:
+                    effective_system = f"{injection}\n\n{system_prompt}"
+
             # Build and dispatch ChatRequest to provider
             chat_request = ChatRequest(
                 messages=chat_messages,
                 tools=tools,
-                system=system_prompt,
+                system=effective_system,
             )
             response_data = await self._call_provider(
                 provider_app_id, provider_name, chat_request.model_dump()
@@ -159,6 +174,11 @@ class Orchestrator:
         # ------------------------------------------------------------------
         final_msgs = await self._context_get_messages(context_app_id)
         final_messages = [Message(**m) for m in final_msgs]
+
+        # Publish session:end event (best-effort)
+        await self._hooks.dispatch_post(
+            "session:end", {"session_id": session_id, "result": result_text}
+        )
 
         return result_text, final_messages
 
