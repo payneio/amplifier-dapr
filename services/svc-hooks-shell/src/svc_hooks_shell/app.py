@@ -20,7 +20,7 @@ from amplifier_service_sdk.service import ServiceConfig, create_app
 
 from svc_hooks_shell.bridge import ShellHookBridge
 
-_PUBSUB_NAME = "amplifier"
+_PUBSUB_NAME = "pubsub"  # matches docker/dapr/components/pubsub.yaml component name
 
 # Events handled synchronously as pre-hooks (colon-notation)
 _PRE_HOOK_EVENTS = ["tool:pre", "prompt:submit"]

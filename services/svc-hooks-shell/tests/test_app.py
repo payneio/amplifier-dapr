@@ -31,7 +31,9 @@ def test_describe_includes_shell(client):
     hooks = data.get("hooks", [])
     assert len(hooks) >= 1
     hook_names = [h["name"] for h in hooks]
-    assert any("shell" in name for name in hook_names), f"No 'shell' hook found in {hook_names}"
+    assert any("shell" in name for name in hook_names), (
+        f"No 'shell' hook found in {hook_names}"
+    )
 
 
 # --- Test 3: invoke tool:pre with no scripts returns CONTINUE ---
@@ -52,6 +54,19 @@ def test_dapr_subscribe_returns_subscriptions(client):
     assert len(data) > 0, "Subscription list must be non-empty"
     topics = [sub["topic"] for sub in data]
     assert "tool.post" in topics, f"Expected 'tool.post' in {topics}"
+
+
+# --- Test 4b: dapr subscribe uses correct pubsub component name ---
+def test_dapr_subscribe_pubsubname_matches_component(client):
+    """pubsubname must match the Dapr pubsub component name ('pubsub'), not 'amplifier'."""
+    response = client.get("/dapr/subscribe")
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) > 0
+    for sub in data:
+        assert sub["pubsubname"] == "pubsub", (
+            f"pubsubname must be 'pubsub' (the Dapr component name), got {sub['pubsubname']!r}"
+        )
 
 
 # --- Test 5: event endpoint accepts POST for tool.post ---

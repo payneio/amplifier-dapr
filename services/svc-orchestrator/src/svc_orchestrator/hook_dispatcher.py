@@ -11,6 +11,10 @@ from svc_orchestrator.dapr_client import DaprClient
 
 logger = logging.getLogger(__name__)
 
+_PUBSUB_COMPONENT = (
+    "pubsub"  # matches docker/dapr/components/pubsub.yaml component name
+)
+
 
 class HookDispatcher:
     """Dispatches pre-hook and post-event messages to registered hook services."""
@@ -118,7 +122,7 @@ class HookDispatcher:
         """
         topic = event.replace(":", ".")
         try:
-            await self._dapr.publish("pubsub", topic, data)
+            await self._dapr.publish(_PUBSUB_COMPONENT, topic, data)
         except Exception:
             logger.debug(
                 "dispatch_post swallowed error for topic %r", topic, exc_info=True

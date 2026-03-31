@@ -58,7 +58,7 @@ class ShellHookBridge:
 
         return None
 
-    async def handle(self, event: str, data: dict[str, Any]) -> HookResult:  # noqa: ARG002
+    async def handle(self, event: str, data: dict[str, Any]) -> HookResult:  # noqa: ARG002 — shell scripts don't receive payload; the script name encodes the intent
         """Handle an Amplifier event by running the matching shell script.
 
         Maps the event name to a script name (e.g. ``tool:pre`` -> ``pre-tool``),

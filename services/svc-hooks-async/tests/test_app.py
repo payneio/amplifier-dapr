@@ -46,6 +46,19 @@ def test_dapr_subscribe_returns_subscriptions(client):
     assert "tool.post" in topics, f"Expected 'tool.post' in {topics}"
 
 
+# --- Test 3b: dapr subscribe uses correct pubsub component name ---
+def test_dapr_subscribe_pubsubname_matches_component(client):
+    """pubsubname must match the Dapr pubsub component name ('pubsub'), not 'amplifier'."""
+    response = client.get("/dapr/subscribe")
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) > 0
+    for sub in data:
+        assert sub["pubsubname"] == "pubsub", (
+            f"pubsubname must be 'pubsub' (the Dapr component name), got {sub['pubsubname']!r}"
+        )
+
+
 # --- Test 4: event endpoint accepts POST for tool.post ---
 def test_event_endpoint_accepts_tool_post(client):
     envelope = {

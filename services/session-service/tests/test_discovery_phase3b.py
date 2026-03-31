@@ -229,6 +229,30 @@ class TestHookPriorities:
         assert routing["hook_priorities"]["svc-hooks-shell"] == 20
         assert routing["hook_priorities"]["svc-hooks-routing"] == 5
 
+    def test_hook_missing_priority_defaults_to_sdk_default(self) -> None:
+        """A hook that omits 'priority' must default to 50, matching HookRegistration.priority."""
+        describe_no_priority = {
+            "name": "svc-no-priority",
+            "version": "0.1.0",
+            "tools": [],
+            "providers": [],
+            "hooks": [
+                {
+                    "name": "noprio",
+                    "mode": "sync",
+                    "events": ["tool:pre"],
+                    # 'priority' key intentionally absent
+                }
+            ],
+            "content_paths": [],
+        }
+        routing = build_routing_table(
+            {"svc-no-priority": describe_no_priority}, context_app_id="svc-context"
+        )
+        assert routing["hook_priorities"]["svc-no-priority"] == 50, (
+            "Missing priority should default to 50 (SDK HookRegistration default), not 0"
+        )
+
 
 # ---------------------------------------------------------------------------
 # Test 4 — async hooks are excluded from routing_table['hooks']

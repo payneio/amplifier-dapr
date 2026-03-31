@@ -13,7 +13,7 @@ from amplifier_service_sdk.service import ServiceConfig, create_app
 
 from svc_hooks_async.logging_hook import SUBSCRIBED_TOPICS, LoggingHook
 
-_PUBSUB_NAME = "amplifier"
+_PUBSUB_NAME = "pubsub"  # matches docker/dapr/components/pubsub.yaml component name
 
 
 def create_async_hooks_app(log_template: str | None = None) -> FastAPI:

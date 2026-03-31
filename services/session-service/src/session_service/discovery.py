@@ -51,7 +51,7 @@ def build_routing_table(
     providers: dict[str, str] = {}
     hooks: dict[str, list[str]] = {}
     hook_endpoints: dict[str, str] = {}
-    hook_priorities: dict[str, Any] = {}
+    hook_priorities: dict[str, int] = {}
     tool_specs: list[dict[str, Any]] = []
 
     for app_id, describe in describe_results.items():
@@ -86,7 +86,9 @@ def build_routing_table(
             # Register the endpoint and priority for this sync hook service
             if hook_name:
                 hook_endpoints[app_id] = f"hooks/{hook_name}/invoke"
-            hook_priorities[app_id] = hook.get("priority", 0)
+            hook_priorities[app_id] = hook.get(
+                "priority", 50
+            )  # matches HookRegistration.priority default
 
     return {
         "tools": tools,
