@@ -26,7 +26,8 @@ Replace the entire IPC layer with Dapr-native microservices. This is a clean bre
 2. **One behavior = one container** -- Every behavior (tool, hook, provider group) runs as its own container. This is aggressive decomposition, enabled by a shared base image and thin SDK.
 3. **Orchestrator drives the loop directly** -- The orchestrator calls tools and providers via Dapr service invocation, not through the Session Service. The Session Service handles session lifecycle only.
 4. **Standard HTTP endpoints** -- No custom protocol. Services are ordinary HTTP servers with well-known endpoint paths.
-5. **No caching** -- Session Service calls `/describe` every turn. Simplicity over premature optimization.
+5. **Machine abstraction** -- A dedicated Machine Service centralizes all filesystem and command execution access. Tool services call the Machine Service via Dapr instead of touching the filesystem directly. This bridges the container isolation boundary and enables both local and remote workspace access.
+6. **No caching** -- Session Service calls `/describe` every turn. Simplicity over premature optimization.
 
 ## Architecture
 
@@ -58,7 +59,13 @@ Replace the entire IPC layer with Dapr-native microservices. This is a clean bre
 │        ┌────────▼──┐ ┌────▼────┐ ┌───▼──────┐                     │
 │        │ Providers │ │  Tools  │ │  Hooks   │                      │
 │        │ (Dapr SI) │ │(Dapr SI)│ │(pub/sub) │                      │
-│        └───────────┘ └─────────┘ └──────────┘                      │
+│        └───────────┘ └────┬────┘ └──────────┘                      │
+│                           │                                         │
+│                    ┌──────▼──────────────────────────┐              │
+│                    │  Machine Service                │              │
+│                    │  (filesystem + command exec)    │              │
+│                    │  [workspace volume mounted]     │              │
+│                    └────────────────────────────────-┘              │
 │                                                                     │
 │        ┌───────────────────────────────────────┐                    │
 │        │  Content Services (/describe +        │                    │
@@ -83,6 +90,8 @@ Replace the entire IPC layer with Dapr-native microservices. This is a clean bre
 
 - **Capability Services** -- Provider, tool, hook, mode, skills, etc. containers. Each exposes well-known HTTP/gRPC endpoints following a simple contract. Split by behavior -- each behavior becomes its own container.
 
+- **Machine Service** -- Centralizes all filesystem and command execution access behind a single Dapr service. In the current IPC architecture, tools like bash, filesystem, grep, and glob operate directly on the user's machine because they run as subprocesses. In containers, that assumption breaks -- tools have no access to the user's workspace. The Machine Service bridges this gap: tool services call it via Dapr service invocation for all filesystem and command operations. It exposes `/exec` (shell command execution), `/files/read`, `/files/write`, `/files/edit`, `/files/list`, `/files/glob`, and `/files/grep` endpoints. In **local mode**, the user's workspace is volume-mounted into the Machine Service container and operations execute via subprocess/filesystem calls. In **remote mode** (future), the same interface proxies to a remote host via SSH/SFTP. Tool services never touch the filesystem directly -- they always go through the Machine Service, making them portable across both modes.
+
 - **Dapr Sidecars** -- Every container gets a Dapr sidecar providing service invocation (with mTLS, retries, circuit breakers), pub/sub (for streaming and hook fan-out), state store (for session state), and observability.
 
 ## Components
@@ -101,6 +110,13 @@ Services are standard HTTP (or gRPC) apps that expose well-known endpoints. No c
 | Hook | *(none -- subscribes to pub/sub topics)* | -- | Hooks subscribe to event topics, no endpoint needed |
 | Context | `/context/messages` | GET/POST | Get/set conversation messages |
 | Orchestrator | `/orchestrator/execute` | POST | Accepts session config + prompt. Publishes stream events to the session's pub/sub topic. Returns final result when the agent loop completes. |
+| Machine | `/exec` | POST | Execute shell command. Returns stdout, stderr, exit code. |
+| Machine | `/files/read` | POST | Read file contents (path, offset, limit) |
+| Machine | `/files/write` | POST | Write file contents |
+| Machine | `/files/edit` | POST | Edit file (string replacement) |
+| Machine | `/files/list` | POST | List directory contents |
+| Machine | `/files/glob` | POST | Glob pattern matching |
+| Machine | `/files/grep` | POST | Search file contents with regex |
 | Describe | `/describe` | GET | Returns capability manifest (what tools/providers/hooks this service offers) + content manifest |
 | Content | `/content/{path}` | GET | Serves content files (context docs, agent definitions, recipes) on demand |
 | Health | `/healthz` | GET | Dapr-standard health check |
@@ -142,6 +158,54 @@ Agent Definition (foundation-agent.yaml)
 - **Content-only services** are still containers -- they just respond to `/describe` and `/content` with no capability endpoints.
 - **Workspace-local content** (`.amplifier/AGENTS.md`, local `@mentions`) is resolved by the CLI and sent as part of the API payload to the Session Service. This is the "content-in-request" pattern -- CLI reads local files, serializes as JSON, includes in the request body.
 - Service content + workspace content are combined by the Session Service when assembling the system prompt.
+
+### Machine Service
+
+In the current IPC architecture, tools like bash, filesystem, grep, and glob execute directly on the user's machine because they run as subprocesses. In a containerized world, each tool service is isolated in its own container with no access to the user's workspace. The Machine Service solves this by centralizing all workspace interactions behind a single Dapr service.
+
+#### The Problem
+
+Any tool that touches the filesystem or executes commands needs access to the user's project directory:
+- `svc-bash` needs to run shell commands in the workspace
+- `svc-filesystem` needs to read, write, and edit files
+- `svc-search` needs to grep and glob across the workspace
+- `svc-web` may need to save downloaded content
+
+Without the Machine Service, each of these would need its own volume mount and its own subprocess execution logic. The Machine Service consolidates this into one place.
+
+#### Two Modes
+
+The Machine Service exposes the same HTTP endpoints regardless of mode. Tool services never know which backend is active.
+
+**Local mode (implemented):** The user's workspace directory is volume-mounted into the Machine Service container. Commands execute via `asyncio.create_subprocess_exec()`. File operations use standard filesystem calls. All paths are sandboxed within the mounted workspace directory (path traversal is blocked).
+
+```yaml
+# docker-compose.yaml
+svc-machine:
+  volumes:
+    - ${WORKSPACE_PATH:-.}:/workspace
+  environment:
+    - MACHINE_WORKSPACE_DIR=/workspace
+```
+
+**Remote mode (future):** The same endpoints proxy to a remote host via SSH (for commands) and SFTP (for file operations). Configuration specifies the remote host, credentials, and workspace path. This enables cloud-hosted dev environments, remote GPU machines, or shared team workspaces.
+
+#### How Tools Use It
+
+Tools call the Machine Service via Dapr service invocation instead of executing directly:
+
+```python
+# Before (IPC world): BashTool runs commands directly
+result = subprocess.run(command, shell=True, capture_output=True)
+
+# After (microservices world): BashTool calls the Machine Service
+result = await httpx_client.post(
+    f"{machine_service_url}/exec",
+    json={"command": command, "timeout": 30, "working_dir": "/workspace"}
+)
+```
+
+This pattern applies to all filesystem-touching tools: bash, read, write, edit, grep, glob, list.
 
 ## Data Flow
 
@@ -258,10 +322,11 @@ For hooks that need to inspect and modify requests (pre-hooks), the orchestrator
 
 | Container | Role |
 |---|---|
+| `svc-machine` | Filesystem and command execution access (workspace volume-mounted in local mode; SSH/SFTP in remote mode) |
 | `session-service` | Session lifecycle gateway |
 | `redis` | Dapr state store + pub/sub broker |
 
-**Total: ~28 application containers + redis + Dapr sidecars**
+**Total: ~29 application containers + redis + Dapr sidecars**
 
 The CLI is NOT a container. It runs on the user's machine.
 
