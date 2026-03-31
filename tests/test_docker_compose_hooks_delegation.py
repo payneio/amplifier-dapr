@@ -72,6 +72,27 @@ def _load_subscriptions() -> list[dict]:
     return [d for d in docs if d is not None]
 
 
+def _env_has_key(env: dict | list, key: str) -> bool:
+    """Check if an env var key exists in list or dict format."""
+    if isinstance(env, list):
+        return any(str(e).startswith(f"{key}=") or str(e) == key for e in env)
+    return key in env
+
+
+def _env_get_value(env: dict | list, key: str) -> str | None:
+    """Get an env var value from list or dict format, or None if not present."""
+    if isinstance(env, list):
+        for entry in env:
+            s = str(entry)
+            if s == key:
+                return ""
+            if s.startswith(f"{key}="):
+                return s[len(key) + 1 :]
+        return None
+    val = env.get(key)
+    return str(val) if val is not None else None
+
+
 class TestHookDelegationServicesExist:
     """All 5 new hook/delegation application services must be defined."""
 
@@ -134,81 +155,25 @@ class TestHookDelegationEnvironment:
         services = _services(compose)
         for svc in HOOK_DELEGATION_SERVICES:
             env = services[svc].get("environment", {})
-            if isinstance(env, list):
-                env_str = " ".join(str(e) for e in env)
-                has_dapr_port = "DAPR_HTTP_PORT" in env_str and "3500" in env_str
-            else:
-                has_dapr_port = str(env.get("DAPR_HTTP_PORT", "")) == "3500"
-            assert has_dapr_port, (
+            assert _env_get_value(env, "DAPR_HTTP_PORT") == "3500", (
                 f"Service '{svc}' should have DAPR_HTTP_PORT=3500 in environment, got: {env}"
             )
 
-    def test_svc_hooks_approval_has_deny_tools(self) -> None:
-        """svc-hooks-approval has DENY_TOOLS env var."""
+    def test_all_services_have_correct_extra_env(self) -> None:
+        """All hook/delegation services have the expected extra environment variables."""
         compose = _load_compose()
         services = _services(compose)
-        env = services["svc-hooks-approval"].get("environment", {})
-        if isinstance(env, list):
-            env_str = " ".join(str(e) for e in env)
-            assert "DENY_TOOLS" in env_str, (
-                f"svc-hooks-approval should have DENY_TOOLS in environment, got: {env}"
-            )
-        else:
-            assert "DENY_TOOLS" in env, (
-                f"svc-hooks-approval should have DENY_TOOLS in environment, got: {env}"
-            )
-
-    def test_svc_hooks_routing_has_routing_matrix_path(self) -> None:
-        """svc-hooks-routing has ROUTING_MATRIX_PATH env var."""
-        compose = _load_compose()
-        services = _services(compose)
-        env = services["svc-hooks-routing"].get("environment", {})
-        if isinstance(env, list):
-            env_str = " ".join(str(e) for e in env)
-            assert "ROUTING_MATRIX_PATH" in env_str, (
-                f"svc-hooks-routing should have ROUTING_MATRIX_PATH in environment, got: {env}"
-            )
-        else:
-            assert "ROUTING_MATRIX_PATH" in env, (
-                f"svc-hooks-routing should have ROUTING_MATRIX_PATH in environment, got: {env}"
-            )
-
-    def test_svc_hooks_async_has_log_template(self) -> None:
-        """svc-hooks-async has LOG_TEMPLATE env var with correct value."""
-        compose = _load_compose()
-        services = _services(compose)
-        env = services["svc-hooks-async"].get("environment", {})
-        expected_value = "~/.amplifier/logs/{session_id}/events.jsonl"
-        if isinstance(env, list):
-            env_str = " ".join(str(e) for e in env)
-            assert "LOG_TEMPLATE" in env_str, (
-                f"svc-hooks-async should have LOG_TEMPLATE in environment, got: {env}"
-            )
-            assert expected_value in env_str, (
-                f"svc-hooks-async LOG_TEMPLATE should be '{expected_value}', got: {env}"
-            )
-        else:
-            assert "LOG_TEMPLATE" in env, (
-                f"svc-hooks-async should have LOG_TEMPLATE in environment, got: {env}"
-            )
-            assert env.get("LOG_TEMPLATE") == expected_value, (
-                f"svc-hooks-async LOG_TEMPLATE should be '{expected_value}', got: {env.get('LOG_TEMPLATE')}"
-            )
-
-    def test_svc_hooks_shell_has_shell_hooks_dir(self) -> None:
-        """svc-hooks-shell has SHELL_HOOKS_DIR env var."""
-        compose = _load_compose()
-        services = _services(compose)
-        env = services["svc-hooks-shell"].get("environment", {})
-        if isinstance(env, list):
-            env_str = " ".join(str(e) for e in env)
-            assert "SHELL_HOOKS_DIR" in env_str, (
-                f"svc-hooks-shell should have SHELL_HOOKS_DIR in environment, got: {env}"
-            )
-        else:
-            assert "SHELL_HOOKS_DIR" in env, (
-                f"svc-hooks-shell should have SHELL_HOOKS_DIR in environment, got: {env}"
-            )
+        for svc, expected in EXPECTED_EXTRA_ENV.items():
+            env = services[svc].get("environment", {})
+            for key, val in expected.items():
+                assert _env_has_key(env, key), (
+                    f"Service '{svc}' missing '{key}' in environment, got: {env}"
+                )
+                if val:  # Only assert value equality when a specific value is expected
+                    assert _env_get_value(env, key) == val, (
+                        f"Service '{svc}'.{key} should be '{val}', "
+                        f"got '{_env_get_value(env, key)}'"
+                    )
 
 
 class TestHookDelegationDependencies:
@@ -379,7 +344,9 @@ class TestSubscriptionsYaml:
     def test_subscriptions_file_is_valid_yaml(self) -> None:
         """subscriptions.yaml is valid YAML."""
         docs = _load_subscriptions()
-        assert len(docs) > 0, "subscriptions.yaml should contain at least one YAML document"
+        assert len(docs) > 0, (
+            "subscriptions.yaml should contain at least one YAML document"
+        )
 
     def test_all_subscriptions_are_dapr_v1alpha1(self) -> None:
         """All subscription resources use apiVersion: dapr.io/v1alpha1."""
@@ -425,12 +392,16 @@ class TestSubscriptionsYaml:
     def test_session_start_scopes(self) -> None:
         """session.start subscription has scopes: svc-hooks-async, svc-hooks-shell."""
         docs = _load_subscriptions()
-        _assert_topic_scopes(docs, "session.start", ["svc-hooks-async", "svc-hooks-shell"])
+        _assert_topic_scopes(
+            docs, "session.start", ["svc-hooks-async", "svc-hooks-shell"]
+        )
 
     def test_session_end_scopes(self) -> None:
         """session.end subscription has scopes: svc-hooks-async, svc-hooks-shell."""
         docs = _load_subscriptions()
-        _assert_topic_scopes(docs, "session.end", ["svc-hooks-async", "svc-hooks-shell"])
+        _assert_topic_scopes(
+            docs, "session.end", ["svc-hooks-async", "svc-hooks-shell"]
+        )
 
     def test_provider_request_scopes(self) -> None:
         """provider.request subscription has scope: svc-hooks-async."""
@@ -440,7 +411,9 @@ class TestSubscriptionsYaml:
     def test_prompt_complete_scopes(self) -> None:
         """prompt.complete subscription has scopes: svc-hooks-async, svc-hooks-shell."""
         docs = _load_subscriptions()
-        _assert_topic_scopes(docs, "prompt.complete", ["svc-hooks-async", "svc-hooks-shell"])
+        _assert_topic_scopes(
+            docs, "prompt.complete", ["svc-hooks-async", "svc-hooks-shell"]
+        )
 
     def test_routes_to_events_endpoint(self) -> None:
         """Each subscription routes to /events/{topic}."""
@@ -459,7 +432,9 @@ class TestSubscriptionsYaml:
                 )
 
 
-def _assert_topic_scopes(docs: list[dict], topic: str, expected_scopes: list[str]) -> None:
+def _assert_topic_scopes(
+    docs: list[dict], topic: str, expected_scopes: list[str]
+) -> None:
     """Helper: assert that a subscription for the given topic has the expected scopes."""
     # Collect all scopes across all docs matching this topic
     all_scopes: list[str] = []
