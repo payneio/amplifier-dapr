@@ -49,6 +49,24 @@ class SessionInfo(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Default services list
+# ---------------------------------------------------------------------------
+
+#: Phase 3a service app-ids discovered when TurnRequest.services is empty.
+DEFAULT_SERVICES: list[str] = [
+    "svc-bash",
+    "svc-filesystem",
+    "svc-search",
+    "svc-web",
+    "svc-skills",
+    "svc-todo",
+    "svc-modes",
+    "svc-mock-provider",
+    "svc-providers",
+]
+
+
+# ---------------------------------------------------------------------------
 # In-memory session store
 # ---------------------------------------------------------------------------
 
@@ -91,8 +109,10 @@ def create_session_app(dapr_url: str | None = None) -> FastAPI:
             _sessions[session_id] = {"turn_count": 0, "status": "active"}
 
         # Discover services and build routing table
+        # Fall back to DEFAULT_SERVICES when the caller does not specify any.
+        service_ids = request.services if request.services else DEFAULT_SERVICES
         routing_table_dict: dict[str, Any] = await discover_services(
-            request.services, _dapr_url
+            service_ids, _dapr_url
         )
 
         # Assemble the system prompt from workspace content
