@@ -1,0 +1,29 @@
+name: svc-search
+version: '0.1.0'
+tools:
+  - name: grep
+    description: Search file contents with regex patterns
+    input_schema:
+      type: object
+      properties:
+        pattern:
+          type: string
+          description: The regular expression pattern to search for
+        path:
+          type: string
+          description: File or directory to search in (defaults to current directory)
+      required:
+        - pattern
+  - name: glob
+    description: Match files using glob patterns
+    input_schema:
+      type: object
+      properties:
+        pattern:
+          type: string
+          description: Glob pattern to match files (e.g., '**/*.py')
+        path:
+          type: string
+          description: Base path to search from (defaults to current directory)
+      required:
+        - pattern
