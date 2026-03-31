@@ -1,4 +1,5 @@
 """Tests for TodoTool."""
+
 from __future__ import annotations
 
 import pytest
@@ -11,15 +12,25 @@ def tool() -> TodoTool:
     return TodoTool()
 
 
-VALID_TODO = {"content": "Write tests", "activeForm": "Writing tests", "status": "pending"}
-VALID_TODO_2 = {"content": "Run tests", "activeForm": "Running tests", "status": "in_progress"}
+VALID_TODO = {
+    "content": "Write tests",
+    "activeForm": "Writing tests",
+    "status": "pending",
+}
+VALID_TODO_2 = {
+    "content": "Run tests",
+    "activeForm": "Running tests",
+    "status": "in_progress",
+}
 VALID_TODO_3 = {"content": "Deploy", "activeForm": "Deploying", "status": "completed"}
 
 
 class TestCreate:
     async def test_create_stores_todos(self, tool: TodoTool) -> None:
         """create action stores todos and returns count."""
-        result = await tool.execute({"action": "create", "todos": [VALID_TODO, VALID_TODO_2]})
+        result = await tool.execute(
+            {"action": "create", "todos": [VALID_TODO, VALID_TODO_2]}
+        )
         assert result.success is True
         assert result.output["status"] == "created"
         assert result.output["count"] == 2
@@ -28,7 +39,9 @@ class TestCreate:
     async def test_create_replaces_existing_todos(self, tool: TodoTool) -> None:
         """create replaces any existing todo state."""
         await tool.execute({"action": "create", "todos": [VALID_TODO]})
-        result = await tool.execute({"action": "create", "todos": [VALID_TODO_2, VALID_TODO_3]})
+        result = await tool.execute(
+            {"action": "create", "todos": [VALID_TODO_2, VALID_TODO_3]}
+        )
         assert result.success is True
         assert result.output["count"] == 2
 
@@ -91,7 +104,10 @@ class TestInvalidAction:
         result = await tool.execute({"action": "delete"})
         assert result.success is False
         assert result.error is not None
-        assert "delete" in result.error["message"] or "Unknown action" in result.error["message"]
+        assert (
+            "delete" in result.error["message"]
+            or "Unknown action" in result.error["message"]
+        )
 
     async def test_none_action_returns_error(self, tool: TodoTool) -> None:
         """Missing action returns an error."""
@@ -107,7 +123,10 @@ class TestInvalidStatus:
         result = await tool.execute({"action": "create", "todos": [bad_todo]})
         assert result.success is False
         assert result.error is not None
-        assert "status" in result.error["message"].lower() or "done" in result.error["message"]
+        assert (
+            "status" in result.error["message"].lower()
+            or "done" in result.error["message"]
+        )
 
 
 class TestMissingFields:

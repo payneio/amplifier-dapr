@@ -1,4 +1,5 @@
 """Tests for the todo FastAPI application."""
+
 from __future__ import annotations
 
 import pytest
@@ -42,7 +43,11 @@ class TestTodoApp:
             "input": {
                 "action": "create",
                 "todos": [
-                    {"content": "Write tests", "activeForm": "Writing tests", "status": "pending"}
+                    {
+                        "content": "Write tests",
+                        "activeForm": "Writing tests",
+                        "status": "pending",
+                    }
                 ],
             },
         }
