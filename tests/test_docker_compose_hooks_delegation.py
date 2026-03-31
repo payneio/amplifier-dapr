@@ -80,7 +80,14 @@ def _env_has_key(env: dict | list, key: str) -> bool:
 
 
 def _env_get_value(env: dict | list, key: str) -> str | None:
-    """Get an env var value from list or dict format, or None if not present."""
+    """Get an env var value from list or dict format, or None if not present.
+
+    Note: when env is a dict and YAML yields a bare key with no value (e.g.
+    ``DENY_TOOLS:``), ``env.get(key)`` returns ``None``, which is
+    indistinguishable from a missing key.  The current compose file always
+    supplies an explicit value (``""`` or a path string), so this case is not
+    triggered in practice.
+    """
     if isinstance(env, list):
         for entry in env:
             s = str(entry)
@@ -91,6 +98,16 @@ def _env_get_value(env: dict | list, key: str) -> str | None:
         return None
     val = env.get(key)
     return str(val) if val is not None else None
+
+
+def _deps_list(deps: dict | list) -> list:
+    """Normalise a depends_on value to a plain list of service names.
+
+    Docker Compose allows depends_on as either a list of strings or a dict
+    mapping service names to condition objects.  Both forms are valid YAML;
+    this helper coerces either into a flat list so callers can use ``in``.
+    """
+    return list(deps) if isinstance(deps, dict) else deps
 
 
 class TestHookDelegationServicesExist:
@@ -185,7 +202,7 @@ class TestHookDelegationDependencies:
         services = _services(compose)
         for svc in HOOK_DELEGATION_SERVICES:
             deps = services[svc].get("depends_on", [])
-            deps_list = list(deps) if isinstance(deps, dict) else deps
+            deps_list = _deps_list(deps)
             assert "redis" in deps_list, (
                 f"Service '{svc}' should depend on redis, got: {deps_list}"
             )
@@ -311,7 +328,7 @@ class TestHookDelegationDaprSidecars:
         for svc in HOOK_DELEGATION_SERVICES:
             sidecar = f"{svc}-dapr"
             deps = services[sidecar].get("depends_on", [])
-            deps_list = list(deps) if isinstance(deps, dict) else deps
+            deps_list = _deps_list(deps)
             assert svc in deps_list, (
                 f"{sidecar} should depend on '{svc}', got: {deps_list}"
             )
@@ -325,7 +342,7 @@ class TestSessionServiceUpdatedForHooksDelegation:
         compose = _load_compose()
         services = _services(compose)
         deps = services["session-service"].get("depends_on", [])
-        deps_list = list(deps) if isinstance(deps, dict) else deps
+        deps_list = _deps_list(deps)
         for sidecar in HOOK_DELEGATION_SIDECARS:
             assert sidecar in deps_list, (
                 f"session-service should depend on '{sidecar}', got: {deps_list}"
@@ -362,6 +379,17 @@ class TestSubscriptionsYaml:
         for doc in docs:
             assert doc.get("kind") == "Subscription", (
                 f"Resource should have kind 'Subscription', got: {doc.get('kind')}"
+            )
+
+    def test_all_subscriptions_have_pubsubname(self) -> None:
+        """All subscription resources have spec.pubsubName: pubsub."""
+        docs = _load_subscriptions()
+        for doc in docs:
+            spec = doc.get("spec", {})
+            pubsubname = spec.get("pubsubName") or spec.get("pubsubname")
+            assert pubsubname == "pubsub", (
+                f"Subscription '{doc.get('metadata', {}).get('name')}' "
+                f"should have spec.pubsubName 'pubsub', got: {pubsubname!r}"
             )
 
     def test_all_required_topics_covered(self) -> None:
