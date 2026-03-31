@@ -16,10 +16,9 @@ from __future__ import annotations
 from unittest.mock import AsyncMock
 
 import pytest
-import pytest_asyncio
 from fastapi.testclient import TestClient
 
-from amplifier_service_sdk.models import HookResult, RoutingTable
+from amplifier_service_sdk.models import RoutingTable
 from svc_delegation.app import create_delegation_app
 from svc_hooks_approval.app import create_approval_hook_app
 from svc_hooks_async.app import create_async_hooks_app
@@ -200,12 +199,12 @@ class TestAsyncHookService:
         assert len(subscriptions) > 0
         topics = [sub["topic"] for sub in subscriptions]
         assert "tool.post" in topics, f"'tool.post' not found in topics: {topics}"
-        assert "session.start" in topics, f"'session.start' not found in topics: {topics}"
+        assert "session.start" in topics, (
+            f"'session.start' not found in topics: {topics}"
+        )
         assert "session.end" in topics, f"'session.end' not found in topics: {topics}"
 
-    def test_async_event_endpoint_accepts_tool_post(
-        self, client: TestClient
-    ) -> None:
+    def test_async_event_endpoint_accepts_tool_post(self, client: TestClient) -> None:
         """POST /events/tool.post with a valid CloudEvents envelope returns SUCCESS."""
         envelope = {
             "specversion": "1.0",
@@ -287,9 +286,7 @@ class TestDelegationService:
     @pytest.fixture
     def client(self):
         """TestClient pointing at a fake orchestrator URL (no real HTTP calls)."""
-        app = create_delegation_app(
-            orchestrator_base_url="http://localhost:9999/fake"
-        )
+        app = create_delegation_app(orchestrator_base_url="http://localhost:9999/fake")
         return TestClient(app)
 
     def test_delegation_describe(self, client: TestClient) -> None:
