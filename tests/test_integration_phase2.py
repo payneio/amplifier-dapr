@@ -14,22 +14,29 @@ from svc_mock_provider.app import create_mock_provider_app
 
 
 # ---------------------------------------------------------------------------
+# Module-level fixtures — shared by all test classes
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def context_client() -> TestClient:
+    """Fresh svc-context TestClient with empty message store."""
+    return TestClient(create_context_app())
+
+
+@pytest.fixture
+def provider_client() -> TestClient:
+    """Fresh svc-mock-provider TestClient."""
+    return TestClient(create_mock_provider_app())
+
+
+# ---------------------------------------------------------------------------
 # TestEndToEndFlow
 # ---------------------------------------------------------------------------
 
 
 class TestEndToEndFlow:
     """End-to-end tests verifying message flow through context and provider."""
-
-    @pytest.fixture
-    def context_client(self) -> TestClient:
-        """Fresh svc-context TestClient with empty message store."""
-        return TestClient(create_context_app())
-
-    @pytest.fixture
-    def provider_client(self) -> TestClient:
-        """Fresh svc-mock-provider TestClient."""
-        return TestClient(create_mock_provider_app())
 
     # ------------------------------------------------------------------
     # test_text_response_flow
@@ -117,14 +124,19 @@ class TestEndToEndFlow:
         }
 
         # Step 1: Add system and user messages mentioning bash
-        context_client.post(
+        resp = context_client.post(
             "/context/messages",
             json={"role": "system", "content": "You have access to bash."},
         )
-        context_client.post(
+        assert resp.status_code == 200
+        assert resp.json()["success"] is True
+
+        resp = context_client.post(
             "/context/messages",
             json={"role": "user", "content": "Please run bash to check disk space."},
         )
+        assert resp.status_code == 200
+        assert resp.json()["success"] is True
 
         # Step 2: Get messages from context
         resp = context_client.get("/context/messages")
@@ -180,11 +192,8 @@ class TestEndToEndFlow:
         final_data = resp.json()
         assert final_data["stop_reason"] == "end_turn"
         assert isinstance(final_data["content"], str)
-        # Content must reference the tool output
-        assert (
-            "tool" in final_data["content"].lower()
-            or tool_result_content in final_data["content"]
-        )
+        # Content must echo back the actual tool result data
+        assert tool_result_content in final_data["content"]
 
         # Step 7: Verify roles in context = [system, user, assistant, tool]
         resp = context_client.get("/context/messages")
@@ -201,16 +210,6 @@ class TestEndToEndFlow:
 
 class TestServiceDescribeContracts:
     """Verify that svc-context and svc-mock-provider honour /describe and /healthz."""
-
-    @pytest.fixture
-    def context_client(self) -> TestClient:
-        """TestClient for svc-context."""
-        return TestClient(create_context_app())
-
-    @pytest.fixture
-    def provider_client(self) -> TestClient:
-        """TestClient for svc-mock-provider."""
-        return TestClient(create_mock_provider_app())
 
     # ------------------------------------------------------------------
     # svc-context contracts
