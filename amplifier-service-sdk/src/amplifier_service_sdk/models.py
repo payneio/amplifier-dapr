@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from enum import Enum
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -87,3 +88,78 @@ class ContentFile(BaseModel):
 
     path: str
     content: str
+
+
+# ── Phase 2 models ────────────────────────────────────────────────────────────
+
+
+class HookAction(str, Enum):
+    """Actions a hook handler can return to control execution flow."""
+
+    CONTINUE = "CONTINUE"
+    DENY = "DENY"
+    MODIFY = "MODIFY"
+    INJECT_CONTEXT = "INJECT_CONTEXT"
+
+
+class ToolCall(BaseModel):
+    """A tool call made by the LLM during a chat turn."""
+
+    id: str
+    name: str
+    arguments: dict[str, Any] = Field(default_factory=dict)
+
+
+class TokenUsage(BaseModel):
+    """Token usage statistics for a chat exchange."""
+
+    input_tokens: int = 0
+    output_tokens: int = 0
+
+
+class Message(BaseModel):
+    """A single message in a conversation."""
+
+    role: str
+    content: str | list[Any] | None = None
+    tool_calls: list[ToolCall] | None = None
+    tool_call_id: str | None = None
+    name: str | None = None
+    metadata: dict[str, Any] | None = None
+
+
+class ChatRequest(BaseModel):
+    """A request to a chat endpoint carrying structured messages."""
+
+    messages: list[Message]
+    tools: list[ToolCapability] | None = None
+    system: str | None = None
+    max_output_tokens: int | None = None
+    reasoning_effort: str | None = None
+    temperature: float | None = None
+
+
+class ChatResponse(BaseModel):
+    """A response from a chat endpoint."""
+
+    content: str | list[Any] | None = None
+    tool_calls: list[ToolCall] | None = None
+    usage: TokenUsage | None = None
+    stop_reason: str | None = None
+
+
+class RoutingTable(BaseModel):
+    """Routing configuration for an orchestrator session."""
+
+    tools: dict[str, str] = Field(default_factory=dict)
+    providers: dict[str, str] = Field(default_factory=dict)
+    hooks: dict[str, list[str]] = Field(default_factory=dict)
+    context: str = ""
+
+
+class StreamEvent(BaseModel):
+    """A streaming event emitted during a session."""
+
+    session_id: str
+    event_type: str
+    data: dict[str, Any] = Field(default_factory=dict)

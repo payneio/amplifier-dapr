@@ -190,3 +190,261 @@ class TestProviderResponse:
         resp = ProviderResponse(content=[{"type": "text", "text": "hello"}])
         assert isinstance(resp.content, list)
         assert resp.content[0]["type"] == "text"
+
+
+# ── Phase 2 model tests ──────────────────────────────────────────────────────
+
+
+class TestHookAction:
+    def test_enum_values(self):
+        from amplifier_service_sdk import HookAction
+
+        assert HookAction.CONTINUE == "CONTINUE"
+        assert HookAction.DENY == "DENY"
+        assert HookAction.MODIFY == "MODIFY"
+        assert HookAction.INJECT_CONTEXT == "INJECT_CONTEXT"
+
+    def test_is_str(self):
+        from amplifier_service_sdk import HookAction
+
+        assert isinstance(HookAction.CONTINUE, str)
+
+    def test_membership(self):
+        from amplifier_service_sdk import HookAction
+
+        values = [e.value for e in HookAction]
+        assert set(values) == {"CONTINUE", "DENY", "MODIFY", "INJECT_CONTEXT"}
+
+
+class TestToolCall:
+    def test_basic_fields(self):
+        from amplifier_service_sdk import ToolCall
+
+        tc = ToolCall(id="call_1", name="search", arguments={"query": "hello"})
+        assert tc.id == "call_1"
+        assert tc.name == "search"
+        assert tc.arguments == {"query": "hello"}
+
+    def test_arguments_default_empty_dict(self):
+        from amplifier_service_sdk import ToolCall
+
+        tc = ToolCall(id="call_2", name="noop")
+        assert tc.arguments == {}
+
+    def test_json_roundtrip(self):
+        from amplifier_service_sdk import ToolCall
+
+        original = ToolCall(id="x", name="y", arguments={"k": "v"})
+        dumped = json.loads(original.model_dump_json())
+        recovered = ToolCall.model_validate(dumped)
+        assert recovered.id == original.id
+        assert recovered.name == original.name
+        assert recovered.arguments == original.arguments
+
+
+class TestTokenUsage:
+    def test_defaults(self):
+        from amplifier_service_sdk import TokenUsage
+
+        usage = TokenUsage()
+        assert usage.input_tokens == 0
+        assert usage.output_tokens == 0
+
+    def test_custom_values(self):
+        from amplifier_service_sdk import TokenUsage
+
+        usage = TokenUsage(input_tokens=100, output_tokens=250)
+        assert usage.input_tokens == 100
+        assert usage.output_tokens == 250
+
+
+class TestMessage:
+    def test_minimal(self):
+        from amplifier_service_sdk import Message
+
+        msg = Message(role="user", content="Hello")
+        assert msg.role == "user"
+        assert msg.content == "Hello"
+        assert msg.tool_calls is None
+        assert msg.tool_call_id is None
+        assert msg.name is None
+        assert msg.metadata is None
+
+    def test_all_fields(self):
+        from amplifier_service_sdk import Message, ToolCall
+
+        tc = ToolCall(id="c1", name="search")
+        msg = Message(
+            role="assistant",
+            content=None,
+            tool_calls=[tc],
+            tool_call_id="tc_id",
+            name="bot",
+            metadata={"key": "val"},
+        )
+        assert msg.role == "assistant"
+        assert msg.content is None
+        assert msg.tool_calls is not None
+        assert len(msg.tool_calls) == 1
+        assert msg.tool_call_id == "tc_id"
+        assert msg.name == "bot"
+        assert msg.metadata == {"key": "val"}
+
+    def test_content_as_list(self):
+        from amplifier_service_sdk import Message
+
+        msg = Message(role="user", content=[{"type": "text", "text": "hi"}])
+        assert isinstance(msg.content, list)
+
+    def test_json_roundtrip(self):
+        from amplifier_service_sdk import Message, ToolCall
+
+        tc = ToolCall(id="c1", name="search", arguments={"q": "test"})
+        original = Message(
+            role="assistant",
+            content="Some response",
+            tool_calls=[tc],
+            tool_call_id=None,
+            name="assistant",
+            metadata={"ts": 123},
+        )
+        dumped = json.loads(original.model_dump_json())
+        recovered = Message.model_validate(dumped)
+        assert recovered.role == original.role
+        assert recovered.content == original.content
+        assert recovered.tool_calls is not None
+        assert len(recovered.tool_calls) == 1
+        assert recovered.tool_calls[0].name == "search"
+        assert recovered.metadata == {"ts": 123}
+
+
+class TestChatRequest:
+    def test_minimal(self):
+        from amplifier_service_sdk import ChatRequest, Message
+
+        msg = Message(role="user", content="Hi")
+        req = ChatRequest(messages=[msg])
+        assert len(req.messages) == 1
+        assert req.tools is None
+        assert req.system is None
+        assert req.max_output_tokens is None
+        assert req.reasoning_effort is None
+        assert req.temperature is None
+
+    def test_all_fields(self):
+        from amplifier_service_sdk import ChatRequest, Message, ToolCapability
+
+        msg = Message(role="user", content="Hi")
+        tool = ToolCapability(name="search", description="Search")
+        req = ChatRequest(
+            messages=[msg],
+            tools=[tool],
+            system="You are helpful",
+            max_output_tokens=512,
+            reasoning_effort="high",
+            temperature=0.5,
+        )
+        assert req.tools is not None
+        assert len(req.tools) == 1
+        assert req.tools[0].name == "search"
+        assert req.system == "You are helpful"
+        assert req.max_output_tokens == 512
+        assert req.reasoning_effort == "high"
+        assert req.temperature == 0.5
+
+
+class TestChatResponse:
+    def test_defaults(self):
+        from amplifier_service_sdk import ChatResponse
+
+        resp = ChatResponse()
+        assert resp.content is None
+        assert resp.tool_calls is None
+        assert resp.usage is None
+        assert resp.stop_reason is None
+
+    def test_all_fields(self):
+        from amplifier_service_sdk import ChatResponse, ToolCall, TokenUsage
+
+        tc = ToolCall(id="c1", name="search")
+        usage = TokenUsage(input_tokens=10, output_tokens=20)
+        resp = ChatResponse(
+            content="Hello",
+            tool_calls=[tc],
+            usage=usage,
+            stop_reason="end_turn",
+        )
+        assert resp.content == "Hello"
+        assert resp.tool_calls is not None
+        assert len(resp.tool_calls) == 1
+        assert resp.usage is not None
+        assert resp.usage.input_tokens == 10
+        assert resp.usage.output_tokens == 20
+        assert resp.stop_reason == "end_turn"
+
+    def test_content_as_list(self):
+        from amplifier_service_sdk import ChatResponse
+
+        resp = ChatResponse(content=[{"type": "text", "text": "hi"}])
+        assert isinstance(resp.content, list)
+
+
+class TestRoutingTable:
+    def test_defaults(self):
+        from amplifier_service_sdk import RoutingTable
+
+        rt = RoutingTable()
+        assert rt.tools == {}
+        assert rt.providers == {}
+        assert rt.hooks == {}
+        assert rt.context == ""
+
+    def test_populated(self):
+        from amplifier_service_sdk import RoutingTable
+
+        rt = RoutingTable(
+            tools={"search": "search-service"},
+            providers={"default": "openai"},
+            hooks={"tool:before": ["audit-service"]},
+            context="production",
+        )
+        assert rt.tools == {"search": "search-service"}
+        assert rt.providers == {"default": "openai"}
+        assert rt.hooks == {"tool:before": ["audit-service"]}
+        assert rt.context == "production"
+
+    def test_json_roundtrip(self):
+        from amplifier_service_sdk import RoutingTable
+
+        original = RoutingTable(
+            tools={"t1": "svc1"},
+            providers={"p1": "openai"},
+            hooks={"h1": ["svc2", "svc3"]},
+            context="test",
+        )
+        dumped = json.loads(original.model_dump_json())
+        recovered = RoutingTable.model_validate(dumped)
+        assert recovered.tools == original.tools
+        assert recovered.providers == original.providers
+        assert recovered.hooks == original.hooks
+        assert recovered.context == original.context
+
+
+class TestStreamEvent:
+    def test_minimal(self):
+        from amplifier_service_sdk import StreamEvent
+
+        evt = StreamEvent(session_id="sess_1", event_type="message")
+        assert evt.session_id == "sess_1"
+        assert evt.event_type == "message"
+        assert evt.data == {}
+
+    def test_with_data(self):
+        from amplifier_service_sdk import StreamEvent
+
+        evt = StreamEvent(
+            session_id="sess_2",
+            event_type="tool_call",
+            data={"tool": "search", "args": {}},
+        )
+        assert evt.data == {"tool": "search", "args": {}}
