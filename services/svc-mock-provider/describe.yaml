@@ -1,0 +1,4 @@
+name: svc-mock-provider
+providers:
+  - name: mock
+    description: Mock LLM provider for testing
