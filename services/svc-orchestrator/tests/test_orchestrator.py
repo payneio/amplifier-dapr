@@ -13,20 +13,6 @@ from svc_orchestrator.dapr_client import DaprClient
 from svc_orchestrator.orchestrator import Orchestrator
 
 
-def _routing_table_with_hooks(
-    tools: dict[str, str] | None = None,
-    hooks: dict[str, list[str]] | None = None,
-    provider_app_id: str = "svc-provider-mock",
-    context: str = "svc-context",
-) -> RoutingTable:
-    return RoutingTable(
-        providers={"mock": provider_app_id},
-        tools=tools or {},
-        context=context,
-        hooks=hooks or {},
-    )
-
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -38,14 +24,16 @@ def _make_dapr() -> DaprClient:
 
 
 def _routing_table(
-    provider_app_id: str = "svc-provider-mock",
     tools: dict[str, str] | None = None,
+    hooks: dict[str, list[str]] | None = None,
+    provider_app_id: str = "svc-provider-mock",
     context: str = "svc-context",
 ) -> RoutingTable:
     return RoutingTable(
         providers={"mock": provider_app_id},
         tools=tools or {},
         context=context,
+        hooks=hooks or {},
     )
 
 
@@ -792,7 +780,7 @@ class TestOrchestratorPreHookDeny:
         dapr.publish = mock_publish  # type: ignore[method-assign]
 
         # Routing table with 'tool:pre' hook pointing to guard service
-        routing = _routing_table_with_hooks(
+        routing = _routing_table(
             tools={"bash": "svc-bash"},
             hooks={"tool:pre": ["svc-guard-hook"]},
         )
@@ -877,7 +865,7 @@ class TestOrchestratorPreHookDeny:
         dapr.invoke_get = mock_invoke_get  # type: ignore[method-assign]
         dapr.publish = mock_publish  # type: ignore[method-assign]
 
-        routing = _routing_table_with_hooks(
+        routing = _routing_table(
             tools={"bash": "svc-bash"},
             hooks={"tool:pre": ["svc-policy-hook"]},
         )
@@ -1045,7 +1033,7 @@ class TestOrchestratorProviderRequestHook:
         dapr.invoke_get = mock_invoke_get  # type: ignore[method-assign]
         dapr.publish = mock_publish  # type: ignore[method-assign]
 
-        routing = _routing_table_with_hooks(
+        routing = _routing_table(
             tools={"bash": "svc-bash"},
             hooks={"provider:request": ["svc-request-hook"]},
         )
@@ -1111,7 +1099,7 @@ class TestOrchestratorProviderRequestHook:
         dapr.invoke_get = mock_invoke_get  # type: ignore[method-assign]
         dapr.publish = mock_publish  # type: ignore[method-assign]
 
-        routing = _routing_table_with_hooks(
+        routing = _routing_table(
             hooks={"provider:request": ["svc-inject-hook"]},
         )
         orch = Orchestrator(dapr=dapr)
@@ -1238,6 +1226,7 @@ class TestOrchestratorSessionEvents:
         # session.end must come after all provider calls
         assert "session.start" in event_order
         assert "session.end" in event_order
+        # .index() is safe: presence confirmed by asserts above
         start_idx = event_order.index("session.start")
         end_idx = event_order.index("session.end")
         provider_idx = event_order.index("provider_call")
