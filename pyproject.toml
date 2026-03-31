@@ -41,6 +41,10 @@ pythonpath = [
     "amplifier-service-sdk/src",
     "services/svc-machine/src",
     "services/svc-bash/src",
+    "services/svc-context/src",
+    "services/svc-mock-provider/src",
+    "services/svc-orchestrator/src",
+    "services/session-service/src",
 ]
 markers = [
     "slow: marks tests as slow-running (requires real service subprocesses)",
@@ -57,4 +61,8 @@ extraPaths = [
     "amplifier-service-sdk/src",
     "services/svc-machine/src",
     "services/svc-bash/src",
+    "services/svc-context/src",
+    "services/svc-mock-provider/src",
+    "services/svc-orchestrator/src",
+    "services/session-service/src",
 ]
