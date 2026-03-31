@@ -161,6 +161,9 @@ class SimpleContextManager:
         self.compact_threshold: float = 0.85
         self.target_usage: float = 0.60
         self.protected_recent: float = 0.30
+        # protected_tool_results shields the most recent N tool results from
+        # Level 1/2 content truncation only.  Level 3+ may still remove or
+        # truncate those messages if budget pressure demands it.
         self.protected_tool_results: int = 5
         self.truncate_chars: int = 8_000
 

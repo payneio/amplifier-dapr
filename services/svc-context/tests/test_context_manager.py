@@ -160,11 +160,7 @@ class TestSimpleContextManager:
         )
 
     # -----------------------------------------------------------------------
-    # Test 8: get_messages does not modify self.messages (ephemeral compaction)
-    # -----------------------------------------------------------------------
-
-    # -----------------------------------------------------------------------
-    # Test 9: protected_tool_results prevents Levels 1/2 from truncating them
+    # Test 8: protected_tool_results prevents Levels 1/2 from truncating them
     # -----------------------------------------------------------------------
 
     async def test_protected_tool_results_not_truncated(self) -> None:
@@ -200,6 +196,10 @@ class TestSimpleContextManager:
                     f"Content starts with: '{str(m.content)[:60]}'"
                 )
 
+    # -----------------------------------------------------------------------
+    # Test 9: get_messages does not modify self.messages (ephemeral compaction)
+    # -----------------------------------------------------------------------
+
     async def test_get_messages_does_not_modify_original(self) -> None:
         """Compaction in get_messages must NOT modify self.messages (ephemeral)."""
         cm = SimpleContextManager()
@@ -224,3 +224,28 @@ class TestSimpleContextManager:
         assert len(cm.messages) == original_count, (
             "self.messages must not be modified by get_messages compaction"
         )
+
+    # -----------------------------------------------------------------------
+    # Test 10: system messages are never compacted
+    # -----------------------------------------------------------------------
+
+    async def test_system_messages_never_compacted(self) -> None:
+        """System messages must survive all compaction levels."""
+        cm = SimpleContextManager()
+        cm.max_tokens = 100
+        cm.compact_threshold = 0.50
+        cm.target_usage = 0.10  # extreme target to drive through all levels
+
+        sys_msg = Message(role="system", content="You are a helpful assistant.")
+        await cm.add_message(sys_msg)
+
+        long_content = "x" * 200  # 200 chars / 4 = 50 tokens each
+        for i in range(6):
+            role = "user" if i % 2 == 0 else "assistant"
+            await cm.add_message(Message(role=role, content=long_content))
+
+        messages = await cm.get_messages()
+
+        system_msgs = [m for m in messages if m.role == "system"]
+        assert len(system_msgs) == 1, "System message must survive compaction"
+        assert system_msgs[0].content == "You are a helpful assistant."
