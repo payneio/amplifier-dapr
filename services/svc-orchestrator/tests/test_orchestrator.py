@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+import httpx
 import pytest
 
 from amplifier_service_sdk.models import Message, RoutingTable
@@ -453,3 +454,186 @@ class TestOrchestratorMaxIterations:
 
         assert provider_call_count == 3
         assert result_text == "Done after 3 iterations"
+
+
+# ---------------------------------------------------------------------------
+# TestToolDispatchEdgeCases
+# ---------------------------------------------------------------------------
+
+
+class TestToolDispatchEdgeCases:
+    """Edge cases: unknown tool names and HTTP errors from tool services."""
+
+    @pytest.mark.asyncio
+    async def test_unknown_tool_returns_error(self) -> None:
+        """Unknown tool name produces error tool result containing 'not found'; does not raise."""
+        dapr = _make_dapr()
+        provider_call_count = 0
+        context_tool_messages: list[dict[str, Any]] = []
+
+        async def mock_invoke(
+            app_id: str, method: str, data: dict[str, Any], **kwargs: Any
+        ) -> dict[str, Any]:
+            nonlocal provider_call_count
+
+            if app_id == "svc-provider-mock" and "complete" in method:
+                provider_call_count += 1
+                if provider_call_count == 1:
+                    return {
+                        "content": None,
+                        "tool_calls": [
+                            {
+                                "id": "call-unk",
+                                "name": "unknown_tool",
+                                "arguments": {},
+                            }
+                        ],
+                        "usage": None,
+                        "stop_reason": "tool_use",
+                    }
+                else:
+                    return {
+                        "content": "Handled unknown tool gracefully.",
+                        "tool_calls": None,
+                        "usage": None,
+                        "stop_reason": "end_turn",
+                    }
+
+            # Capture tool messages added to context
+            if "context" in app_id and "messages" in method:
+                if data.get("role") == "tool":
+                    context_tool_messages.append(data)
+                return {"ok": True}
+
+            return {"ok": True}
+
+        async def mock_invoke_get(
+            app_id: str, method: str, **kwargs: Any
+        ) -> dict[str, Any]:
+            return {"messages": [{"role": "user", "content": "use unknown tool"}]}
+
+        async def mock_publish(*args: Any, **kwargs: Any) -> None:
+            pass
+
+        dapr.invoke = mock_invoke  # type: ignore[method-assign]
+        dapr.invoke_get = mock_invoke_get  # type: ignore[method-assign]
+        dapr.publish = mock_publish  # type: ignore[method-assign]
+
+        # Routing table has NO entry for 'unknown_tool'
+        routing = _routing_table(tools={})
+        orch = Orchestrator(dapr=dapr)
+
+        # Should NOT raise
+        result_text, messages = await orch.execute(
+            system_prompt="You are helpful.",
+            messages=[Message(role="user", content="use unknown tool")],
+            config={"provider": "mock"},
+            routing_table=routing,
+            session_id="session-unknown-tool",
+        )
+
+        assert result_text == "Handled unknown tool gracefully."
+        assert provider_call_count == 2, (
+            f"Expected 2 provider calls, got {provider_call_count}"
+        )
+        assert len(context_tool_messages) >= 1, (
+            "Expected at least one tool result message to be added to context"
+        )
+        assert any(
+            "not found" in str(m.get("content", "")).lower()
+            for m in context_tool_messages
+        ), (
+            f"Expected tool result message to contain 'not found', "
+            f"got: {context_tool_messages}"
+        )
+
+    @pytest.mark.asyncio
+    async def test_tool_service_error_returns_error_content(self) -> None:
+        """HTTP error from tool service produces error tool result; does not raise."""
+        dapr = _make_dapr()
+        provider_call_count = 0
+        context_tool_messages: list[dict[str, Any]] = []
+
+        async def mock_invoke(
+            app_id: str, method: str, data: dict[str, Any], **kwargs: Any
+        ) -> dict[str, Any]:
+            nonlocal provider_call_count
+
+            if app_id == "svc-provider-mock" and "complete" in method:
+                provider_call_count += 1
+                if provider_call_count == 1:
+                    return {
+                        "content": None,
+                        "tool_calls": [
+                            {
+                                "id": "call-http-err",
+                                "name": "bash",
+                                "arguments": {"cmd": "echo hi"},
+                            }
+                        ],
+                        "usage": None,
+                        "stop_reason": "tool_use",
+                    }
+                else:
+                    return {
+                        "content": "Recovered after HTTP error.",
+                        "tool_calls": None,
+                        "usage": None,
+                        "stop_reason": "end_turn",
+                    }
+
+            if app_id == "svc-bash" and "tools/bash/execute" in method:
+                # Simulate a 500 HTTP error from the tool service
+                request = httpx.Request("POST", "http://svc-bash/tools/bash/execute")
+                response = httpx.Response(500, request=request)
+                raise httpx.HTTPStatusError(
+                    "500 Internal Server Error",
+                    request=request,
+                    response=response,
+                )
+
+            # Capture tool messages added to context
+            if "context" in app_id and "messages" in method:
+                if data.get("role") == "tool":
+                    context_tool_messages.append(data)
+                return {"ok": True}
+
+            return {"ok": True}
+
+        async def mock_invoke_get(
+            app_id: str, method: str, **kwargs: Any
+        ) -> dict[str, Any]:
+            return {"messages": [{"role": "user", "content": "run bash"}]}
+
+        async def mock_publish(*args: Any, **kwargs: Any) -> None:
+            pass
+
+        dapr.invoke = mock_invoke  # type: ignore[method-assign]
+        dapr.invoke_get = mock_invoke_get  # type: ignore[method-assign]
+        dapr.publish = mock_publish  # type: ignore[method-assign]
+
+        routing = _routing_table(tools={"bash": "svc-bash"})
+        orch = Orchestrator(dapr=dapr)
+
+        # Should NOT raise
+        result_text, messages = await orch.execute(
+            system_prompt="You are a shell assistant.",
+            messages=[Message(role="user", content="run bash")],
+            config={"provider": "mock"},
+            routing_table=routing,
+            session_id="session-http-error",
+        )
+
+        assert result_text == "Recovered after HTTP error."
+        assert provider_call_count == 2, (
+            f"Expected 2 provider calls, got {provider_call_count}"
+        )
+        assert len(context_tool_messages) >= 1, (
+            "Expected at least one tool result message to be added to context"
+        )
+        assert any(
+            "error" in str(m.get("content", "")).lower() for m in context_tool_messages
+        ), (
+            f"Expected tool result message to contain 'error', "
+            f"got: {context_tool_messages}"
+        )

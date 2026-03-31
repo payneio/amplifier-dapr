@@ -254,7 +254,16 @@ class Orchestrator:
         whose content is the error string.
         """
         try:
-            tool_app_id = routing_table.tools.get(tool_call.name, tool_call.name)
+            # Check if the tool is registered in the routing table
+            if tool_call.name not in routing_table.tools:
+                return Message(
+                    role="tool",
+                    content=f"Tool '{tool_call.name}' not found in routing table",
+                    tool_call_id=tool_call.id,
+                    name=tool_call.name,
+                )
+
+            tool_app_id = routing_table.tools[tool_call.name]
 
             # Publish stream.tool_call event
             await self._publish_stream_event(
