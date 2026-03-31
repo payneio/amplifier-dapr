@@ -386,7 +386,9 @@ class TestBuildRoutingTableWithHooks:
         assert "svc-hooks-async" not in routing["hooks"].get("tool:post_invoke", [])
 
         # hook_endpoints for sync services
-        assert routing["hook_endpoints"]["svc-hooks-approval"] == "hooks/approval/invoke"
+        assert (
+            routing["hook_endpoints"]["svc-hooks-approval"] == "hooks/approval/invoke"
+        )
         assert routing["hook_endpoints"]["svc-hooks-shell"] == "hooks/shell-gate/invoke"
         assert routing["hook_endpoints"]["svc-hooks-routing"] == "hooks/routing/invoke"
         assert "svc-hooks-async" not in routing["hook_endpoints"]
