@@ -74,6 +74,7 @@ class HookDispatcher:
                     "Hook service %r raised an exception for event %r; skipping (best-effort)",
                     app_id,
                     event,
+                    exc_info=True,
                 )
                 continue
 
@@ -83,7 +84,9 @@ class HookDispatcher:
             if hook_result.action == "INJECT_CONTEXT":
                 injection = (hook_result.data or {}).get("context_injection", "")
                 if injection:
-                    context_injections.append(str(injection))
+                    context_injections.append(
+                        str(injection)
+                    )  # coerce to str in case hook returns a non-string value
 
         if context_injections:
             return HookResult(
@@ -117,4 +120,7 @@ class HookDispatcher:
         try:
             await self._dapr.publish("pubsub", topic, data)
         except Exception:
-            pass  # best-effort — never propagates
+            logger.debug(
+                "dispatch_post swallowed error for topic %r", topic, exc_info=True
+            )
+            # best-effort — never propagates
