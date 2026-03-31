@@ -74,7 +74,10 @@ class TestSet:
         result = await tool.execute({"operation": "set"})
         assert result.success is False
         assert result.error is not None
-        assert "name" in result.error["code"] or "missing" in result.error["message"].lower()
+        assert (
+            "name" in result.error["code"]
+            or "missing" in result.error["message"].lower()
+        )
 
     async def test_set_unknown_mode_returns_error(self, tool: ModeTool) -> None:
         with patch.object(tool, "_discover_modes", return_value=[]):
@@ -84,7 +87,9 @@ class TestSet:
 
 
 class TestClear:
-    async def test_clear_deactivates_mode(self, tool: ModeTool, hooks: ModeHooks) -> None:
+    async def test_clear_deactivates_mode(
+        self, tool: ModeTool, hooks: ModeHooks
+    ) -> None:
         hooks.set_active_mode(SAMPLE_MODE)
         assert hooks.get_active_mode() is not None
 
@@ -102,9 +107,7 @@ class TestInvalidOperation:
 
 
 class TestNotReady:
-    async def test_list_not_ready_when_no_hooks(
-        self, tool_no_hooks: ModeTool
-    ) -> None:
+    async def test_list_not_ready_when_no_hooks(self, tool_no_hooks: ModeTool) -> None:
         result = await tool_no_hooks.execute({"operation": "list"})
         assert result.success is False
         assert result.error["code"] == "not_ready"
@@ -116,16 +119,12 @@ class TestNotReady:
         assert result.success is False
         assert result.error["code"] == "not_ready"
 
-    async def test_set_not_ready_when_no_hooks(
-        self, tool_no_hooks: ModeTool
-    ) -> None:
+    async def test_set_not_ready_when_no_hooks(self, tool_no_hooks: ModeTool) -> None:
         result = await tool_no_hooks.execute({"operation": "set", "name": "plan"})
         assert result.success is False
         assert result.error["code"] == "not_ready"
 
-    async def test_clear_not_ready_when_no_hooks(
-        self, tool_no_hooks: ModeTool
-    ) -> None:
+    async def test_clear_not_ready_when_no_hooks(self, tool_no_hooks: ModeTool) -> None:
         result = await tool_no_hooks.execute({"operation": "clear"})
         assert result.success is False
         assert result.error["code"] == "not_ready"
