@@ -2,8 +2,8 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install uv
-RUN pip install uv
+# Install uv (pinned for reproducible builds)
+RUN pip install uv==0.10.12
 
 # Copy project files
 COPY pyproject.toml .

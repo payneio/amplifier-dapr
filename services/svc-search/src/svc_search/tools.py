@@ -28,6 +28,7 @@ class BaseMachineTool:
     """Shared HTTP machinery for tools that delegate to svc-machine."""
 
     _timeout_seconds: float = 30
+    _endpoint_path: str  # subclasses must set this
 
     def __init__(self, machine_base_url: str) -> None:
         """Initialise the tool with the machine service base URL.
@@ -91,11 +92,39 @@ class BaseMachineTool:
                 data={},
             )
 
+    async def execute(self, params: dict[str, Any]) -> ToolResult:
+        """Forward a pattern-based request to the machine service endpoint.
+
+        Args:
+            params: Tool input dict.  Must contain ``pattern``.
+                    Supports optional ``path``.
+
+        Returns:
+            ToolResult with success=True and output on success, or
+            success=False with an error message on failure.
+        """
+        pattern = params.get("pattern")
+        if not pattern:
+            return ToolResult(
+                success=False,
+                error={"message": "pattern is required"},
+            )
+
+        payload: dict[str, Any] = {"pattern": pattern}
+        if "path" in params:
+            payload["path"] = params["path"]
+
+        call = await self._call_machine_safe(self._endpoint_path, payload)
+        if call.error is not None:
+            return call.error
+        return ToolResult(success=True, output=call.data)
+
 
 class GrepTool(BaseMachineTool):
     """Tool that searches file contents using grep via svc-machine."""
 
     _timeout_seconds: float = _GREP_TIMEOUT_SECONDS
+    _endpoint_path: str = "/files/grep"
 
     name: str = "grep"
     description: str = "Search file contents with regex patterns"
@@ -114,37 +143,12 @@ class GrepTool(BaseMachineTool):
         "required": ["pattern"],
     }
 
-    async def execute(self, params: dict[str, Any]) -> ToolResult:
-        """Search file contents via the machine service.
-
-        Args:
-            params: Tool input dict.  Must contain ``pattern``.
-                    Supports optional ``path``.
-
-        Returns:
-            ToolResult with success=True and output containing matches.
-        """
-        pattern = params.get("pattern")
-        if not pattern:
-            return ToolResult(
-                success=False,
-                error={"message": "pattern is required"},
-            )
-
-        payload: dict[str, Any] = {"pattern": pattern}
-        if "path" in params:
-            payload["path"] = params["path"]
-
-        call = await self._call_machine_safe("/files/grep", payload)
-        if call.error is not None:
-            return call.error
-        return ToolResult(success=True, output=call.data)
-
 
 class GlobTool(BaseMachineTool):
     """Tool that matches files using glob patterns via svc-machine."""
 
     _timeout_seconds: float = _GLOB_TIMEOUT_SECONDS
+    _endpoint_path: str = "/files/glob"
 
     name: str = "glob"
     description: str = "Match files using glob patterns"
@@ -162,29 +166,3 @@ class GlobTool(BaseMachineTool):
         },
         "required": ["pattern"],
     }
-
-    async def execute(self, params: dict[str, Any]) -> ToolResult:
-        """Match files via the machine service.
-
-        Args:
-            params: Tool input dict.  Must contain ``pattern``.
-                    Supports optional ``path``.
-
-        Returns:
-            ToolResult with success=True and output containing matches.
-        """
-        pattern = params.get("pattern")
-        if not pattern:
-            return ToolResult(
-                success=False,
-                error={"message": "pattern is required"},
-            )
-
-        payload: dict[str, Any] = {"pattern": pattern}
-        if "path" in params:
-            payload["path"] = params["path"]
-
-        call = await self._call_machine_safe("/files/glob", payload)
-        if call.error is not None:
-            return call.error
-        return ToolResult(success=True, output=call.data)

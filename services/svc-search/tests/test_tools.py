@@ -103,3 +103,13 @@ class TestGlobTool:
         assert result.success is False
         assert result.error is not None
         assert "404" in result.error["message"]
+
+    async def test_execute_unreachable_machine(self, tool: GlobTool) -> None:
+        """execute() returns success=False with structured error when machine is unreachable."""
+        exc = httpx.ConnectError("Connection refused")
+        with patch.object(tool, "_call_machine", new=AsyncMock(side_effect=exc)):
+            result = await tool.execute({"pattern": "**/*.py"})
+
+        assert result.success is False
+        assert result.error is not None
+        assert "unreachable" in result.error["message"]
