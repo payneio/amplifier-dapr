@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
+from pydantic import BaseModel
 
 from amplifier_service_sdk import ToolCapability
 from amplifier_service_sdk.models import HookRegistration
@@ -135,8 +136,6 @@ class TestContentEndpoint:
 class TestServiceConfigHooks:
     def test_service_config_accepts_hooks(self) -> None:
         """ServiceConfig is a Pydantic BaseModel that accepts HookRegistration list."""
-        from pydantic import BaseModel
-
         hooks = [
             HookRegistration(name="pre-tool", events=["tool_call"], priority=10),
             HookRegistration(name="post-response", events=["response"], mode="async"),
