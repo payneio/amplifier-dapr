@@ -1,0 +1,19 @@
+name: svc-modes
+version: '0.1.0'
+tools:
+  - name: mode
+    description: |
+      Manage runtime modes. Operations: 'set' (activate a mode), 'clear' (deactivate),
+      'list' (show available), 'current' (show active). Mode transitions may require
+      confirmation depending on gate policy.
+    input_schema:
+      type: object
+      properties:
+        operation:
+          type: string
+          enum: [set, clear, list, current]
+          description: "Operation to perform"
+        name:
+          type: string
+          description: "Mode name (required for 'set' operation)"
+      required: [operation]
