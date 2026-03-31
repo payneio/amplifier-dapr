@@ -1,0 +1,69 @@
+apiVersion: dapr.io/v1alpha1
+kind: Subscription
+metadata:
+  name: tool-post-subscription
+spec:
+  topic: tool.post
+  route: /events/tool.post
+  pubsubname: pubsub
+  scopes:
+    - svc-hooks-async
+    - svc-hooks-shell
+---
+apiVersion: dapr.io/v1alpha1
+kind: Subscription
+metadata:
+  name: tool-pre-subscription
+spec:
+  topic: tool.pre
+  route: /events/tool.pre
+  pubsubname: pubsub
+  scopes:
+    - svc-hooks-async
+---
+apiVersion: dapr.io/v1alpha1
+kind: Subscription
+metadata:
+  name: session-start-subscription
+spec:
+  topic: session.start
+  route: /events/session.start
+  pubsubname: pubsub
+  scopes:
+    - svc-hooks-async
+    - svc-hooks-shell
+---
+apiVersion: dapr.io/v1alpha1
+kind: Subscription
+metadata:
+  name: session-end-subscription
+spec:
+  topic: session.end
+  route: /events/session.end
+  pubsubname: pubsub
+  scopes:
+    - svc-hooks-async
+    - svc-hooks-shell
+---
+apiVersion: dapr.io/v1alpha1
+kind: Subscription
+metadata:
+  name: provider-request-subscription
+spec:
+  topic: provider.request
+  route: /events/provider.request
+  pubsubname: pubsub
+  scopes:
+    - svc-hooks-async
+---
+apiVersion: dapr.io/v1alpha1
+kind: Subscription
+metadata:
+  name: prompt-complete-subscription
+spec:
+  topic: prompt.complete
+  route: /events/prompt.complete
+  pubsubname: pubsub
+  scopes:
+    - svc-hooks-async
+    - svc-hooks-shell
