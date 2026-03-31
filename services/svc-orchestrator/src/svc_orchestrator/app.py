@@ -109,7 +109,7 @@ def create_orchestrator_app(dapr_url: str | None = None) -> FastAPI:
             agent_ref=request.agent_ref,
         )
         result = await spawner.spawn(child_request)
-        session_id = child_request.child_session_id or result.get("session_id", "")
+        session_id = result.get("session_id", child_request.child_session_id)
         return DelegateResponse(
             child_session_id=session_id,
             result=result,

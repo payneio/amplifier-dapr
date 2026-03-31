@@ -74,8 +74,10 @@ class TestChildSessionSpawner:
         session_part = method[len("sessions/") : -len("/turn")]
         assert len(session_part) > 0, "session_id should have been generated"
 
-        # result must be the dict returned by dapr.invoke
-        assert result == {"result": "ok", "messages": []}
+        # result must include the generated session_id merged with dapr response
+        assert result["result"] == "ok"
+        assert result["messages"] == []
+        assert result["session_id"] == session_part
 
     @pytest.mark.asyncio
     async def test_spawn_passes_workspace_content(self) -> None:
@@ -98,3 +100,17 @@ class TestChildSessionSpawner:
         payload: dict = call_args[0][2]
         assert "workspace_content" in payload
         assert payload["workspace_content"] == workspace
+
+    @pytest.mark.asyncio
+    async def test_spawn_returns_session_id_in_result(self) -> None:
+        """spawn() includes the session_id used in the returned dict."""
+        dapr = _make_dapr()
+        dapr.invoke.return_value = {"result": "ok", "messages": []}  # type: ignore[union-attr]
+
+        spawner = ChildSessionSpawner(dapr=dapr)
+        result = await spawner.spawn(
+            ChildSessionRequest(prompt="hi", child_session_id="")
+        )
+
+        assert "session_id" in result
+        assert len(result["session_id"]) == 8

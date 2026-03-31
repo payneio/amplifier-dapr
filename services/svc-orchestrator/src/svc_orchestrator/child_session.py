@@ -59,9 +59,10 @@ class ChildSessionSpawner:
             "agent_ref": request.agent_ref,
         }
 
-        return await self._dapr.invoke(
+        result: dict[str, Any] = await self._dapr.invoke(
             self._session_service_app_id,
             f"sessions/{session_id}/turn",
             payload,
             timeout=300.0,
         )
+        return {"session_id": session_id, **result}
