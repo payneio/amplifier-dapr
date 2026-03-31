@@ -1,0 +1,34 @@
+name: svc-web
+version: '0.1.0'
+tools:
+  - name: web_search
+    description: Search the web for information
+    input_schema:
+      type: object
+      properties:
+        query:
+          type: string
+          description: Search query to execute
+      required:
+        - query
+  - name: web_fetch
+    description: Fetch content from a web URL.
+    input_schema:
+      type: object
+      properties:
+        url:
+          type: string
+          description: URL to fetch content from
+        save_to_file:
+          type: string
+          description: Save full content to this file path instead of returning in response.
+        offset:
+          type: integer
+          description: Start reading from byte N (default 0). Use for pagination.
+          default: 0
+        limit:
+          type: integer
+          description: Max bytes to return (default 200KB). Use for pagination.
+          default: 204800
+      required:
+        - url
