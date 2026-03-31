@@ -1,0 +1,55 @@
+name: svc-filesystem
+version: '0.1.0'
+tools:
+  - name: read_file
+    description: Read file contents from the filesystem
+    input_schema:
+      type: object
+      properties:
+        file_path:
+          type: string
+          description: Path to the file to read
+        offset:
+          type: integer
+          description: Line number to start reading from (1-indexed)
+        limit:
+          type: integer
+          description: Maximum number of lines to read
+      required:
+        - file_path
+  - name: write_file
+    description: Write content to a file on the filesystem
+    input_schema:
+      type: object
+      properties:
+        file_path:
+          type: string
+          description: Path to the file to write
+        content:
+          type: string
+          description: Content to write to the file
+      required:
+        - file_path
+        - content
+  - name: edit_file
+    description: Edit a file by replacing a string with another string
+    input_schema:
+      type: object
+      properties:
+        file_path:
+          type: string
+          description: Path to the file to edit
+        old_string:
+          type: string
+          description: The string to find and replace
+        new_string:
+          type: string
+          description: The replacement string
+        replace_all:
+          type: boolean
+          default: false
+          description: If true, replace all occurrences; otherwise replace only the first
+      required:
+        - file_path
+        - old_string
+        - new_string
