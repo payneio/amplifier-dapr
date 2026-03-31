@@ -99,7 +99,7 @@ def create_session_app(dapr_url: str | None = None) -> FastAPI:
         )
 
         # Load existing transcript
-        transcript: list[Message] = load_transcript(session_id)
+        transcript: list[Message] = load_transcript(session_id, _dapr_url)
 
         # Add user message to transcript
         transcript.append(Message(role="user", content=request.prompt))
@@ -125,7 +125,7 @@ def create_session_app(dapr_url: str | None = None) -> FastAPI:
         messages = [Message(**m) for m in result_messages]
 
         # Save transcript
-        save_transcript(session_id, messages)
+        save_transcript(session_id, messages, _dapr_url)
 
         # Increment turn count
         _sessions[session_id]["turn_count"] += 1
