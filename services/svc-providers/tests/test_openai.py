@@ -88,49 +88,60 @@ class TestCompleteWithMockedTextResponse:
         p._client = mock_client
         return p
 
+    @pytest.fixture
+    def simple_request(self) -> ChatRequest:
+        """A minimal ChatRequest for reuse across tests in this class."""
+        return ChatRequest(messages=[Message(role="user", content="Hi")])
+
     @pytest.mark.asyncio
-    async def test_complete_returns_chat_response(self, provider: Any) -> None:
+    async def test_complete_returns_chat_response(
+        self, provider: Any, simple_request: ChatRequest
+    ) -> None:
         """complete() returns a ChatResponse instance."""
-        request = ChatRequest(messages=[Message(role="user", content="Hi")])
-        response = await provider.complete(request)
+        response = await provider.complete(simple_request)
         assert isinstance(response, ChatResponse)
 
     @pytest.mark.asyncio
-    async def test_complete_returns_correct_text(self, provider: Any) -> None:
+    async def test_complete_returns_correct_text(
+        self, provider: Any, simple_request: ChatRequest
+    ) -> None:
         """complete() returns ChatResponse with text from mocked response."""
-        request = ChatRequest(messages=[Message(role="user", content="Hi")])
-        response = await provider.complete(request)
+        response = await provider.complete(simple_request)
         assert response.content == "Hello from OpenAI!"
 
     @pytest.mark.asyncio
-    async def test_complete_usage_is_token_usage(self, provider: Any) -> None:
+    async def test_complete_usage_is_token_usage(
+        self, provider: Any, simple_request: ChatRequest
+    ) -> None:
         """complete() returns ChatResponse with TokenUsage instance."""
-        request = ChatRequest(messages=[Message(role="user", content="Hi")])
-        response = await provider.complete(request)
+        response = await provider.complete(simple_request)
         assert response.usage is not None
         assert isinstance(response.usage, TokenUsage)
 
     @pytest.mark.asyncio
-    async def test_complete_usage_input_tokens(self, provider: Any) -> None:
+    async def test_complete_usage_input_tokens(
+        self, provider: Any, simple_request: ChatRequest
+    ) -> None:
         """complete() maps prompt_tokens to input_tokens."""
-        request = ChatRequest(messages=[Message(role="user", content="Hi")])
-        response = await provider.complete(request)
+        response = await provider.complete(simple_request)
         assert response.usage is not None
         assert response.usage.input_tokens == 10
 
     @pytest.mark.asyncio
-    async def test_complete_usage_output_tokens(self, provider: Any) -> None:
+    async def test_complete_usage_output_tokens(
+        self, provider: Any, simple_request: ChatRequest
+    ) -> None:
         """complete() maps completion_tokens to output_tokens."""
-        request = ChatRequest(messages=[Message(role="user", content="Hi")])
-        response = await provider.complete(request)
+        response = await provider.complete(simple_request)
         assert response.usage is not None
         assert response.usage.output_tokens == 5
 
     @pytest.mark.asyncio
-    async def test_complete_stop_reason(self, provider: Any) -> None:
+    async def test_complete_stop_reason(
+        self, provider: Any, simple_request: ChatRequest
+    ) -> None:
         """complete() sets stop_reason from finish_reason."""
-        request = ChatRequest(messages=[Message(role="user", content="Hi")])
-        response = await provider.complete(request)
+        response = await provider.complete(simple_request)
         assert response.stop_reason == "stop"
 
 

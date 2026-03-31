@@ -31,6 +31,9 @@ class AzureOpenAIProvider(OpenAIProvider):
         """
         super().__init__(config)
         config = config or {}
+        # Also accept AZURE_OPENAI_API_KEY (more intuitive for Azure users than OPENAI_API_KEY)
+        if self._api_key is None:
+            self._api_key = os.environ.get("AZURE_OPENAI_API_KEY")
         self._azure_endpoint: str | None = config.get(
             "azure_endpoint"
         ) or os.environ.get("AZURE_OPENAI_ENDPOINT")
@@ -52,7 +55,7 @@ class AzureOpenAIProvider(OpenAIProvider):
             if self._api_key is None:
                 raise ValueError(
                     "An Azure OpenAI API key is required. "
-                    "Pass api_key in config or set AZURE_OPENAI_API_KEY."
+                    "Pass api_key in config or set AZURE_OPENAI_API_KEY (or OPENAI_API_KEY)."
                 )
             if self._azure_endpoint is None:
                 raise ValueError(

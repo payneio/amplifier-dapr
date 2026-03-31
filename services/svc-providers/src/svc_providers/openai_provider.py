@@ -350,7 +350,7 @@ class OpenAIProvider(BaseProvider):
         text_content: str | None = None
 
         if message is not None:
-            # Text content
+            # Text content; `or None` coerces empty string "" → None intentionally
             text_content = getattr(message, "content", None) or None
 
             # Tool calls

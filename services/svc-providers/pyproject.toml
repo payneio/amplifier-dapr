@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "svc-providers"
 version = "0.1.0"
-description = "Amplifier provider service — Anthropic Claude LLM provider"
+description = "Amplifier provider service — Anthropic, OpenAI, and Azure OpenAI"
 requires-python = ">=3.11"
 dependencies = [
     "amplifier-service-sdk",
