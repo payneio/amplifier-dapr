@@ -21,7 +21,7 @@ def _save_state(dapr_url: str, key: str, value: Any) -> None:
         key: State key.
         value: Value to store (must be JSON-serializable).
     """
-    url = f"{dapr_url}/v1.0/state/{_STATE_STORE_NAME}"
+    url = f"{dapr_url}/v1.0/state/{_STATE_STORE_NAME}/{key}"
     payload = [{"key": key, "value": value}]
     with httpx.Client() as client:
         response = client.post(url, json=payload)
