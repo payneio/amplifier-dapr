@@ -47,3 +47,16 @@ class TestOrchestratorApp:
         """POST /orchestrator/execute returns 422 on empty body (endpoint exists)."""
         response = client.post("/orchestrator/execute", json={})
         assert response.status_code == 422
+
+    def test_delegate_endpoint_exists(self, client: TestClient) -> None:
+        """POST /orchestrator/delegate returns 422 on empty body (endpoint exists)."""
+        response = client.post("/orchestrator/delegate", json={})
+        assert response.status_code == 422
+
+    def test_describe_includes_delegation_capability(self, client: TestClient) -> None:
+        """GET /describe includes delegation in the tools list."""
+        response = client.get("/describe")
+        assert response.status_code == 200
+        data = response.json()
+        tool_names = [tool["name"] for tool in data.get("tools", [])]
+        assert "delegation" in tool_names
