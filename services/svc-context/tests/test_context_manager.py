@@ -163,6 +163,43 @@ class TestSimpleContextManager:
     # Test 8: get_messages does not modify self.messages (ephemeral compaction)
     # -----------------------------------------------------------------------
 
+    # -----------------------------------------------------------------------
+    # Test 9: protected_tool_results prevents Levels 1/2 from truncating them
+    # -----------------------------------------------------------------------
+
+    async def test_protected_tool_results_not_truncated(self) -> None:
+        """Level 1/2 must NOT truncate the most recent protected_tool_results messages.
+
+        Scenario: 8 tool results, protected_tool_results=6 so only indices 0 & 1
+        are truncatable.  Without the fix, Level 2 would truncate indices 2 & 3
+        (which are protected).  With the fix those messages must remain intact.
+        """
+        cm = SimpleContextManager()
+        cm.max_tokens = 800
+        cm.compact_threshold = 0.50  # threshold = 400 tokens → triggers at 800
+        cm.target_usage = 0.75  # target = 600 tokens
+        cm.truncate_chars = 100  # 100 chars = ~25 tokens (well below full content)
+        cm.protected_tool_results = 6  # protect last 6 out of 8 (indices 2-7)
+
+        long_content = "t" * 400  # 400 chars → 100 tokens each
+
+        # Add 8 tool results — total 800 tokens, above the 50% threshold (400)
+        for i in range(8):
+            msg = Message(role="tool", content=long_content, tool_call_id=f"call_{i}")
+            await cm.add_message(msg)
+
+        messages = await cm.get_messages()
+
+        # No returned tool result message should have truncated content:
+        # if protected_tool_results is honoured, Levels 1/2 only touch indices
+        # 0 & 1 (the unprotected ones); indices 2+ are shielded.
+        for m in messages:
+            if m.role == "tool":
+                assert not str(m.content).endswith("...[truncated]"), (
+                    f"A protected tool result was truncated. "
+                    f"Content starts with: '{str(m.content)[:60]}'"
+                )
+
     async def test_get_messages_does_not_modify_original(self) -> None:
         """Compaction in get_messages must NOT modify self.messages (ephemeral)."""
         cm = SimpleContextManager()

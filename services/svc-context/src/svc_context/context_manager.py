@@ -80,18 +80,26 @@ def _compact(
         i for i, m in enumerate(working) if _is_tool_result(m) and not _is_system(m)
     ]
 
-    # Level 1 — truncate oldest 25%
-    level1_count = max(1, len(tool_result_indices) // 4)
-    for idx in tool_result_indices[:level1_count]:
+    # Protect the most recent N tool results from Level 1/2 truncation
+    protected_tr = (
+        set(tool_result_indices[-protected_tool_results:])
+        if protected_tool_results > 0
+        else set()
+    )
+    truncatable = [i for i in tool_result_indices if i not in protected_tr]
+
+    # Level 1 — truncate oldest 25% of truncatable tool results
+    level1_count = max(1, len(truncatable) // 4)
+    for idx in truncatable[:level1_count]:
         working[idx] = _truncate_content(working[idx], truncate_chars)
 
     if under_target():
         return working
 
-    # Level 2 — truncate next 25% (indices 25–50%)
+    # Level 2 — truncate next 25% of truncatable (indices 25–50%)
     level2_start = level1_count
-    level2_end = level2_start + max(1, len(tool_result_indices) // 4)
-    for idx in tool_result_indices[level2_start:level2_end]:
+    level2_end = level2_start + max(1, len(truncatable) // 4)
+    for idx in truncatable[level2_start:level2_end]:
         working[idx] = _truncate_content(working[idx], truncate_chars)
 
     if under_target():
@@ -127,6 +135,11 @@ def _compact(
     # ------------------------------------------------------------------ #
     # Level 5: keep last 4 non-system messages + all system messages     #
     # ------------------------------------------------------------------ #
+    # Design note: system messages are placed first regardless of where  #
+    # they originally appeared in the conversation.  This is intentional #
+    # — most providers treat system messages as preamble, and at this    #
+    # last-resort level preserving positional order matters less than    #
+    # ensuring the model still sees its instructions.                    #
     system_msgs = [m for m in working if _is_system(m)]
     non_system_msgs = [m for m in working if not _is_system(m)]
     last_four = non_system_msgs[-4:]
