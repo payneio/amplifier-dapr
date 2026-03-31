@@ -23,7 +23,9 @@ class TestReadFileTool:
     async def test_execute_success(self, tool: ReadFileTool) -> None:
         """execute() calls machine /files/read and returns success=True with content."""
         mock_result: dict[str, Any] = {"content": "hello world\n", "total_lines": 1}
-        with patch.object(tool, "_call_machine", new=AsyncMock(return_value=mock_result)):
+        with patch.object(
+            tool, "_call_machine", new=AsyncMock(return_value=mock_result)
+        ):
             result = await tool.execute({"file_path": "/tmp/test.txt"})
 
         assert result.success is True
@@ -77,7 +79,9 @@ class TestWriteFileTool:
     async def test_execute_success(self, tool: WriteFileTool) -> None:
         """execute() calls machine /files/write and returns success=True."""
         mock_result: dict[str, Any] = {"success": True}
-        with patch.object(tool, "_call_machine", new=AsyncMock(return_value=mock_result)):
+        with patch.object(
+            tool, "_call_machine", new=AsyncMock(return_value=mock_result)
+        ):
             result = await tool.execute(
                 {"file_path": "/tmp/test.txt", "content": "hello"}
             )
@@ -100,6 +104,36 @@ class TestWriteFileTool:
         assert result.error is not None
         assert "content" in result.error["message"]
 
+    @pytest.mark.asyncio
+    async def test_execute_http_error(self, tool: WriteFileTool) -> None:
+        """execute() returns success=False when machine returns HTTP error."""
+        exc = httpx.HTTPStatusError(
+            "Internal Server Error",
+            request=httpx.Request("POST", "http://fake-machine:8080/files/write"),
+            response=httpx.Response(500),
+        )
+        with patch.object(tool, "_call_machine", new=AsyncMock(side_effect=exc)):
+            result = await tool.execute(
+                {"file_path": "/tmp/test.txt", "content": "hello"}
+            )
+
+        assert result.success is False
+        assert result.error is not None
+        assert "500" in result.error["message"]
+
+    @pytest.mark.asyncio
+    async def test_execute_unreachable_machine(self, tool: WriteFileTool) -> None:
+        """execute() returns success=False when machine is unreachable."""
+        exc = httpx.ConnectError("Connection refused")
+        with patch.object(tool, "_call_machine", new=AsyncMock(side_effect=exc)):
+            result = await tool.execute(
+                {"file_path": "/tmp/test.txt", "content": "hello"}
+            )
+
+        assert result.success is False
+        assert result.error is not None
+        assert "unreachable" in result.error["message"]
+
 
 class TestEditFileTool:
     """Tests for EditFileTool.execute."""
@@ -113,7 +147,9 @@ class TestEditFileTool:
     async def test_execute_success(self, tool: EditFileTool) -> None:
         """execute() calls machine /files/edit and returns success=True."""
         mock_result: dict[str, Any] = {"success": True, "replacements_made": 1}
-        with patch.object(tool, "_call_machine", new=AsyncMock(return_value=mock_result)):
+        with patch.object(
+            tool, "_call_machine", new=AsyncMock(return_value=mock_result)
+        ):
             result = await tool.execute(
                 {
                     "file_path": "/tmp/test.txt",
@@ -143,3 +179,41 @@ class TestEditFileTool:
         )
         assert result.success is False
         assert result.error is not None
+
+    @pytest.mark.asyncio
+    async def test_execute_http_error(self, tool: EditFileTool) -> None:
+        """execute() returns success=False when machine returns HTTP error."""
+        exc = httpx.HTTPStatusError(
+            "Not Found",
+            request=httpx.Request("POST", "http://fake-machine:8080/files/edit"),
+            response=httpx.Response(404),
+        )
+        with patch.object(tool, "_call_machine", new=AsyncMock(side_effect=exc)):
+            result = await tool.execute(
+                {
+                    "file_path": "/tmp/test.txt",
+                    "old_string": "hello",
+                    "new_string": "world",
+                }
+            )
+
+        assert result.success is False
+        assert result.error is not None
+        assert "404" in result.error["message"]
+
+    @pytest.mark.asyncio
+    async def test_execute_unreachable_machine(self, tool: EditFileTool) -> None:
+        """execute() returns success=False when machine is unreachable."""
+        exc = httpx.ConnectError("Connection refused")
+        with patch.object(tool, "_call_machine", new=AsyncMock(side_effect=exc)):
+            result = await tool.execute(
+                {
+                    "file_path": "/tmp/test.txt",
+                    "old_string": "hello",
+                    "new_string": "world",
+                }
+            )
+
+        assert result.success is False
+        assert result.error is not None
+        assert "unreachable" in result.error["message"]

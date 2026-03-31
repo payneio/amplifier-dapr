@@ -8,6 +8,8 @@ import httpx
 
 from amplifier_service_sdk.models import ToolResult
 
+_DEFAULT_TIMEOUT_SECONDS = 30
+
 
 class BaseMachineTool:
     """Shared HTTP machinery for tools that delegate to svc-machine."""
@@ -30,13 +32,50 @@ class BaseMachineTool:
         Returns:
             Parsed JSON response dict from the machine service.
         """
-        async with httpx.AsyncClient(timeout=30) as client:
+        async with httpx.AsyncClient(timeout=_DEFAULT_TIMEOUT_SECONDS) as client:
             response = await client.post(
                 f"{self._base_url}{path}",
                 json=payload,
             )
             response.raise_for_status()
             return response.json()  # type: ignore[no-any-return]
+
+    async def _call_machine_safe(
+        self, path: str, payload: dict[str, Any]
+    ) -> tuple[ToolResult | None, dict[str, Any]]:
+        """Call the machine service, converting HTTP errors to ToolResult failures.
+
+        Args:
+            path: Endpoint path (e.g. ``/files/read``).
+            payload: JSON request body.
+
+        Returns:
+            A tuple of ``(error_result, data)``.  On success ``error_result`` is
+            ``None`` and ``data`` holds the parsed response.  On failure
+            ``error_result`` is a ``ToolResult(success=False, ...)`` and ``data``
+            is an empty dict.
+        """
+        try:
+            result = await self._call_machine(path, payload)
+            return None, result
+        except httpx.HTTPStatusError as exc:
+            return (
+                ToolResult(
+                    success=False,
+                    error={
+                        "message": f"machine service error: {exc.response.status_code}"
+                    },
+                ),
+                {},
+            )
+        except httpx.RequestError as exc:
+            return (
+                ToolResult(
+                    success=False,
+                    error={"message": f"machine service unreachable: {exc}"},
+                ),
+                {},
+            )
 
 
 class ReadFileTool(BaseMachineTool):
@@ -63,17 +102,17 @@ class ReadFileTool(BaseMachineTool):
         "required": ["file_path"],
     }
 
-    async def execute(self, input: dict[str, Any]) -> ToolResult:
+    async def execute(self, params: dict[str, Any]) -> ToolResult:
         """Read file contents via the machine service.
 
         Args:
-            input: Tool input dict.  Must contain ``file_path``.
-                   Supports optional ``offset`` and ``limit``.
+            params: Tool input dict.  Must contain ``file_path``.
+                    Supports optional ``offset`` and ``limit``.
 
         Returns:
             ToolResult with success=True and output containing file content.
         """
-        file_path = input.get("file_path")
+        file_path = params.get("file_path")
         if not file_path:
             return ToolResult(
                 success=False,
@@ -81,24 +120,14 @@ class ReadFileTool(BaseMachineTool):
             )
 
         payload: dict[str, Any] = {"path": file_path}
-        if "offset" in input:
-            payload["offset"] = input["offset"]
-        if "limit" in input:
-            payload["limit"] = input["limit"]
+        if "offset" in params:
+            payload["offset"] = params["offset"]
+        if "limit" in params:
+            payload["limit"] = params["limit"]
 
-        try:
-            result = await self._call_machine("/files/read", payload)
-        except httpx.HTTPStatusError as exc:
-            return ToolResult(
-                success=False,
-                error={"message": f"machine service error: {exc.response.status_code}"},
-            )
-        except httpx.RequestError as exc:
-            return ToolResult(
-                success=False,
-                error={"message": f"machine service unreachable: {exc}"},
-            )
-
+        error, result = await self._call_machine_safe("/files/read", payload)
+        if error is not None:
+            return error
         return ToolResult(success=True, output=result)
 
 
@@ -122,23 +151,23 @@ class WriteFileTool(BaseMachineTool):
         "required": ["file_path", "content"],
     }
 
-    async def execute(self, input: dict[str, Any]) -> ToolResult:
+    async def execute(self, params: dict[str, Any]) -> ToolResult:
         """Write file contents via the machine service.
 
         Args:
-            input: Tool input dict.  Must contain ``file_path`` and ``content``.
+            params: Tool input dict.  Must contain ``file_path`` and ``content``.
 
         Returns:
             ToolResult with success=True on successful write.
         """
-        file_path = input.get("file_path")
+        file_path = params.get("file_path")
         if not file_path:
             return ToolResult(
                 success=False,
                 error={"message": "file_path is required"},
             )
 
-        content = input.get("content")
+        content = params.get("content")
         if content is None:
             return ToolResult(
                 success=False,
@@ -147,19 +176,9 @@ class WriteFileTool(BaseMachineTool):
 
         payload: dict[str, Any] = {"path": file_path, "content": content}
 
-        try:
-            result = await self._call_machine("/files/write", payload)
-        except httpx.HTTPStatusError as exc:
-            return ToolResult(
-                success=False,
-                error={"message": f"machine service error: {exc.response.status_code}"},
-            )
-        except httpx.RequestError as exc:
-            return ToolResult(
-                success=False,
-                error={"message": f"machine service unreachable: {exc}"},
-            )
-
+        error, result = await self._call_machine_safe("/files/write", payload)
+        if error is not None:
+            return error
         return ToolResult(success=True, output=result)
 
 
@@ -192,31 +211,31 @@ class EditFileTool(BaseMachineTool):
         "required": ["file_path", "old_string", "new_string"],
     }
 
-    async def execute(self, input: dict[str, Any]) -> ToolResult:
+    async def execute(self, params: dict[str, Any]) -> ToolResult:
         """Edit file contents via the machine service.
 
         Args:
-            input: Tool input dict.  Must contain ``file_path``, ``old_string``,
-                   and ``new_string``.  Supports optional ``replace_all``.
+            params: Tool input dict.  Must contain ``file_path``, ``old_string``,
+                    and ``new_string``.  Supports optional ``replace_all``.
 
         Returns:
             ToolResult with success=True on successful edit.
         """
-        file_path = input.get("file_path")
+        file_path = params.get("file_path")
         if not file_path:
             return ToolResult(
                 success=False,
                 error={"message": "file_path is required"},
             )
 
-        old_string = input.get("old_string")
+        old_string = params.get("old_string")
         if old_string is None:
             return ToolResult(
                 success=False,
                 error={"message": "old_string is required"},
             )
 
-        new_string = input.get("new_string")
+        new_string = params.get("new_string")
         if new_string is None:
             return ToolResult(
                 success=False,
@@ -234,20 +253,10 @@ class EditFileTool(BaseMachineTool):
             "old_string": old_string,
             "new_string": new_string,
         }
-        if "replace_all" in input:
-            payload["replace_all"] = input["replace_all"]
+        if "replace_all" in params:
+            payload["replace_all"] = params["replace_all"]
 
-        try:
-            result = await self._call_machine("/files/edit", payload)
-        except httpx.HTTPStatusError as exc:
-            return ToolResult(
-                success=False,
-                error={"message": f"machine service error: {exc.response.status_code}"},
-            )
-        except httpx.RequestError as exc:
-            return ToolResult(
-                success=False,
-                error={"message": f"machine service unreachable: {exc}"},
-            )
-
+        error, result = await self._call_machine_safe("/files/edit", payload)
+        if error is not None:
+            return error
         return ToolResult(success=True, output=result)
