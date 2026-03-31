@@ -65,4 +65,9 @@ extraPaths = [
     "services/svc-mock-provider/src",
     "services/svc-orchestrator/src",
     "services/session-service/src",
+    "services/svc-hooks-approval/src",
+    "services/svc-hooks-routing/src",
+    "services/svc-hooks-async/src",
+    "services/svc-hooks-shell/src",
+    "services/svc-delegation/src",
 ]
