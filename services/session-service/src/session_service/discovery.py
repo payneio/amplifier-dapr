@@ -11,7 +11,7 @@ import httpx
 logger = logging.getLogger(__name__)
 
 
-def _call_describe(app_id: str, dapr_url: str) -> dict[str, Any]:
+async def _call_describe(app_id: str, dapr_url: str) -> dict[str, Any]:
     """GET /describe from a service via Dapr Service Invocation.
 
     Args:
@@ -22,7 +22,8 @@ def _call_describe(app_id: str, dapr_url: str) -> dict[str, Any]:
         The parsed JSON response body from the /describe endpoint.
     """
     url = f"{dapr_url}/v1.0/invoke/{app_id}/method/describe"
-    response = httpx.get(url)
+    async with httpx.AsyncClient() as client:
+        response = await client.get(url)
     response.raise_for_status()
     result: dict[str, Any] = response.json()
     return result
@@ -82,7 +83,7 @@ def build_routing_table(
     }
 
 
-def discover_services(
+async def discover_services(
     service_app_ids: list[str],
     dapr_url: str,
     context_app_id: str = "svc-context",
@@ -103,7 +104,7 @@ def discover_services(
 
     for app_id in service_app_ids:
         try:
-            result = _call_describe(app_id, dapr_url)
+            result = await _call_describe(app_id, dapr_url)
             describe_results[app_id] = result
         except Exception as exc:  # noqa: BLE001
             logger.warning("Failed to describe service %r: %s", app_id, exc)

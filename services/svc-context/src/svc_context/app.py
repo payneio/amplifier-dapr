@@ -31,6 +31,11 @@ def create_context_app() -> FastAPI:
     config = ServiceConfig(name="svc-context")
     app = create_app(config)
 
+    # NOTE: This manager instance is scoped to the process lifetime, not per-session.
+    # All sessions sharing a single svc-context deployment will share context state.
+    # Phase 3 should add session-keyed context management (e.g. /context/{session_id}/messages)
+    # to correctly isolate concurrent sessions.  For Phase 2, the orchestrator is expected
+    # to call /context/clear between sessions or each session uses a dedicated instance.
     manager = SimpleContextManager()
 
     @app.post("/context/messages")

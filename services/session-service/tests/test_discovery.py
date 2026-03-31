@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from session_service.discovery import (
     build_routing_table,
@@ -146,7 +146,9 @@ class TestBuildRoutingTable:
 class TestDiscoverServices:
     """Tests for discover_services()."""
 
-    def test_calls_describe_for_each_service_and_builds_routing_table(self) -> None:
+    async def test_calls_describe_for_each_service_and_builds_routing_table(
+        self,
+    ) -> None:
         """discover_services calls _call_describe for each app_id and returns routing table."""
         fake_describe = {
             "name": "fake-service",
@@ -158,9 +160,11 @@ class TestDiscoverServices:
         }
 
         with patch(
-            "session_service.discovery._call_describe", return_value=fake_describe
+            "session_service.discovery._call_describe",
+            new_callable=AsyncMock,
+            return_value=fake_describe,
         ) as mock_call:
-            routing = discover_services(
+            routing = await discover_services(
                 service_app_ids=["svc-a", "svc-b"],
                 dapr_url="http://localhost:3500",
                 context_app_id="svc-context",

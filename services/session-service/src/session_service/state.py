@@ -13,22 +13,26 @@ _STATE_STORE_NAME = "statestore"
 _logger = logging.getLogger(__name__)
 
 
-def _save_state(dapr_url: str, key: str, value: Any) -> None:
-    """Save a key-value pair to the Dapr state store.
+async def _save_state(dapr_url: str, key: str, value: Any) -> None:
+    """Save a key-value pair to the Dapr state store (bulk-save format).
+
+    Uses the Dapr bulk-save endpoint ``POST /v1.0/state/{store}`` which
+    accepts an array of ``{key, value}`` objects.  The per-key path suffix
+    is intentionally omitted so the payload format matches the endpoint.
 
     Args:
         dapr_url: Base URL of the Dapr HTTP sidecar.
         key: State key.
         value: Value to store (must be JSON-serializable).
     """
-    url = f"{dapr_url}/v1.0/state/{_STATE_STORE_NAME}/{key}"
+    url = f"{dapr_url}/v1.0/state/{_STATE_STORE_NAME}"
     payload = [{"key": key, "value": value}]
-    with httpx.Client() as client:
-        response = client.post(url, json=payload)
+    async with httpx.AsyncClient() as client:
+        response = await client.post(url, json=payload)
         response.raise_for_status()
 
 
-def _get_state(dapr_url: str, key: str) -> Any | None:
+async def _get_state(dapr_url: str, key: str) -> Any | None:
     """Get a value from the Dapr state store.
 
     Args:
@@ -39,14 +43,16 @@ def _get_state(dapr_url: str, key: str) -> Any | None:
         The stored value, or None if not found (204 or empty response).
     """
     url = f"{dapr_url}/v1.0/state/{_STATE_STORE_NAME}/{key}"
-    with httpx.Client() as client:
-        response = client.get(url)
+    async with httpx.AsyncClient() as client:
+        response = await client.get(url)
         if response.status_code == 204 or not response.content:
             return None
         return response.json()
 
 
-def save_transcript(session_id: str, messages: list[Message], dapr_url: str) -> None:
+async def save_transcript(
+    session_id: str, messages: list[Message], dapr_url: str
+) -> None:
     """Save transcript for a session to the Dapr state store.
 
     Serializes messages via model_dump() and stores them under the key
@@ -60,12 +66,12 @@ def save_transcript(session_id: str, messages: list[Message], dapr_url: str) -> 
     key = f"{session_id}-transcript"
     value = [m.model_dump() for m in messages]
     try:
-        _save_state(dapr_url, key, value)
+        await _save_state(dapr_url, key, value)
     except Exception:
         _logger.exception("Failed to save transcript for session %s", session_id)
 
 
-def load_transcript(session_id: str, dapr_url: str) -> list[Message]:
+async def load_transcript(session_id: str, dapr_url: str) -> list[Message]:
     """Load transcript for a session from the Dapr state store.
 
     Deserializes stored data via Message.model_validate. Returns an empty
@@ -80,7 +86,7 @@ def load_transcript(session_id: str, dapr_url: str) -> list[Message]:
     """
     key = f"{session_id}-transcript"
     try:
-        data = _get_state(dapr_url, key)
+        data = await _get_state(dapr_url, key)
         if data is None:
             return []
         return [Message.model_validate(m) for m in data]

@@ -9,7 +9,7 @@ import httpx
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
-from amplifier_service_sdk.models import Message, RoutingTable
+from amplifier_service_sdk.models import Message
 from amplifier_service_sdk.service import ServiceConfig, create_app
 
 from session_service.content import assemble_system_prompt
@@ -91,15 +91,17 @@ def create_session_app(dapr_url: str | None = None) -> FastAPI:
             _sessions[session_id] = {"turn_count": 0, "status": "active"}
 
         # Discover services and build routing table
-        routing_table: RoutingTable = discover_services(request.services)
+        routing_table_dict: dict[str, Any] = await discover_services(
+            request.services, _dapr_url
+        )
 
         # Assemble the system prompt from workspace content
         system_prompt: str = assemble_system_prompt(
-            request.workspace_content, request.agent_ref
+            routing_table_dict, request.workspace_content, _dapr_url
         )
 
         # Load existing transcript
-        transcript: list[Message] = load_transcript(session_id, _dapr_url)
+        transcript: list[Message] = await load_transcript(session_id, _dapr_url)
 
         # Add user message to transcript
         transcript.append(Message(role="user", content=request.prompt))
@@ -111,8 +113,8 @@ def create_session_app(dapr_url: str | None = None) -> FastAPI:
         payload = {
             "system_prompt": system_prompt,
             "messages": [m.model_dump() for m in transcript],
-            "config": {"provider_name": request.provider_name},
-            "routing_table": routing_table.model_dump(),
+            "config": {"provider": request.provider_name},
+            "routing_table": routing_table_dict,
             "session_id": session_id,
         }
         async with httpx.AsyncClient() as client:
@@ -125,7 +127,7 @@ def create_session_app(dapr_url: str | None = None) -> FastAPI:
         messages = [Message(**m) for m in result_messages]
 
         # Save transcript
-        save_transcript(session_id, messages, _dapr_url)
+        await save_transcript(session_id, messages, _dapr_url)
 
         # Increment turn count
         _sessions[session_id]["turn_count"] += 1
