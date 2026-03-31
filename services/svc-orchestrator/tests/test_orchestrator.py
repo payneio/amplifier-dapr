@@ -13,6 +13,20 @@ from svc_orchestrator.dapr_client import DaprClient
 from svc_orchestrator.orchestrator import Orchestrator
 
 
+def _routing_table_with_hooks(
+    tools: dict[str, str] | None = None,
+    hooks: dict[str, list[str]] | None = None,
+    provider_app_id: str = "svc-provider-mock",
+    context: str = "svc-context",
+) -> RoutingTable:
+    return RoutingTable(
+        providers={"mock": provider_app_id},
+        tools=tools or {},
+        context=context,
+        hooks=hooks or {},
+    )
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -701,4 +715,264 @@ class TestProviderRetry:
         assert invoke_call_count == 2, (
             f"Expected 2 provider invoke calls (1 failed + 1 succeeded), "
             f"got {invoke_call_count}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# TestOrchestratorPreHookDeny
+# ---------------------------------------------------------------------------
+
+
+class TestOrchestratorPreHookDeny:
+    """When a pre-hook denies a tool, the tool service must NOT be invoked."""
+
+    @pytest.mark.asyncio
+    async def test_pre_hook_deny_prevents_tool_invocation(self) -> None:
+        """When pre-hook denies, tool is NOT invoked and result contains denial reason."""
+        dapr = _make_dapr()
+        invocation_log: list[str] = []
+        provider_call_count = 0
+        context_tool_messages: list[dict[str, Any]] = []
+
+        async def mock_invoke(
+            app_id: str, method: str, data: dict[str, Any], **kwargs: Any
+        ) -> dict[str, Any]:
+            nonlocal provider_call_count
+            invocation_log.append(app_id)
+
+            if app_id == "svc-provider-mock" and "complete" in method:
+                provider_call_count += 1
+                if provider_call_count == 1:
+                    return {
+                        "content": None,
+                        "tool_calls": [
+                            {
+                                "id": "call-deny",
+                                "name": "bash",
+                                "arguments": {"cmd": "rm -rf /"},
+                            }
+                        ],
+                        "usage": None,
+                        "stop_reason": "tool_use",
+                    }
+                else:
+                    return {
+                        "content": "Tool was blocked.",
+                        "tool_calls": None,
+                        "usage": None,
+                        "stop_reason": "end_turn",
+                    }
+
+            # Hook service returns DENY
+            if app_id == "svc-guard-hook":
+                return {
+                    "action": "DENY",
+                    "reason": "Tool use blocked by guard",
+                    "data": None,
+                }
+
+            # Capture tool messages added to context
+            if "context" in app_id and "messages" in method:
+                if isinstance(data, dict) and data.get("role") == "tool":
+                    context_tool_messages.append(data)
+                return {"ok": True}
+
+            return {"ok": True}
+
+        async def mock_invoke_get(
+            app_id: str, method: str, **kwargs: Any
+        ) -> dict[str, Any]:
+            return {"messages": [{"role": "user", "content": "run bash"}]}
+
+        async def mock_publish(*args: Any, **kwargs: Any) -> None:
+            pass
+
+        dapr.invoke = mock_invoke  # type: ignore[method-assign]
+        dapr.invoke_get = mock_invoke_get  # type: ignore[method-assign]
+        dapr.publish = mock_publish  # type: ignore[method-assign]
+
+        # Routing table with 'tool:pre' hook pointing to guard service
+        routing = _routing_table_with_hooks(
+            tools={"bash": "svc-bash"},
+            hooks={"tool:pre": ["svc-guard-hook"]},
+        )
+        orch = Orchestrator(dapr=dapr)
+
+        result_text, messages = await orch.execute(
+            system_prompt="Be helpful.",
+            messages=[Message(role="user", content="run bash")],
+            config={"provider": "mock"},
+            routing_table=routing,
+            session_id="session-deny-1",
+        )
+
+        assert "svc-bash" not in invocation_log, (
+            "Tool service 'svc-bash' should NOT have been invoked when pre-hook denies"
+        )
+        assert len(context_tool_messages) >= 1, (
+            "Expected at least one tool result message in context (the denial message)"
+        )
+        assert any(
+            "blocked" in str(m.get("content", "")).lower()
+            for m in context_tool_messages
+        ), (
+            f"Expected tool result message to contain 'blocked', "
+            f"got: {context_tool_messages}"
+        )
+
+    @pytest.mark.asyncio
+    async def test_pre_hook_deny_reason_in_tool_result(self) -> None:
+        """Denial reason from hook is included in the returned tool message content."""
+        dapr = _make_dapr()
+        provider_call_count = 0
+        context_tool_messages: list[dict[str, Any]] = []
+
+        async def mock_invoke(
+            app_id: str, method: str, data: dict[str, Any], **kwargs: Any
+        ) -> dict[str, Any]:
+            nonlocal provider_call_count
+
+            if app_id == "svc-provider-mock" and "complete" in method:
+                provider_call_count += 1
+                if provider_call_count == 1:
+                    return {
+                        "content": None,
+                        "tool_calls": [
+                            {"id": "call-deny2", "name": "bash", "arguments": {}}
+                        ],
+                        "usage": None,
+                        "stop_reason": "tool_use",
+                    }
+                else:
+                    return {
+                        "content": "Handled denial.",
+                        "tool_calls": None,
+                        "usage": None,
+                        "stop_reason": "end_turn",
+                    }
+
+            if app_id == "svc-policy-hook":
+                return {
+                    "action": "DENY",
+                    "reason": "policy violation detected",
+                    "data": None,
+                }
+
+            if "context" in app_id and "messages" in method:
+                if isinstance(data, dict) and data.get("role") == "tool":
+                    context_tool_messages.append(data)
+                return {"ok": True}
+
+            return {"ok": True}
+
+        async def mock_invoke_get(
+            app_id: str, method: str, **kwargs: Any
+        ) -> dict[str, Any]:
+            return {"messages": [{"role": "user", "content": "run bash"}]}
+
+        async def mock_publish(*args: Any, **kwargs: Any) -> None:
+            pass
+
+        dapr.invoke = mock_invoke  # type: ignore[method-assign]
+        dapr.invoke_get = mock_invoke_get  # type: ignore[method-assign]
+        dapr.publish = mock_publish  # type: ignore[method-assign]
+
+        routing = _routing_table_with_hooks(
+            tools={"bash": "svc-bash"},
+            hooks={"tool:pre": ["svc-policy-hook"]},
+        )
+        orch = Orchestrator(dapr=dapr)
+
+        await orch.execute(
+            system_prompt="Be helpful.",
+            messages=[Message(role="user", content="run bash")],
+            config={"provider": "mock"},
+            routing_table=routing,
+            session_id="session-deny-2",
+        )
+
+        assert len(context_tool_messages) >= 1
+        # The denial reason should appear in the tool message content
+        assert any(
+            "policy violation detected" in str(m.get("content", ""))
+            for m in context_tool_messages
+        ), f"Expected denial reason in tool message, got: {context_tool_messages}"
+
+
+# ---------------------------------------------------------------------------
+# TestOrchestratorPostHookPublish
+# ---------------------------------------------------------------------------
+
+
+class TestOrchestratorPostHookPublish:
+    """After tool execution, dispatch_post publishes a 'tool.post' event."""
+
+    @pytest.mark.asyncio
+    async def test_post_hook_publishes_tool_post_topic(self) -> None:
+        """After tool execution, 'tool.post' appears in published_topics list."""
+        dapr = _make_dapr()
+        published_topics: list[str] = []
+        provider_call_count = 0
+
+        async def mock_invoke(
+            app_id: str, method: str, data: dict[str, Any], **kwargs: Any
+        ) -> dict[str, Any]:
+            nonlocal provider_call_count
+
+            if app_id == "svc-provider-mock" and "complete" in method:
+                provider_call_count += 1
+                if provider_call_count == 1:
+                    return {
+                        "content": None,
+                        "tool_calls": [
+                            {
+                                "id": "call-post",
+                                "name": "bash",
+                                "arguments": {"cmd": "echo hi"},
+                            }
+                        ],
+                        "usage": None,
+                        "stop_reason": "tool_use",
+                    }
+                else:
+                    return {
+                        "content": "Done.",
+                        "tool_calls": None,
+                        "usage": None,
+                        "stop_reason": "end_turn",
+                    }
+
+            if app_id == "svc-bash" and "tools/bash/execute" in method:
+                return {"output": "hi", "success": True}
+
+            return {"ok": True}
+
+        async def mock_invoke_get(
+            app_id: str, method: str, **kwargs: Any
+        ) -> dict[str, Any]:
+            return {"messages": [{"role": "user", "content": "run bash"}]}
+
+        async def mock_publish(
+            pubsub: str, topic: str, data: Any, **kwargs: Any
+        ) -> None:
+            published_topics.append(topic)
+
+        dapr.invoke = mock_invoke  # type: ignore[method-assign]
+        dapr.invoke_get = mock_invoke_get  # type: ignore[method-assign]
+        dapr.publish = mock_publish  # type: ignore[method-assign]
+
+        routing = _routing_table(tools={"bash": "svc-bash"})
+        orch = Orchestrator(dapr=dapr)
+
+        result_text, messages = await orch.execute(
+            system_prompt="Be helpful.",
+            messages=[Message(role="user", content="run bash")],
+            config={"provider": "mock"},
+            routing_table=routing,
+            session_id="session-post-hook-1",
+        )
+
+        assert result_text == "Done."
+        assert "tool.post" in published_topics, (
+            f"Expected 'tool.post' in published topics, got: {published_topics}"
         )

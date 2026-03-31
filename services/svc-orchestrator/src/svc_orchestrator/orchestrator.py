@@ -16,6 +16,7 @@ from amplifier_service_sdk.models import (
 )
 
 from svc_orchestrator.dapr_client import DaprClient
+from svc_orchestrator.hook_dispatcher import HookDispatcher
 
 
 class Orchestrator:
@@ -28,6 +29,7 @@ class Orchestrator:
             dapr: Async Dapr HTTP client used for service invocation.
         """
         self._dapr = dapr
+        self._hooks = HookDispatcher(dapr=dapr)
 
     async def execute(
         self,
@@ -276,6 +278,26 @@ class Orchestrator:
                 },
             )
 
+            # Dispatch pre-hook — block tool if any hook returns DENY
+            pre_result = await self._hooks.dispatch_pre(
+                "tool:pre",
+                {
+                    "tool_name": tool_call.name,
+                    "tool_call_id": tool_call.id,
+                    "arguments": tool_call.arguments,
+                    "session_id": session_id,
+                },
+                routing_table,
+            )
+            if pre_result.action == "DENY":
+                reason = pre_result.reason or "denied by hook"
+                return Message(
+                    role="tool",
+                    content=f"Tool '{tool_call.name}' was blocked: {reason}",
+                    tool_call_id=tool_call.id,
+                    name=tool_call.name,
+                )
+
             # Invoke the tool service
             raw_result = await self._dapr.invoke(
                 tool_app_id,
@@ -289,6 +311,17 @@ class Orchestrator:
                 output = raw_result
             else:
                 output = json.dumps(raw_result)
+
+            # Dispatch post-hook (best-effort, fire-and-forget)
+            await self._hooks.dispatch_post(
+                "tool:post",
+                {
+                    "tool_name": tool_call.name,
+                    "tool_call_id": tool_call.id,
+                    "result": output,
+                    "session_id": session_id,
+                },
+            )
 
             # Publish stream.tool_result event
             await self._publish_stream_event(
