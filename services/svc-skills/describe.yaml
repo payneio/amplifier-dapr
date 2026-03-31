@@ -1,0 +1,45 @@
+name: svc-skills
+version: '0.1.0'
+tools:
+  - name: load_skill
+    description: |
+      Load domain knowledge from an available skill. Skills provide specialized knowledge, workflows,
+      best practices, and standards. Use when you need domain expertise, coding guidelines, or
+      architectural patterns.
+
+      Operations:
+
+      **List all skills:**
+        load_skill(list=True)
+        Returns a formatted list of all available skills with descriptions.
+
+      **Search for skills:**
+        load_skill(search="pattern")
+        Filters skills by name or description matching the search term.
+
+      **Get skill metadata:**
+        load_skill(info="skill-name")
+        Returns metadata (name, description, version, license, path) without loading full content.
+
+      **Load full skill content:**
+        load_skill(skill_name="skill-name")
+        Loads the complete skill content into context. Returns skill_directory path for accessing
+        companion files referenced in the skill.
+    input_schema:
+      type: object
+      properties:
+        skill_name:
+          type: string
+          description: Name of skill to load
+        list:
+          type: boolean
+          description: If true, return list of all available skills
+        search:
+          type: string
+          description: Search term to filter skills by name or description
+        info:
+          type: string
+          description: Get metadata for a specific skill without loading full content
+        source:
+          type: string
+          description: Register a new skill source. Accepts git+https:// URLs or local paths.
