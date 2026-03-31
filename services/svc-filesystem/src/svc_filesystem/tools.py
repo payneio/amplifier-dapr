@@ -9,7 +9,37 @@ import httpx
 from amplifier_service_sdk.models import ToolResult
 
 
-class ReadFileTool:
+class BaseMachineTool:
+    """Shared HTTP machinery for tools that delegate to svc-machine."""
+
+    def __init__(self, machine_base_url: str) -> None:
+        """Initialise the tool with the machine service base URL.
+
+        Args:
+            machine_base_url: Base URL for svc-machine (trailing slash stripped).
+        """
+        self._base_url = machine_base_url.rstrip("/")
+
+    async def _call_machine(self, path: str, payload: dict[str, Any]) -> dict[str, Any]:
+        """POST to the machine service endpoint.
+
+        Args:
+            path: Endpoint path (e.g. ``/files/read``).
+            payload: JSON request body.
+
+        Returns:
+            Parsed JSON response dict from the machine service.
+        """
+        async with httpx.AsyncClient(timeout=30) as client:
+            response = await client.post(
+                f"{self._base_url}{path}",
+                json=payload,
+            )
+            response.raise_for_status()
+            return response.json()  # type: ignore[no-any-return]
+
+
+class ReadFileTool(BaseMachineTool):
     """Tool that reads file contents by calling svc-machine over HTTP."""
 
     name: str = "read_file"
@@ -32,14 +62,6 @@ class ReadFileTool:
         },
         "required": ["file_path"],
     }
-
-    def __init__(self, machine_base_url: str) -> None:
-        """Initialise the tool with the machine service base URL.
-
-        Args:
-            machine_base_url: Base URL for svc-machine (trailing slash stripped).
-        """
-        self._base_url = machine_base_url.rstrip("/")
 
     async def execute(self, input: dict[str, Any]) -> ToolResult:
         """Read file contents via the machine service.
@@ -79,26 +101,8 @@ class ReadFileTool:
 
         return ToolResult(success=True, output=result)
 
-    async def _call_machine(self, path: str, payload: dict[str, Any]) -> dict[str, Any]:
-        """POST to the machine service endpoint.
 
-        Args:
-            path: Endpoint path (e.g. ``/files/read``).
-            payload: JSON request body.
-
-        Returns:
-            Parsed JSON response dict from the machine service.
-        """
-        async with httpx.AsyncClient(timeout=30) as client:
-            response = await client.post(
-                f"{self._base_url}{path}",
-                json=payload,
-            )
-            response.raise_for_status()
-            return response.json()  # type: ignore[no-any-return]
-
-
-class WriteFileTool:
+class WriteFileTool(BaseMachineTool):
     """Tool that writes file contents by calling svc-machine over HTTP."""
 
     name: str = "write_file"
@@ -117,14 +121,6 @@ class WriteFileTool:
         },
         "required": ["file_path", "content"],
     }
-
-    def __init__(self, machine_base_url: str) -> None:
-        """Initialise the tool with the machine service base URL.
-
-        Args:
-            machine_base_url: Base URL for svc-machine (trailing slash stripped).
-        """
-        self._base_url = machine_base_url.rstrip("/")
 
     async def execute(self, input: dict[str, Any]) -> ToolResult:
         """Write file contents via the machine service.
@@ -166,26 +162,8 @@ class WriteFileTool:
 
         return ToolResult(success=True, output=result)
 
-    async def _call_machine(self, path: str, payload: dict[str, Any]) -> dict[str, Any]:
-        """POST to the machine service endpoint.
 
-        Args:
-            path: Endpoint path (e.g. ``/files/write``).
-            payload: JSON request body.
-
-        Returns:
-            Parsed JSON response dict from the machine service.
-        """
-        async with httpx.AsyncClient(timeout=30) as client:
-            response = await client.post(
-                f"{self._base_url}{path}",
-                json=payload,
-            )
-            response.raise_for_status()
-            return response.json()  # type: ignore[no-any-return]
-
-
-class EditFileTool:
+class EditFileTool(BaseMachineTool):
     """Tool that edits file contents by replacing strings via svc-machine."""
 
     name: str = "edit_file"
@@ -213,14 +191,6 @@ class EditFileTool:
         },
         "required": ["file_path", "old_string", "new_string"],
     }
-
-    def __init__(self, machine_base_url: str) -> None:
-        """Initialise the tool with the machine service base URL.
-
-        Args:
-            machine_base_url: Base URL for svc-machine (trailing slash stripped).
-        """
-        self._base_url = machine_base_url.rstrip("/")
 
     async def execute(self, input: dict[str, Any]) -> ToolResult:
         """Edit file contents via the machine service.
@@ -281,21 +251,3 @@ class EditFileTool:
             )
 
         return ToolResult(success=True, output=result)
-
-    async def _call_machine(self, path: str, payload: dict[str, Any]) -> dict[str, Any]:
-        """POST to the machine service endpoint.
-
-        Args:
-            path: Endpoint path (e.g. ``/files/edit``).
-            payload: JSON request body.
-
-        Returns:
-            Parsed JSON response dict from the machine service.
-        """
-        async with httpx.AsyncClient(timeout=30) as client:
-            response = await client.post(
-                f"{self._base_url}{path}",
-                json=payload,
-            )
-            response.raise_for_status()
-            return response.json()  # type: ignore[no-any-return]
