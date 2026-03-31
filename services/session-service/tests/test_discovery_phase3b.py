@@ -316,7 +316,89 @@ class TestToolsAndHooksCoexist:
 
 
 # ---------------------------------------------------------------------------
-# Test 6 — DEFAULT_SERVICES contains Phase 3b services
+# Test 6 — build_routing_table populates hooks, hook_endpoints, hook_priorities
+# ---------------------------------------------------------------------------
+
+
+class TestBuildRoutingTableWithHooks:
+    """build_routing_table correctly populates hook keys for Phase 3b services."""
+
+    def test_hooks_key_populated_for_sync_hooks(self) -> None:
+        """build_routing_table adds sync hooks to routing_table['hooks'] by event."""
+        describe_results = {
+            "svc-hooks-approval": _describe_hooks_approval(),
+        }
+        routing = build_routing_table(describe_results, context_app_id="svc-context")
+
+        assert "hooks" in routing
+        assert "tool:pre_invoke" in routing["hooks"]
+        assert "svc-hooks-approval" in routing["hooks"]["tool:pre_invoke"]
+
+    def test_hook_endpoints_key_populated(self) -> None:
+        """build_routing_table populates routing_table['hook_endpoints'] for sync hooks."""
+        describe_results = {
+            "svc-hooks-routing": _describe_hooks_routing(),
+        }
+        routing = build_routing_table(describe_results, context_app_id="svc-context")
+
+        assert "hook_endpoints" in routing
+        assert "svc-hooks-routing" in routing["hook_endpoints"]
+        assert routing["hook_endpoints"]["svc-hooks-routing"] == "hooks/routing/invoke"
+
+    def test_hook_priorities_key_populated(self) -> None:
+        """build_routing_table populates routing_table['hook_priorities'] for sync hooks."""
+        describe_results = {
+            "svc-hooks-shell": _describe_hooks_shell(),
+        }
+        routing = build_routing_table(describe_results, context_app_id="svc-context")
+
+        assert "hook_priorities" in routing
+        assert routing["hook_priorities"]["svc-hooks-shell"] == 20
+
+    def test_async_hooks_excluded_from_routing_table(self) -> None:
+        """build_routing_table excludes async hooks from routing_table['hooks']."""
+        describe_results = {
+            "svc-hooks-async": _describe_hooks_async(),
+        }
+        routing = build_routing_table(describe_results, context_app_id="svc-context")
+
+        assert "svc-hooks-async" not in routing["hooks"].get("tool:post_invoke", [])
+        assert "svc-hooks-async" not in routing["hooks"].get("session:end", [])
+        assert "svc-hooks-async" not in routing.get("hook_endpoints", {})
+
+    def test_full_phase3b_routing_table(self) -> None:
+        """build_routing_table correctly handles all Phase 3b hook services together."""
+        describe_results = {
+            "svc-hooks-approval": _describe_hooks_approval(),
+            "svc-hooks-routing": _describe_hooks_routing(),
+            "svc-hooks-async": _describe_hooks_async(),
+            "svc-hooks-shell": _describe_hooks_shell(),
+        }
+        routing = build_routing_table(describe_results, context_app_id="svc-context")
+
+        # Sync hooks mapped by event
+        assert "svc-hooks-approval" in routing["hooks"]["tool:pre_invoke"]
+        assert "svc-hooks-shell" in routing["hooks"]["tool:pre_invoke"]
+        assert "svc-hooks-routing" in routing["hooks"]["session:start"]
+        assert "svc-hooks-routing" in routing["hooks"]["session:end"]
+
+        # Async hook excluded
+        assert "svc-hooks-async" not in routing["hooks"].get("tool:post_invoke", [])
+
+        # hook_endpoints for sync services
+        assert routing["hook_endpoints"]["svc-hooks-approval"] == "hooks/approval/invoke"
+        assert routing["hook_endpoints"]["svc-hooks-shell"] == "hooks/shell-gate/invoke"
+        assert routing["hook_endpoints"]["svc-hooks-routing"] == "hooks/routing/invoke"
+        assert "svc-hooks-async" not in routing["hook_endpoints"]
+
+        # hook_priorities
+        assert routing["hook_priorities"]["svc-hooks-approval"] == 10
+        assert routing["hook_priorities"]["svc-hooks-shell"] == 20
+        assert routing["hook_priorities"]["svc-hooks-routing"] == 5
+
+
+# ---------------------------------------------------------------------------
+# Test 7 — DEFAULT_SERVICES contains Phase 3b services
 # ---------------------------------------------------------------------------
 
 
