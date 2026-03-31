@@ -70,7 +70,7 @@ class DescribeResponse(BaseModel):
     name: str
     version: str = "0.1.0"
     tools: list[ToolCapability] = Field(default_factory=list)
-    hooks: list[dict[str, Any]] = Field(default_factory=list)
+    hooks: list["HookRegistration"] = Field(default_factory=list)
     providers: list[dict[str, Any]] = Field(default_factory=list)
     content_paths: list[str] = Field(default_factory=list)
 
@@ -155,6 +155,8 @@ class RoutingTable(BaseModel):
     providers: dict[str, str] = Field(default_factory=dict)
     hooks: dict[str, list[str]] = Field(default_factory=dict)
     context: str = ""
+    hook_endpoints: dict[str, str] = Field(default_factory=dict)
+    hook_priorities: dict[str, int] = Field(default_factory=dict)
 
 
 class StreamEvent(BaseModel):
@@ -163,3 +165,28 @@ class StreamEvent(BaseModel):
     session_id: str
     event_type: str
     data: dict[str, Any] = Field(default_factory=dict)
+
+
+# ── Phase 3b models ───────────────────────────────────────────────────────────
+
+
+class HookRegistration(BaseModel):
+    """Describes a hook registration advertised by a service via /describe."""
+
+    name: str
+    events: list[str] = Field(default_factory=list)
+    priority: int = 50
+    mode: str = "sync"  # 'sync' = pre-hook blocking, 'async' = pub/sub subscriber
+
+
+class DaprSubscription(BaseModel):
+    """A Dapr pub/sub subscription descriptor."""
+
+    pubsubname: str
+    topic: str
+    route: str = ""
+
+    def model_post_init(self, __context: Any) -> None:  # noqa: ANN401
+        if not self.route:
+            safe_topic = self.topic.replace(":", ".")
+            self.route = f"/events/{safe_topic}"
