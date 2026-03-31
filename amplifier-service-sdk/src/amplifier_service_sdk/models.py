@@ -176,8 +176,9 @@ class HookRegistration(BaseModel):
     name: str
     events: list[str] = Field(default_factory=list)
     priority: int = 50
-    mode: Literal["sync", "async"] = (
-        "sync"  # 'sync' = pre-hook blocking, 'async' = pub/sub subscriber
+    mode: Literal["sync", "async"] = Field(
+        default="sync",
+        description="'sync' = pre-hook blocking, 'async' = pub/sub subscriber",
     )
 
 

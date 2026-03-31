@@ -3,6 +3,7 @@
 import json
 
 import pytest
+from pydantic import ValidationError
 
 from amplifier_service_sdk.models import (
     DaprSubscription,
@@ -82,7 +83,7 @@ class TestHookRegistration:
 
     def test_invalid_mode_rejected(self):
         """mode only accepts 'sync' or 'async'; any other value is a validation error."""
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             HookRegistration(name="my-hook", mode="fire_and_forget")  # type: ignore[arg-type]
 
 
