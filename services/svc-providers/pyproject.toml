@@ -5,12 +5,14 @@ build-backend = "hatchling.build"
 [project]
 name = "svc-providers"
 version = "0.1.0"
-description = "Amplifier provider service — Anthropic, OpenAI, and Azure OpenAI"
+description = "Amplifier provider service — Anthropic, OpenAI, Azure OpenAI, Gemini, Ollama, vLLM, GitHub Copilot"
 requires-python = ">=3.11"
 dependencies = [
     "amplifier-service-sdk",
     "anthropic>=0.40",
     "openai>=1.50",
+    "google-generativeai>=0.8",
+    "ollama>=0.3",
 ]
 
 [tool.uv.sources]

@@ -6,3 +6,11 @@ providers:
     description: OpenAI provider
   - name: azure-openai
     description: Azure OpenAI provider
+  - name: gemini
+    description: Google Gemini provider
+  - name: ollama
+    description: Ollama local model provider
+  - name: vllm
+    description: vLLM OpenAI-compatible provider
+  - name: github-copilot
+    description: GitHub Copilot provider
