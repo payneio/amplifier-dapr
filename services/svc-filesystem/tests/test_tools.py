@@ -19,7 +19,6 @@ class TestReadFileTool:
         """Create a ReadFileTool pointed at a fake machine URL."""
         return ReadFileTool(machine_base_url="http://fake-machine:8080")
 
-    @pytest.mark.asyncio
     async def test_execute_success(self, tool: ReadFileTool) -> None:
         """execute() calls machine /files/read and returns success=True with content."""
         mock_result: dict[str, Any] = {"content": "hello world\n", "total_lines": 1}
@@ -32,7 +31,6 @@ class TestReadFileTool:
         assert result.output is not None
         assert result.output["content"] == "hello world\n"
 
-    @pytest.mark.asyncio
     async def test_execute_missing_file_path(self, tool: ReadFileTool) -> None:
         """execute() with no file_path returns success=False with descriptive error."""
         result = await tool.execute({})
@@ -40,7 +38,6 @@ class TestReadFileTool:
         assert result.error is not None
         assert "file_path" in result.error["message"]
 
-    @pytest.mark.asyncio
     async def test_execute_http_error(self, tool: ReadFileTool) -> None:
         """execute() returns success=False when machine returns HTTP error."""
         exc = httpx.HTTPStatusError(
@@ -55,7 +52,6 @@ class TestReadFileTool:
         assert result.error is not None
         assert "404" in result.error["message"]
 
-    @pytest.mark.asyncio
     async def test_execute_unreachable_machine(self, tool: ReadFileTool) -> None:
         """execute() returns success=False with structured error when machine is unreachable."""
         exc = httpx.ConnectError("Connection refused")
@@ -75,7 +71,6 @@ class TestWriteFileTool:
         """Create a WriteFileTool pointed at a fake machine URL."""
         return WriteFileTool(machine_base_url="http://fake-machine:8080")
 
-    @pytest.mark.asyncio
     async def test_execute_success(self, tool: WriteFileTool) -> None:
         """execute() calls machine /files/write and returns success=True."""
         mock_result: dict[str, Any] = {"success": True}
@@ -88,7 +83,6 @@ class TestWriteFileTool:
 
         assert result.success is True
 
-    @pytest.mark.asyncio
     async def test_execute_missing_file_path(self, tool: WriteFileTool) -> None:
         """execute() with no file_path returns success=False."""
         result = await tool.execute({"content": "hello"})
@@ -96,7 +90,6 @@ class TestWriteFileTool:
         assert result.error is not None
         assert "file_path" in result.error["message"]
 
-    @pytest.mark.asyncio
     async def test_execute_missing_content(self, tool: WriteFileTool) -> None:
         """execute() with no content returns success=False."""
         result = await tool.execute({"file_path": "/tmp/test.txt"})
@@ -104,7 +97,6 @@ class TestWriteFileTool:
         assert result.error is not None
         assert "content" in result.error["message"]
 
-    @pytest.mark.asyncio
     async def test_execute_http_error(self, tool: WriteFileTool) -> None:
         """execute() returns success=False when machine returns HTTP error."""
         exc = httpx.HTTPStatusError(
@@ -121,7 +113,6 @@ class TestWriteFileTool:
         assert result.error is not None
         assert "500" in result.error["message"]
 
-    @pytest.mark.asyncio
     async def test_execute_unreachable_machine(self, tool: WriteFileTool) -> None:
         """execute() returns success=False when machine is unreachable."""
         exc = httpx.ConnectError("Connection refused")
@@ -143,7 +134,6 @@ class TestEditFileTool:
         """Create an EditFileTool pointed at a fake machine URL."""
         return EditFileTool(machine_base_url="http://fake-machine:8080")
 
-    @pytest.mark.asyncio
     async def test_execute_success(self, tool: EditFileTool) -> None:
         """execute() calls machine /files/edit and returns success=True."""
         mock_result: dict[str, Any] = {"success": True, "replacements_made": 1}
@@ -160,14 +150,22 @@ class TestEditFileTool:
 
         assert result.success is True
 
-    @pytest.mark.asyncio
-    async def test_execute_missing_fields(self, tool: EditFileTool) -> None:
-        """execute() with missing old_string/new_string returns success=False."""
+    async def test_execute_missing_old_string(self, tool: EditFileTool) -> None:
+        """execute() with missing old_string returns success=False with descriptive error."""
         result = await tool.execute({"file_path": "/tmp/test.txt"})
         assert result.success is False
         assert result.error is not None
+        assert "old_string" in result.error["message"]
 
-    @pytest.mark.asyncio
+    async def test_execute_missing_new_string(self, tool: EditFileTool) -> None:
+        """execute() with missing new_string returns success=False with descriptive error."""
+        result = await tool.execute(
+            {"file_path": "/tmp/test.txt", "old_string": "hello"}
+        )
+        assert result.success is False
+        assert result.error is not None
+        assert "new_string" in result.error["message"]
+
     async def test_execute_same_strings(self, tool: EditFileTool) -> None:
         """execute() with old_string == new_string returns success=False."""
         result = await tool.execute(
@@ -180,7 +178,6 @@ class TestEditFileTool:
         assert result.success is False
         assert result.error is not None
 
-    @pytest.mark.asyncio
     async def test_execute_http_error(self, tool: EditFileTool) -> None:
         """execute() returns success=False when machine returns HTTP error."""
         exc = httpx.HTTPStatusError(
@@ -201,7 +198,6 @@ class TestEditFileTool:
         assert result.error is not None
         assert "404" in result.error["message"]
 
-    @pytest.mark.asyncio
     async def test_execute_unreachable_machine(self, tool: EditFileTool) -> None:
         """execute() returns success=False when machine is unreachable."""
         exc = httpx.ConnectError("Connection refused")

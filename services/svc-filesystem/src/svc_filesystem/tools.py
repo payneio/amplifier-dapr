@@ -2,13 +2,25 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, NamedTuple
 
 import httpx
 
 from amplifier_service_sdk.models import ToolResult
 
 _DEFAULT_TIMEOUT_SECONDS = 30
+
+
+class _MachineCallResult(NamedTuple):
+    """Return type for ``_call_machine_safe``.
+
+    Attributes:
+        error: A ``ToolResult(success=False, ...)`` on failure, or ``None`` on success.
+        data:  Parsed response dict on success, or empty dict on failure.
+    """
+
+    error: ToolResult | None
+    data: dict[str, Any]
 
 
 class BaseMachineTool:
@@ -42,7 +54,7 @@ class BaseMachineTool:
 
     async def _call_machine_safe(
         self, path: str, payload: dict[str, Any]
-    ) -> tuple[ToolResult | None, dict[str, Any]]:
+    ) -> _MachineCallResult:
         """Call the machine service, converting HTTP errors to ToolResult failures.
 
         Args:
@@ -50,31 +62,30 @@ class BaseMachineTool:
             payload: JSON request body.
 
         Returns:
-            A tuple of ``(error_result, data)``.  On success ``error_result`` is
-            ``None`` and ``data`` holds the parsed response.  On failure
-            ``error_result`` is a ``ToolResult(success=False, ...)`` and ``data``
-            is an empty dict.
+            A ``_MachineCallResult`` with ``error=None`` and ``data`` populated on
+            success, or ``error`` set to a ``ToolResult(success=False, ...)`` and
+            ``data`` as an empty dict on failure.
         """
         try:
             result = await self._call_machine(path, payload)
-            return None, result
+            return _MachineCallResult(error=None, data=result)
         except httpx.HTTPStatusError as exc:
-            return (
-                ToolResult(
+            return _MachineCallResult(
+                error=ToolResult(
                     success=False,
                     error={
                         "message": f"machine service error: {exc.response.status_code}"
                     },
                 ),
-                {},
+                data={},
             )
         except httpx.RequestError as exc:
-            return (
-                ToolResult(
+            return _MachineCallResult(
+                error=ToolResult(
                     success=False,
                     error={"message": f"machine service unreachable: {exc}"},
                 ),
-                {},
+                data={},
             )
 
 
@@ -125,10 +136,10 @@ class ReadFileTool(BaseMachineTool):
         if "limit" in params:
             payload["limit"] = params["limit"]
 
-        error, result = await self._call_machine_safe("/files/read", payload)
-        if error is not None:
-            return error
-        return ToolResult(success=True, output=result)
+        call = await self._call_machine_safe("/files/read", payload)
+        if call.error is not None:
+            return call.error
+        return ToolResult(success=True, output=call.data)
 
 
 class WriteFileTool(BaseMachineTool):
@@ -176,10 +187,10 @@ class WriteFileTool(BaseMachineTool):
 
         payload: dict[str, Any] = {"path": file_path, "content": content}
 
-        error, result = await self._call_machine_safe("/files/write", payload)
-        if error is not None:
-            return error
-        return ToolResult(success=True, output=result)
+        call = await self._call_machine_safe("/files/write", payload)
+        if call.error is not None:
+            return call.error
+        return ToolResult(success=True, output=call.data)
 
 
 class EditFileTool(BaseMachineTool):
@@ -256,7 +267,7 @@ class EditFileTool(BaseMachineTool):
         if "replace_all" in params:
             payload["replace_all"] = params["replace_all"]
 
-        error, result = await self._call_machine_safe("/files/edit", payload)
-        if error is not None:
-            return error
-        return ToolResult(success=True, output=result)
+        call = await self._call_machine_safe("/files/edit", payload)
+        if call.error is not None:
+            return call.error
+        return ToolResult(success=True, output=call.data)
