@@ -1,9 +1,17 @@
+# ── Stage 1: Shared Amplifier service base ────────────────────────────────
+FROM python:3.12-slim AS amplifier-service-base
+WORKDIR /app
+RUN pip install --no-cache-dir uv
+COPY amplifier-service-sdk/ /build/amplifier-service-sdk/
+RUN cd /build/amplifier-service-sdk && uv pip install --system . && rm -rf /build
+HEALTHCHECK --interval=10s --timeout=3s --retries=3 \
+  CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/healthz')"
+EXPOSE 8000
+
+# ── Stage 2: svc-content-system-design-intelligence ───────────────────────
 FROM amplifier-service-base
 
-# Copy service configuration
 COPY services/svc-content-system-design-intelligence/describe.yaml /app/describe.yaml
-
-# Copy content from amplifier-system-design-intelligence src directory (no context/ dir exists)
-COPY services/amplifier-system-design-intelligence/src/amplifier_system_design_intelligence/ /app/content/
+COPY services/svc-content-system-design-intelligence/content/ /app/content/
 
 CMD ["amplifier-serve", "--config", "/app/describe.yaml"]
