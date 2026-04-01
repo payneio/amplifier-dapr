@@ -5,7 +5,6 @@ from __future__ import annotations
 import os
 import tempfile
 
-import pytest
 from rich.console import Console
 
 from amplifier_ipc_cli.repl import (
@@ -78,9 +77,7 @@ class TestProcessMentions:
     def test_existing_file_injected(self) -> None:
         """A mention pointing to an existing file is replaced by a <context_file> block."""
         console = Console(quiet=True)
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".txt", delete=False
-        ) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
             f.write("file content here")
             tmp_path = f.name
 
@@ -89,7 +86,11 @@ class TestProcessMentions:
             assert "<context_file" in result
             assert "file content here" in result
             # The @ mention path should be stripped from the user text portion
-            assert f"@{tmp_path}" not in result.split("</context_file>")[-1] if "</context_file>" in result else True
+            assert (
+                f"@{tmp_path}" not in result.split("</context_file>")[-1]
+                if "</context_file>" in result
+                else True
+            )
         finally:
             os.unlink(tmp_path)
 
