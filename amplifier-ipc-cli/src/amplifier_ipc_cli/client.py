@@ -10,6 +10,7 @@ import httpx
 
 _DEFAULT_BASE_URL = "http://localhost:8080"
 _TIMEOUT = 120.0
+_METADATA_TIMEOUT = 10.0  # metadata queries: tools, modes, clear
 
 
 @dataclass
@@ -174,7 +175,9 @@ class SessionClient:
         GET /sessions/{session_id}/tools
         """
         http = self._get_http()
-        response = await http.get(f"/sessions/{session_id}/tools", timeout=10.0)
+        response = await http.get(
+            f"/sessions/{session_id}/tools", timeout=_METADATA_TIMEOUT
+        )
         response.raise_for_status()
         return response.json().get("tools", [])
 
@@ -184,7 +187,9 @@ class SessionClient:
         GET /sessions/{session_id}/modes
         """
         http = self._get_http()
-        response = await http.get(f"/sessions/{session_id}/modes", timeout=10.0)
+        response = await http.get(
+            f"/sessions/{session_id}/modes", timeout=_METADATA_TIMEOUT
+        )
         response.raise_for_status()
         return response.json().get("modes", [])
 
@@ -194,6 +199,8 @@ class SessionClient:
         POST /sessions/{session_id}/clear
         """
         http = self._get_http()
-        response = await http.post(f"/sessions/{session_id}/clear", timeout=10.0)
+        response = await http.post(
+            f"/sessions/{session_id}/clear", timeout=_METADATA_TIMEOUT
+        )
         response.raise_for_status()
         return response.json().get("status") == "cleared"

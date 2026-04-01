@@ -2,17 +2,21 @@
 
 from __future__ import annotations
 
+from collections.abc import Generator
+
 import pytest
 from fastapi.testclient import TestClient
 
-from session_service.app import create_session_app
+from session_service.app import _sessions, create_session_app
 
 
 @pytest.fixture
-def client() -> TestClient:
-    """Create a TestClient for the session-service app."""
+def client() -> Generator[TestClient, None, None]:
+    """Create a TestClient for the session-service app with isolated session state."""
+    _sessions.clear()
     app = create_session_app(dapr_url="http://localhost:3500")
-    return TestClient(app)
+    yield TestClient(app)
+    _sessions.clear()
 
 
 def test_get_tools_returns_empty_before_turn(client: TestClient) -> None:
@@ -55,8 +59,6 @@ def test_clear_session_returns_ok(client: TestClient) -> None:
 
 def test_clear_session_resets_turn_count(client: TestClient) -> None:
     """POST /sessions/{id}/clear resets turn_count to 0 and status to 'active'."""
-    from session_service.app import _sessions  # noqa: PLC0415
-
     session_id = "test-reset-session"
     # Manually put a session with some state
     _sessions[session_id] = {"turn_count": 5, "status": "active"}

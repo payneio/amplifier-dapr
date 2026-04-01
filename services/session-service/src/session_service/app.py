@@ -222,6 +222,9 @@ def create_session_app(dapr_url: str | None = None) -> FastAPI:
                 # Save transcript
                 await save_transcript(session_id, messages, _dapr_url)
 
+                # Store routing table for later metadata queries
+                _sessions[session_id]["routing_table"] = routing_table_dict
+
                 # Increment turn count
                 _sessions[session_id]["turn_count"] += 1
 
@@ -276,6 +279,7 @@ def create_session_app(dapr_url: str | None = None) -> FastAPI:
     @app.post("/sessions/{session_id}/clear")
     async def session_clear(session_id: str) -> dict[str, Any]:
         """Reset session state to initial values."""
+        # Upsert: create a fresh session entry whether or not one already existed.
         _sessions[session_id] = {"turn_count": 0, "status": "active"}
         return {"status": "cleared"}
 
