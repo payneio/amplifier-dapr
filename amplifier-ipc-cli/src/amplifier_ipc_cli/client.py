@@ -152,6 +152,8 @@ class SessionClient:
             buffer = ""
             async for chunk in response.aiter_text():
                 buffer += chunk
+                # Normalize \r\n to \n for SSE parsing
+                buffer = buffer.replace("\r\n", "\n")
                 # SSE events are separated by double newlines
                 while "\n\n" in buffer:
                     block, buffer = buffer.split("\n\n", 1)

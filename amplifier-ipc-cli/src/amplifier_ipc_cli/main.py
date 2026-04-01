@@ -100,7 +100,7 @@ async def _run_impl(
                         provider_name=provider,
                     ):
                         if event.event == "complete" and isinstance(event.data, dict):
-                            accumulated_response = event.data.get("response", "")
+                            accumulated_response = event.data.get("result", "") or event.data.get("response", "")
                         elif event.event == "error":
                             error_msg = (
                                 event.data.get("message", str(event.data))

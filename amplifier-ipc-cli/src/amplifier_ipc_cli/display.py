@@ -198,7 +198,10 @@ class StreamingDisplay:
         self._console.print(f"[red]Error: {message}[/red]")
 
     def _handle_complete(self, data: Any) -> None:
-        """Store the final response text and print a trailing newline."""
+        """Store the final response text and print it if no tokens were streamed."""
         if isinstance(data, dict):
-            self._response = data.get("response", "")
+            self._response = data.get("result", "") or data.get("response", "")
+        # If the response came as a batch (no token events), print the text
+        if self._response:
+            self._console.print(self._response, highlight=False, markup=False)
         self._console.print()
