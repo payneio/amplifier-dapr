@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 
 import httpx
-import pytest
 
 from amplifier_ipc_cli.client import SSEEvent, SessionClient
 
@@ -64,7 +63,9 @@ class TestSessionClient:
             return httpx.Response(200, json={"status": "ok"})
 
         transport = httpx.MockTransport(handler)
-        async with httpx.AsyncClient(base_url="http://localhost:8080", transport=transport) as http:
+        async with httpx.AsyncClient(
+            base_url="http://localhost:8080", transport=transport
+        ) as http:
             client = SessionClient()
             client._http = http
             result = await client.healthcheck()
@@ -85,7 +86,9 @@ class TestSessionClient:
             return httpx.Response(200, json=expected_response)
 
         transport = httpx.MockTransport(handler)
-        async with httpx.AsyncClient(base_url="http://localhost:8080", transport=transport) as http:
+        async with httpx.AsyncClient(
+            base_url="http://localhost:8080", transport=transport
+        ) as http:
             client = SessionClient()
             client._http = http
             result = await client.send_turn(session_id, "Hello world")
@@ -103,9 +106,35 @@ class TestSessionClient:
             return httpx.Response(200, json=expected_info)
 
         transport = httpx.MockTransport(handler)
-        async with httpx.AsyncClient(base_url="http://localhost:8080", transport=transport) as http:
+        async with httpx.AsyncClient(
+            base_url="http://localhost:8080", transport=transport
+        ) as http:
             client = SessionClient()
             client._http = http
             result = await client.get_session_info(session_id)
 
         assert result == expected_info
+
+    async def test_stream_turn_yields_sse_events(self) -> None:
+        """stream_turn() yields SSEEvents parsed from the SSE response body."""
+        session_id = "test-session-789"
+        sse_body = 'event: delta\ndata: {"text": "hello"}\n\nevent: done\ndata: {"text": ""}\n\n'
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            assert request.method == "POST"
+            assert request.url.path == f"/sessions/{session_id}/turn/stream"
+            return httpx.Response(200, text=sse_body)
+
+        transport = httpx.MockTransport(handler)
+        async with httpx.AsyncClient(
+            base_url="http://localhost:8080", transport=transport
+        ) as http:
+            client = SessionClient()
+            client._http = http
+            events = [e async for e in client.stream_turn(session_id, "hi")]
+
+        assert len(events) == 2
+        assert events[0].event == "delta"
+        assert events[0].data == {"text": "hello"}
+        assert events[1].event == "done"
+        assert events[1].data == {"text": ""}

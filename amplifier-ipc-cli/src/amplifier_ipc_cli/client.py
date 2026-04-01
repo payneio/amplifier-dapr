@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, AsyncIterator
 
 import httpx
@@ -35,9 +35,9 @@ class SSEEvent:
         for line in raw.splitlines():
             line = line.strip()
             if line.startswith("event:"):
-                event_type = line[len("event:"):].strip()
+                event_type = line[len("event:") :].strip()
             elif line.startswith("data:"):
-                raw_data = line[len("data:"):].strip()
+                raw_data = line[len("data:") :].strip()
                 data = json.loads(raw_data)
 
         return cls(event=event_type, data=data)
