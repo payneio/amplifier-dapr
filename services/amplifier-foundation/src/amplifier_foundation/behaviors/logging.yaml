@@ -1,9 +1,0 @@
-behavior:
-  name: behavior-logging
-  version: 1.0.0
-  description: Session logging to JSONL files
-  hooks:
-  - class: amplifier_foundation.hooks.logging.LoggingHook
-    config:
-      mode: session-only
-      session_log_template: ~/.amplifier/projects/{project}/sessions/{session_id}/events.jsonl

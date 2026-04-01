@@ -1,7 +1,0 @@
-behavior:
-  ref: amplifier-dev-behavior
-  uuid: 9ef70d3e-27cc-4249-9294-7240750a855f
-  version: 1
-  description: Amplifier ecosystem development behavior — multi-repo workflows, testing patterns, and ecosystem expertise
-  context: true
-  behaviors: []

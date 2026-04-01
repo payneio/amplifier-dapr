@@ -1,9 +1,0 @@
-behavior:
-  name: behavior-status-context
-  version: 1.0.0
-  description: Inject environment and git status into agent context
-  hooks:
-  - class: amplifier_foundation.hooks.status_context.StatusContextHook
-    config:
-      include_datetime: true
-      datetime_include_timezone: false

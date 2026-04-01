@@ -1,7 +1,0 @@
-behavior:
-  ref: shadow-amplifier
-  uuid: a81aeb27-b067-41fd-bc4b-d228dfd0220c
-  version: 1
-  description: Amplifier ecosystem-specific shadow environment support
-  context: true
-  behaviors: []
