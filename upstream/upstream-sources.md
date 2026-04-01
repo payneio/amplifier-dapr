@@ -5,7 +5,7 @@ The following are SoT for Amplifier v1. They are working implementations that we
 ## Amplifier
 
 - amplifier-core: https://github.com/microsoft/amplifier-core
-- amplifier-foundation: https://github.com/microsoft/amplifier-foundation (library and bundle)
+- amplifier-foundation: https://github.com/microsoft/amplifier-foundation (legacy -- functionality now split across svc-* microservices in amplifier-ipc)
 - amplifier-app-cli: https://github.com/microsoft/amplifier-app-cli
 
 ## Bundles

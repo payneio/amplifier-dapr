@@ -203,7 +203,7 @@ Settings loading is fully defensive — no exceptions propagate:
 
 ## Compatibility
 
-This contract is versioned with amplifier-foundation. Changes to the directory
+This contract is versioned with amplifier-ipc. Changes to the directory
 layout MUST be backward-compatible or accompanied by a migration path.
 
 Interfaces that conform to this contract can interoperate seamlessly —

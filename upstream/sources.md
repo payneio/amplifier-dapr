@@ -16,7 +16,8 @@
   - source: https://github.com/microsoft/amplifier-app-cli@main
   - HEAD: 1d84e62fa5d8a85d5a1a3a9306731de7fc773878
   - last updated: 2026-03-14T16:27:02Z
-- amplifier-foundation
+- amplifier-foundation (legacy -- replaced by svc-* microservices in amplifier-ipc)
   - source: https://github.com/microsoft/amplifier-foundation@main
   - HEAD: a92a10177e9b3d5d4c79504e576fd4c35a456f36
   - last updated: 2026-03-15T11:48:48Z
+  - note: Functionality now split across session-service, svc-orchestrator, svc-context, and individual svc-* tool/hook services.

@@ -1,30 +1,13 @@
-# Local development overrides for amplifier-ipc services.
-# These use `uv run --directory` to run directly from source,
-# so code changes are immediately reflected without reinstalling.
+# Amplifier IPC project settings.
 #
-# Keys under service_overrides.<agent_name> must match the service ref as
-# resolved by resolve_agent() — the agent's own service uses the agent's ref
-# as the service key, and behaviors use their ref as the service key.
+# The old stdio/subprocess service_overrides are no longer used.
+# Services now run as Dapr-native containers via docker-compose.
+# To start the full stack:
 #
-# NOTE: Do not specify working_dir when the command already uses --directory.
-# The --directory flag tells uv which project to use and is resolved relative
-# to the HOST process CWD (the repo root). Setting working_dir would change
-# the subprocess CWD and make the relative --directory path incorrect.
-
-amplifier_ipc:
-  service_overrides:
-    amplifier-dev:
-      amplifier-dev:
-        command: ["uv", "run", "--directory", "./services/amplifier-foundation", "amplifier-foundation-serve"]
-      modes:
-        command: ["uv", "run", "--directory", "./services/amplifier-modes", "amplifier-modes-serve"]
-      skills:
-        command: ["uv", "run", "--directory", "./services/amplifier-skills", "amplifier-skills-serve"]
-      routing:
-        command: ["uv", "run", "--directory", "./services/amplifier-routing-matrix", "amplifier-routing-matrix-serve"]
-      superpowers-methodology:
-        command: ["uv", "run", "--directory", "./services/amplifier-superpowers", "amplifier-superpowers-serve"]
-      recipes:
-        command: ["uv", "run", "--directory", "./services/amplifier-recipes", "amplifier-recipes-serve"]
-      apply-patch:
-        command: ["uv", "run", "--directory", "./services/amplifier-filesystem", "amplifier-filesystem-serve"]
+#   docker compose up
+#
+# For local development of individual services, you can run them
+# directly with uv and override the Dapr endpoint:
+#
+#   cd services/svc-bash
+#   uv run uvicorn svc_bash.main:app --port 8001
