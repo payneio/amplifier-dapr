@@ -135,9 +135,10 @@ class TestDispatchSlash:
         assert result.should_exit is False
         # Should print a warning
         console.print.assert_called()
-        # Verify warning contains 'yellow' markup or the unknown command name
-        call_args = str(console.print.call_args_list)
-        assert "yellow" in call_args.lower() or "unknowncmd" in call_args.lower()
+        # Verify warning contains both 'yellow' markup and the unknown command name
+        args = console.print.call_args[0][0]
+        assert "yellow" in args
+        assert "unknowncmd" in args
 
     async def test_status_exception_handled(self) -> None:
         """/status catches exceptions and prints a yellow warning."""

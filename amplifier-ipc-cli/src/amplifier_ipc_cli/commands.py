@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
+
+from rich.panel import Panel
+from rich.table import Table
 
 if TYPE_CHECKING:
     from rich.console import Console
@@ -29,7 +32,7 @@ class SlashResult:
 
     should_exit: bool = False
     inline_prompt: str | None = None
-    new_mode: str | None = field(default=None)
+    new_mode: str | None = None
 
 
 async def dispatch_slash(
@@ -84,9 +87,6 @@ async def _handle_status(
 ) -> SlashResult:
     """Handle the /status command."""
     try:
-        from rich.panel import Panel
-        from rich.table import Table
-
         info: dict[str, Any] = await client.get_session_info(session_id)
 
         table = Table(show_header=True, header_style="bold")
@@ -110,8 +110,6 @@ async def _handle_tools(
 ) -> SlashResult:
     """Handle the /tools command."""
     try:
-        from rich.table import Table
-
         tools: list[dict[str, Any]] = await client.get_tools(session_id)
 
         table = Table(show_header=True, header_style="bold")
@@ -154,8 +152,6 @@ async def _handle_modes(
 ) -> SlashResult:
     """Handle the /modes command."""
     try:
-        from rich.table import Table
-
         modes: list[dict[str, Any]] = await client.get_modes(session_id)
 
         table = Table(show_header=True, header_style="bold")
@@ -165,6 +161,8 @@ async def _handle_modes(
         for mode in modes:
             name = str(mode.get("name", ""))
             description = str(mode.get("description", ""))
+            if len(description) > 80:
+                description = description[:77] + "..."
             table.add_row(name, description)
 
         console.print(table)
