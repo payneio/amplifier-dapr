@@ -92,7 +92,6 @@ async def _run_impl(
             if output_format == "json":
                 # Accumulate response for JSON output
                 accumulated_response = ""
-                error_occurred = False
                 try:
                     async for event in client.stream_turn(
                         effective_session_id,
@@ -109,20 +108,18 @@ async def _run_impl(
                                 else str(event.data)
                             )
                             _emit_json_error(error_msg, effective_session_id)
-                            error_occurred = True
-                            break
+                            return 1
                 except Exception as exc:
                     _emit_json_error(str(exc), effective_session_id)
                     return 1
 
-                if not error_occurred:
-                    result = {
-                        "status": "success",
-                        "response": accumulated_response,
-                        "session_id": effective_session_id,
-                        "timestamp": datetime.now(timezone.utc).isoformat(),
-                    }
-                    click.echo(json.dumps(result))
+                result = {
+                    "status": "success",
+                    "response": accumulated_response,
+                    "session_id": effective_session_id,
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                }
+                click.echo(json.dumps(result))
             else:
                 # Text mode: stream events and render
                 try:
@@ -207,7 +204,7 @@ def version() -> None:
     "-w",
     default=lambda: os.getcwd(),
     type=click.Path(file_okay=False, resolve_path=True),
-    show_default=True,
+    show_default="<cwd>",
     help="Workspace directory path.",
 )
 @click.option(
