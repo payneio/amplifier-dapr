@@ -1,0 +1,145 @@
+"""HTTP client for the Amplifier IPC service."""
+
+from __future__ import annotations
+
+import json
+from dataclasses import dataclass, field
+from typing import Any, AsyncIterator
+
+import httpx
+
+_DEFAULT_BASE_URL = "http://localhost:8080"
+_TIMEOUT = 120.0
+
+
+@dataclass
+class SSEEvent:
+    """A single Server-Sent Event."""
+
+    event: str
+    data: Any
+
+    @classmethod
+    def from_lines(cls, raw: str) -> SSEEvent | None:
+        """Parse a raw SSE text block into an SSEEvent.
+
+        Returns None for empty input. Defaults event type to 'message'
+        when no event field is present. Parses data field as JSON.
+        """
+        if not raw or not raw.strip():
+            return None
+
+        event_type = "message"
+        data: Any = None
+
+        for line in raw.splitlines():
+            line = line.strip()
+            if line.startswith("event:"):
+                event_type = line[len("event:"):].strip()
+            elif line.startswith("data:"):
+                raw_data = line[len("data:"):].strip()
+                data = json.loads(raw_data)
+
+        return cls(event=event_type, data=data)
+
+
+class SessionClient:
+    """HTTP client for interacting with the Amplifier IPC session service."""
+
+    def __init__(self, base_url: str = _DEFAULT_BASE_URL) -> None:
+        self.base_url = base_url
+        self._http: httpx.AsyncClient | None = None
+
+    def _get_http(self) -> httpx.AsyncClient:
+        """Return the HTTP client, creating one if needed."""
+        if self._http is None:
+            self._http = httpx.AsyncClient(
+                base_url=self.base_url,
+                timeout=_TIMEOUT,
+            )
+        return self._http
+
+    async def healthcheck(self) -> bool:
+        """Check if the service is healthy.
+
+        Returns True if the service responds with HTTP 200, False otherwise.
+        """
+        http = self._get_http()
+        response = await http.get("/healthz")
+        return response.status_code == 200
+
+    async def send_turn(
+        self,
+        session_id: str,
+        prompt: str,
+        workspace_content: str | None = None,
+        provider_name: str | None = None,
+        services: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
+        """Send a turn to the session service and return the response.
+
+        POST /sessions/{session_id}/turn
+        """
+        http = self._get_http()
+        body: dict[str, Any] = {"prompt": prompt}
+        if workspace_content is not None:
+            body["workspace_content"] = workspace_content
+        if provider_name is not None:
+            body["provider_name"] = provider_name
+        if services is not None:
+            body["services"] = services
+
+        response = await http.post(
+            f"/sessions/{session_id}/turn",
+            json=body,
+        )
+        response.raise_for_status()
+        return response.json()
+
+    async def stream_turn(
+        self,
+        session_id: str,
+        prompt: str,
+        workspace_content: str | None = None,
+        provider_name: str | None = None,
+        services: list[dict[str, Any]] | None = None,
+    ) -> AsyncIterator[SSEEvent]:
+        """Stream a turn from the session service as SSE events.
+
+        POST /sessions/{session_id}/turn/stream
+        Uses buffer-based SSE parsing, splitting on double newlines.
+        """
+        http = self._get_http()
+        body: dict[str, Any] = {"prompt": prompt}
+        if workspace_content is not None:
+            body["workspace_content"] = workspace_content
+        if provider_name is not None:
+            body["provider_name"] = provider_name
+        if services is not None:
+            body["services"] = services
+
+        async with http.stream(
+            "POST",
+            f"/sessions/{session_id}/turn/stream",
+            json=body,
+        ) as response:
+            response.raise_for_status()
+            buffer = ""
+            async for chunk in response.aiter_text():
+                buffer += chunk
+                # SSE events are separated by double newlines
+                while "\n\n" in buffer:
+                    block, buffer = buffer.split("\n\n", 1)
+                    event = SSEEvent.from_lines(block)
+                    if event is not None:
+                        yield event
+
+    async def get_session_info(self, session_id: str) -> dict[str, Any]:
+        """Get information about a session.
+
+        GET /sessions/{session_id}
+        """
+        http = self._get_http()
+        response = await http.get(f"/sessions/{session_id}")
+        response.raise_for_status()
+        return response.json()
