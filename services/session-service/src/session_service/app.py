@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import json
 import os
+from collections.abc import AsyncIterator
 from typing import Any
 
 import httpx
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
+from sse_starlette import EventSourceResponse
 
 from amplifier_service_sdk.models import Message
 from amplifier_service_sdk.service import ServiceConfig, create_app
@@ -15,6 +18,7 @@ from amplifier_service_sdk.service import ServiceConfig, create_app
 from session_service.content import assemble_system_prompt
 from session_service.discovery import discover_services
 from session_service.state import load_transcript, save_transcript
+from session_service.streaming import StreamEventType
 
 
 # ---------------------------------------------------------------------------
@@ -163,6 +167,79 @@ def create_session_app(dapr_url: str | None = None) -> FastAPI:
             result=result_text,
             messages=messages,
         ).model_dump()
+
+    @app.post("/sessions/{session_id}/turn/stream")
+    async def turn_stream(session_id: str, request: TurnRequest) -> EventSourceResponse:
+        """Execute a conversation turn and stream results as Server-Sent Events."""
+
+        async def event_generator() -> AsyncIterator[dict[str, str]]:
+            try:
+                # Create session if it doesn't exist
+                if session_id not in _sessions:
+                    _sessions[session_id] = {"turn_count": 0, "status": "active"}
+
+                # Discover services and build routing table
+                service_ids = request.services if request.services else DEFAULT_SERVICES
+                routing_table_dict: dict[str, Any] = await discover_services(
+                    service_ids, _dapr_url
+                )
+
+                # Assemble the system prompt from workspace content
+                system_prompt: str = assemble_system_prompt(
+                    routing_table_dict, request.workspace_content, _dapr_url
+                )
+
+                # Load existing transcript
+                transcript: list[Message] = await load_transcript(session_id, _dapr_url)
+
+                # Add user message to transcript
+                transcript.append(Message(role="user", content=request.prompt))
+
+                # Invoke orchestrator via Dapr service invocation
+                invoke_url = f"{_dapr_url}/v1.0/invoke/svc-orchestrator/method/orchestrator/execute"
+                payload = {
+                    "system_prompt": system_prompt,
+                    "messages": [m.model_dump() for m in transcript],
+                    "config": {"provider": request.provider_name},
+                    "routing_table": routing_table_dict,
+                    "session_id": session_id,
+                }
+                async with httpx.AsyncClient() as client:
+                    response = await client.post(
+                        invoke_url, json=payload, timeout=120.0
+                    )
+                    response.raise_for_status()
+                    orch_result: dict[str, Any] = response.json()
+
+                result_text: str = orch_result.get("result", "")
+                result_messages: list[dict[str, Any]] = orch_result.get("messages", [])
+                messages = [Message(**m) for m in result_messages]
+
+                # Save transcript
+                await save_transcript(session_id, messages, _dapr_url)
+
+                # Increment turn count
+                _sessions[session_id]["turn_count"] += 1
+
+                # Emit complete event
+                yield {
+                    "event": StreamEventType.complete.value,
+                    "data": json.dumps(
+                        {
+                            "session_id": session_id,
+                            "result": result_text,
+                            "messages": [m.model_dump() for m in messages],
+                        }
+                    ),
+                }
+
+            except Exception as exc:
+                yield {
+                    "event": StreamEventType.error.value,
+                    "data": json.dumps({"message": str(exc)}),
+                }
+
+        return EventSourceResponse(event_generator())
 
     @app.get("/sessions/{session_id}")
     async def session_info(session_id: str) -> dict[str, Any]:
