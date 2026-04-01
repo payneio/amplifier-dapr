@@ -15,6 +15,7 @@ from sse_starlette.sse import EventSourceResponse
 from amplifier_service_sdk.models import Message
 from amplifier_service_sdk.service import ServiceConfig, create_app
 
+from session_service.agents import resolve_agent
 from session_service.content import assemble_system_prompt
 from session_service.discovery import discover_services
 from session_service.state import load_transcript, save_transcript
@@ -119,17 +120,27 @@ def create_session_app(dapr_url: str | None = None) -> FastAPI:
         if session_id not in _sessions:
             _sessions[session_id] = {"turn_count": 0, "status": "active"}
 
-        # Discover services and build routing table
-        # Fall back to DEFAULT_SERVICES when the caller does not specify any.
-        service_ids = request.services if request.services else DEFAULT_SERVICES
+        # Resolve agent configuration
+        agent_config = resolve_agent(request.agent_ref)
+
+        # Discover services — caller-supplied list takes priority over agent default
+        service_ids = request.services if request.services else agent_config["services"]
         routing_table_dict: dict[str, Any] = await discover_services(
             service_ids, _dapr_url
         )
 
-        # Assemble the system prompt from workspace content
+        # Resolve provider — agent default overrides the bare "mock" sentinel
+        provider_name = request.provider_name
+        if provider_name == "mock" and agent_config.get("default_provider"):
+            provider_name = agent_config["default_provider"]
+
+        # Assemble the system prompt from workspace content, prepend agent prompt
         system_prompt: str = assemble_system_prompt(
             routing_table_dict, request.workspace_content, _dapr_url
         )
+        agent_system_prompt = agent_config.get("system_prompt", "")
+        if agent_system_prompt:
+            system_prompt = agent_system_prompt + "\n\n" + system_prompt
 
         # Load existing transcript
         transcript: list[Message] = await load_transcript(session_id, _dapr_url)
@@ -144,7 +155,7 @@ def create_session_app(dapr_url: str | None = None) -> FastAPI:
         payload = {
             "system_prompt": system_prompt,
             "messages": [m.model_dump() for m in transcript],
-            "config": {"provider": request.provider_name},
+            "config": {"provider": provider_name},
             "routing_table": routing_table_dict,
             "session_id": session_id,
         }
@@ -182,16 +193,27 @@ def create_session_app(dapr_url: str | None = None) -> FastAPI:
                 if session_id not in _sessions:
                     _sessions[session_id] = {"turn_count": 0, "status": "active"}
 
-                # Discover services and build routing table
-                service_ids = request.services if request.services else DEFAULT_SERVICES
+                # Resolve agent configuration
+                agent_config = resolve_agent(request.agent_ref)
+
+                # Discover services — caller-supplied list takes priority over agent default
+                service_ids = request.services if request.services else agent_config["services"]
                 routing_table_dict: dict[str, Any] = await discover_services(
                     service_ids, _dapr_url
                 )
 
-                # Assemble the system prompt from workspace content
+                # Resolve provider — agent default overrides the bare "mock" sentinel
+                provider_name = request.provider_name
+                if provider_name == "mock" and agent_config.get("default_provider"):
+                    provider_name = agent_config["default_provider"]
+
+                # Assemble the system prompt from workspace content, prepend agent prompt
                 system_prompt: str = assemble_system_prompt(
                     routing_table_dict, request.workspace_content, _dapr_url
                 )
+                agent_system_prompt = agent_config.get("system_prompt", "")
+                if agent_system_prompt:
+                    system_prompt = agent_system_prompt + "\n\n" + system_prompt
 
                 # Load existing transcript
                 transcript: list[Message] = await load_transcript(session_id, _dapr_url)
@@ -204,7 +226,7 @@ def create_session_app(dapr_url: str | None = None) -> FastAPI:
                 payload = {
                     "system_prompt": system_prompt,
                     "messages": [m.model_dump() for m in transcript],
-                    "config": {"provider": request.provider_name},
+                    "config": {"provider": provider_name},
                     "routing_table": routing_table_dict,
                     "session_id": session_id,
                 }

@@ -47,6 +47,7 @@ async def _run_impl(
     workspace: str,
     output_format: str,
     message: str | None,
+    agent: str | None = None,
 ) -> int:
     """Async implementation of the run command.
 
@@ -98,6 +99,7 @@ async def _run_impl(
                         prompt,
                         workspace_content=workspace_content,
                         provider_name=provider,
+                        agent_ref=agent,
                     ):
                         if event.event == "complete" and isinstance(event.data, dict):
                             accumulated_response = event.data.get("result", "") or event.data.get("response", "")
@@ -129,6 +131,7 @@ async def _run_impl(
                             prompt,
                             workspace_content=workspace_content,
                             provider_name=provider,
+                            agent_ref=agent,
                         ):
                             await display.handle_event(event)
                 except Exception as exc:
@@ -157,6 +160,7 @@ async def _run_impl(
                 provider_name=provider,
                 workspace_content=workspace_content,
                 console=console,
+                agent_ref=agent,
             )
 
     return 0
@@ -215,6 +219,12 @@ def version() -> None:
     show_default=True,
     help="Output format.",
 )
+@click.option(
+    "--agent",
+    "-a",
+    default=None,
+    help="Agent to use (e.g. 'foundation'). Determines service set and default provider.",
+)
 @click.argument("message", required=False)
 def run(
     url: str,
@@ -222,6 +232,7 @@ def run(
     provider: str,
     workspace: str,
     output_format: str,
+    agent: str | None,
     message: str | None,
 ) -> None:
     """Send MESSAGE to the Amplifier session service.
@@ -237,6 +248,7 @@ def run(
             workspace=workspace,
             output_format=output_format,
             message=message,
+            agent=agent,
         )
     )
     sys.exit(exit_code)

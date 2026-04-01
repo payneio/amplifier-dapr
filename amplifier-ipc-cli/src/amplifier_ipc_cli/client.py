@@ -82,6 +82,7 @@ class SessionClient:
         workspace_content: str | None,
         provider_name: str | None,
         services: list[dict[str, Any]] | None,
+        agent_ref: str | None = None,
     ) -> dict[str, Any]:
         """Build the request body for turn endpoints."""
         body: dict[str, Any] = {"prompt": prompt}
@@ -91,6 +92,8 @@ class SessionClient:
             body["provider_name"] = provider_name
         if services is not None:
             body["services"] = services
+        if agent_ref is not None:
+            body["agent_ref"] = agent_ref
         return body
 
     async def healthcheck(self) -> bool:
@@ -113,13 +116,14 @@ class SessionClient:
         workspace_content: str | None = None,
         provider_name: str | None = None,
         services: list[dict[str, Any]] | None = None,
+        agent_ref: str | None = None,
     ) -> dict[str, Any]:
         """Send a turn to the session service and return the response.
 
         POST /sessions/{session_id}/turn
         """
         http = self._get_http()
-        body = self._build_turn_body(prompt, workspace_content, provider_name, services)
+        body = self._build_turn_body(prompt, workspace_content, provider_name, services, agent_ref)
         response = await http.post(
             f"/sessions/{session_id}/turn",
             json=body,
@@ -134,6 +138,7 @@ class SessionClient:
         workspace_content: str | None = None,
         provider_name: str | None = None,
         services: list[dict[str, Any]] | None = None,
+        agent_ref: str | None = None,
     ) -> AsyncIterator[SSEEvent]:
         """Stream a turn from the session service as SSE events.
 
@@ -141,7 +146,7 @@ class SessionClient:
         Uses buffer-based SSE parsing, splitting on double newlines.
         """
         http = self._get_http()
-        body = self._build_turn_body(prompt, workspace_content, provider_name, services)
+        body = self._build_turn_body(prompt, workspace_content, provider_name, services, agent_ref)
 
         async with http.stream(
             "POST",

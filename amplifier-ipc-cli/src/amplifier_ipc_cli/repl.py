@@ -183,6 +183,7 @@ async def interactive_repl(
     workspace_content: str | None,
     console: Console,
     history_path: str | None = None,
+    agent_ref: str | None = None,
 ) -> None:
     """Run the interactive REPL loop.
 
@@ -248,6 +249,7 @@ async def interactive_repl(
                         user_input,
                         workspace_content=workspace_content,
                         provider_name=provider_name,
+                        agent_ref=agent_ref,
                     ):
                         if cancellation.is_immediate:
                             break
