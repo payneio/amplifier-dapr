@@ -7,7 +7,7 @@ from pathlib import Path
 
 import yaml
 
-_DEFAULT_URL = "http://localhost:8080"
+_DEFAULT_URL = "http://localhost:8090"
 _DEFAULT_PROVIDER = "mock"
 
 

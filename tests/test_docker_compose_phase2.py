@@ -196,17 +196,17 @@ class TestDaprSidecars:
 
 
 class TestSessionServicePort:
-    """session-service must expose port 8080:8000."""
+    """session-service must expose port 8090:8000."""
 
     def test_session_service_port_mapping(self) -> None:
-        """session-service exposes port 8080:8000."""
+        """session-service exposes port 8090:8000."""
         compose = _load_compose()
         services = _services(compose)
         session_svc = services["session-service"]
         ports = session_svc.get("ports", [])
         ports_str = " ".join(str(p) for p in ports)
-        assert "8080" in ports_str and "8000" in ports_str, (
-            f"session-service should expose port 8080:8000, got ports: {ports}"
+        assert "8090" in ports_str and "8000" in ports_str, (
+            f"session-service should expose port 8090:8000, got ports: {ports}"
         )
 
 

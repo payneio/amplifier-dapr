@@ -181,7 +181,7 @@ def version() -> None:
 @cli.command()
 @click.option(
     "--url",
-    default="http://localhost:8080",
+    default="http://localhost:8090",
     envvar="AMPLIFIER_URL",
     show_default=True,
     help="URL of the Amplifier session service.",

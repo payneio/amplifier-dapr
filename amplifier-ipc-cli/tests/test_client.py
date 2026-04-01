@@ -45,9 +45,9 @@ class TestSSEEvent:
 
 class TestSessionClient:
     def test_default_base_url(self) -> None:
-        """SessionClient defaults to http://localhost:8080."""
+        """SessionClient defaults to http://localhost:8090."""
         client = SessionClient()
-        assert client.base_url == "http://localhost:8080"
+        assert client.base_url == "http://localhost:8090"
 
     def test_custom_base_url(self) -> None:
         """SessionClient accepts a custom base_url."""
@@ -64,14 +64,14 @@ class TestSessionClient:
 
         transport = httpx.MockTransport(handler)
         async with httpx.AsyncClient(
-            base_url="http://localhost:8080", transport=transport
+            base_url="http://localhost:8090", transport=transport
         ) as http:
             client = SessionClient()
             client._http = http
             result = await client.healthcheck()
 
         assert result is True
-        assert calls == ["http://localhost:8080/healthz"]
+        assert calls == ["http://localhost:8090/healthz"]
 
     async def test_send_turn_calls_session_service(self) -> None:
         """send_turn() performs POST /sessions/{id}/turn with prompt in body."""
@@ -87,7 +87,7 @@ class TestSessionClient:
 
         transport = httpx.MockTransport(handler)
         async with httpx.AsyncClient(
-            base_url="http://localhost:8080", transport=transport
+            base_url="http://localhost:8090", transport=transport
         ) as http:
             client = SessionClient()
             client._http = http
@@ -107,7 +107,7 @@ class TestSessionClient:
 
         transport = httpx.MockTransport(handler)
         async with httpx.AsyncClient(
-            base_url="http://localhost:8080", transport=transport
+            base_url="http://localhost:8090", transport=transport
         ) as http:
             client = SessionClient()
             client._http = http
@@ -127,7 +127,7 @@ class TestSessionClient:
 
         transport = httpx.MockTransport(handler)
         async with httpx.AsyncClient(
-            base_url="http://localhost:8080", transport=transport
+            base_url="http://localhost:8090", transport=transport
         ) as http:
             client = SessionClient()
             client._http = http
@@ -157,7 +157,7 @@ class TestSessionClient:
 
         transport = httpx.MockTransport(handler)
         async with httpx.AsyncClient(
-            base_url="http://localhost:8080", transport=transport
+            base_url="http://localhost:8090", transport=transport
         ) as http:
             client = SessionClient()
             client._http = http
@@ -191,7 +191,7 @@ class TestSessionClientMetadataMethods:
 
         transport = httpx.MockTransport(handler)
         async with httpx.AsyncClient(
-            base_url="http://localhost:8080", transport=transport
+            base_url="http://localhost:8090", transport=transport
         ) as http:
             client = SessionClient()
             client._http = http
@@ -208,7 +208,7 @@ class TestSessionClientMetadataMethods:
 
         transport = httpx.MockTransport(handler)
         async with httpx.AsyncClient(
-            base_url="http://localhost:8080", transport=transport
+            base_url="http://localhost:8090", transport=transport
         ) as http:
             client = SessionClient()
             client._http = http
@@ -227,7 +227,7 @@ class TestSessionClientMetadataMethods:
 
         transport = httpx.MockTransport(handler)
         async with httpx.AsyncClient(
-            base_url="http://localhost:8080", transport=transport
+            base_url="http://localhost:8090", transport=transport
         ) as http:
             client = SessionClient()
             client._http = http
@@ -246,7 +246,7 @@ class TestSessionClientMetadataMethods:
 
         transport = httpx.MockTransport(handler)
         async with httpx.AsyncClient(
-            base_url="http://localhost:8080", transport=transport
+            base_url="http://localhost:8090", transport=transport
         ) as http:
             client = SessionClient()
             client._http = http

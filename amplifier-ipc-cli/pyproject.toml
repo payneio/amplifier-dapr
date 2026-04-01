@@ -16,7 +16,7 @@ dependencies = [
 ]
 
 [project.scripts]
-amplifier = "amplifier_ipc_cli.main:main"
+amplifier-svc = "amplifier_ipc_cli.main:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/amplifier_ipc_cli"]

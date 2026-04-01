@@ -16,10 +16,10 @@ from amplifier_ipc_cli.settings import (
 
 class TestDefaults:
     def test_default_url(self) -> None:
-        """CLISettings defaults url to http://localhost:8080."""
+        """CLISettings defaults url to http://localhost:8090."""
         settings = CLISettings()
-        assert settings.url == "http://localhost:8080"
-        assert _DEFAULT_URL == "http://localhost:8080"
+        assert settings.url == "http://localhost:8090"
+        assert _DEFAULT_URL == "http://localhost:8090"
 
     def test_default_provider(self) -> None:
         """CLISettings defaults provider to 'mock'."""

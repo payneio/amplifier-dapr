@@ -71,7 +71,7 @@ class TestWorkspaceResolver:
         """settings.yaml is excluded from the result."""
         amplifier_dir = tmp_path / ".amplifier"
         amplifier_dir.mkdir()
-        (amplifier_dir / "settings.yaml").write_text("url: http://localhost:8080\n")
+        (amplifier_dir / "settings.yaml").write_text("url: http://localhost:8090\n")
         (amplifier_dir / "AGENTS.md").write_text("# Agents")
 
         result = resolve_workspace_content(tmp_path)
@@ -167,7 +167,7 @@ class TestCLISettings:
         missing = tmp_path / "nonexistent.yaml"
         settings = CLISettings.from_yaml(missing)
 
-        assert settings.url == "http://localhost:8080"
+        assert settings.url == "http://localhost:8090"
         assert settings.provider == "mock"
 
     def test_from_yaml_defaults_on_invalid_yaml(self, tmp_path: Path) -> None:
@@ -177,7 +177,7 @@ class TestCLISettings:
 
         settings = CLISettings.from_yaml(settings_file)
 
-        assert settings.url == "http://localhost:8080"
+        assert settings.url == "http://localhost:8090"
         assert settings.provider == "mock"
 
     def test_from_yaml_partial_override(self, tmp_path: Path) -> None:
@@ -197,14 +197,14 @@ class TestCLISettings:
 
         settings = CLISettings.from_yaml(settings_file)
 
-        assert settings.url == "http://localhost:8080"
+        assert settings.url == "http://localhost:8090"
         assert settings.provider == "mock"
 
     def test_default_constructor(self) -> None:
         """CLISettings() with no args has the expected defaults."""
         settings = CLISettings()
 
-        assert settings.url == "http://localhost:8080"
+        assert settings.url == "http://localhost:8090"
         assert settings.provider == "mock"
 
 
@@ -559,9 +559,9 @@ class TestSessionClient:
     """SessionClient constructs correct URLs and HTTP bodies."""
 
     def test_default_base_url(self) -> None:
-        """Default base_url is http://localhost:8080."""
+        """Default base_url is http://localhost:8090."""
         client = SessionClient()
-        assert client.base_url == "http://localhost:8080"
+        assert client.base_url == "http://localhost:8090"
 
     def test_custom_base_url(self) -> None:
         """Custom base_url is stored as provided."""
@@ -577,7 +577,7 @@ class TestSessionClient:
         mock_http = AsyncMock()
         mock_http.post.return_value = mock_response
 
-        client = SessionClient(base_url="http://localhost:8080")
+        client = SessionClient(base_url="http://localhost:8090")
         client._http = mock_http
 
         result = await client.send_turn(

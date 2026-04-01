@@ -8,7 +8,7 @@ from typing import Any, AsyncIterator
 
 import httpx
 
-_DEFAULT_BASE_URL = "http://localhost:8080"
+_DEFAULT_BASE_URL = "http://localhost:8090"
 _TIMEOUT = 120.0
 _METADATA_TIMEOUT = 10.0  # metadata queries: tools, modes, clear
 
