@@ -2,36 +2,74 @@
 
 from __future__ import annotations
 
-_DEFAULT_SYSTEM_PROMPT = "You are a helpful assistant."
+import logging
+
+import httpx
 
 
-def assemble_system_prompt(
+logger = logging.getLogger(__name__)
+
+
+async def assemble_system_prompt(
     routing_table: dict,
-    workspace_content: dict[str, str],
-    dapr_url: str,
+    workspace_content: str | None = None,
+    agent_system_prompt: str | None = None,
+    dapr_url: str = "http://localhost:3500",
 ) -> str:
-    """Assemble a system prompt from workspace content.
+    """Assemble a system prompt from service content and workspace content.
 
-    Iterates workspace_content dict, formats each entry as a context_file XML block.
-    Returns all blocks joined together, or _DEFAULT_SYSTEM_PROMPT if workspace is empty.
+    Fetches content from registered content services via the Dapr sidecar,
+    wraps each response in a ``<context_file>`` XML block, and combines with
+    the agent system prompt and workspace content.
 
     Args:
-        routing_table: The service routing table (reserved for Phase 3 service content).
-        workspace_content: Mapping of file paths to their content.
-        dapr_url: Dapr sidecar URL (reserved for Phase 3 service content fetching).
+        routing_table: The service routing table; reads ``_content_services``
+            (dict of app_id -> list of content paths) populated by discovery.
+        workspace_content: Pre-formatted workspace content string (optional).
+        agent_system_prompt: Agent-specific system prompt to prepend (optional).
+        dapr_url: Base URL of the Dapr HTTP sidecar.
 
     Returns:
-        A system prompt string with workspace content as context_file blocks,
-        or _DEFAULT_SYSTEM_PROMPT if no workspace content is provided.
-
-    TODO (Phase 3): Fetch additional service content via GET /content/{path}
-        for each service in routing_table.
+        Combined system prompt string, or ``"You are a helpful assistant."`` as
+        a fallback when no content is available.
     """
-    if not workspace_content:
-        return _DEFAULT_SYSTEM_PROMPT
-
     parts: list[str] = []
-    for path, content in workspace_content.items():
-        parts.append(f'<context_file path="{path}">\n{content}\n</context_file>')
+
+    # Agent-specific system prompt
+    if agent_system_prompt:
+        parts.append(agent_system_prompt)
+
+    # Fetch content from content services via Dapr sidecar
+    content_services: dict[str, list[str]] = routing_table.get("_content_services", {})
+    if content_services:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            for app_id, paths in content_services.items():
+                for path in paths:
+                    try:
+                        url = f"{dapr_url}/v1.0/invoke/{app_id}/method/content/{path}"
+                        resp = await client.get(url)
+                        if resp.status_code == 200:
+                            data = resp.json()
+                            content = (
+                                data.get("content", "")
+                                if isinstance(data, dict)
+                                else str(data)
+                            )
+                            if content:
+                                parts.append(
+                                    f'<context_file path="{app_id}:{path}">\n{content}\n</context_file>'
+                                )
+                    except Exception:  # noqa: BLE001
+                        logger.warning(
+                            "Failed to fetch content %r from service %r", path, app_id
+                        )
+
+    # Workspace content from CLI (already formatted as context_file blocks)
+    if workspace_content:
+        parts.append(workspace_content)
+
+    # Fallback
+    if not parts:
+        return "You are a helpful assistant."
 
     return "\n\n".join(parts)

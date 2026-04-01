@@ -90,6 +90,13 @@ def build_routing_table(
                 "priority", 50
             )  # matches HookRegistration.priority default
 
+    # Collect content paths advertised by each service
+    content_services: dict[str, list[str]] = {}
+    for app_id, describe in describe_results.items():
+        paths = describe.get("content_paths", [])
+        if paths:
+            content_services[app_id] = paths
+
     return {
         "tools": tools,
         "providers": providers,
@@ -97,6 +104,7 @@ def build_routing_table(
         "hook_endpoints": hook_endpoints,
         "hook_priorities": hook_priorities,
         "_tool_specs": tool_specs,
+        "_content_services": content_services,
         "context": context_app_id,
     }
 

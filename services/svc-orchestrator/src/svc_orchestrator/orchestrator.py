@@ -72,11 +72,10 @@ class Orchestrator:
         provider_app_id = routing_table.providers.get(provider_name, provider_name)
 
         # ------------------------------------------------------------------
-        # Seed the context service with system prompt + initial messages
+        # Seed the context service with initial messages only.
+        # The system prompt is passed via ChatRequest.system — never stored
+        # as a context message to avoid duplicating it on every turn.
         # ------------------------------------------------------------------
-        await self._context_add_message(
-            context_app_id, {"role": "system", "content": system_prompt}
-        )
         for msg in messages:
             await self._context_add_message(context_app_id, msg.model_dump())
 
@@ -106,9 +105,12 @@ class Orchestrator:
             if max_iterations >= 0 and iteration >= max_iterations:
                 break
 
-            # Fetch current context window
+            # Fetch current context window; strip any persisted system messages
+            # since the system prompt is always delivered via ChatRequest.system.
             context_msgs = await self._context_get_messages(context_app_id)
-            chat_messages = [Message(**m) for m in context_msgs]
+            chat_messages = [
+                Message(**m) for m in context_msgs if m.get("role") != "system"
+            ]
 
             # Dispatch provider:request pre-hook (may inject additional context)
             pre_result = await self._hooks.dispatch_pre(
@@ -318,11 +320,11 @@ class Orchestrator:
                     name=tool_call.name,
                 )
 
-            # Invoke the tool service
+            # Invoke the tool service using ToolRequest format
             raw_result = await self._dapr.invoke(
                 tool_app_id,
                 f"tools/{tool_call.name}/execute",
-                tool_call.arguments,
+                {"name": tool_call.name, "input": tool_call.arguments},
             )
 
             # Serialise output to a string

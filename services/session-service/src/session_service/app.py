@@ -134,13 +134,22 @@ def create_session_app(dapr_url: str | None = None) -> FastAPI:
         if provider_name == "mock" and agent_config.get("default_provider"):
             provider_name = agent_config["default_provider"]
 
-        # Assemble the system prompt from workspace content, prepend agent prompt
-        system_prompt: str = assemble_system_prompt(
-            routing_table_dict, request.workspace_content, _dapr_url
+        # Convert workspace content dict to formatted string for prompt assembly
+        workspace_content_str: str | None = None
+        if request.workspace_content:
+            ws_parts = [
+                f'<context_file path="{path}">\n{content}\n</context_file>'
+                for path, content in request.workspace_content.items()
+            ]
+            workspace_content_str = "\n\n".join(ws_parts)
+
+        # Assemble the system prompt: agent prompt + service content + workspace
+        system_prompt: str = await assemble_system_prompt(
+            routing_table_dict,
+            workspace_content=workspace_content_str,
+            agent_system_prompt=agent_config.get("system_prompt"),
+            dapr_url=_dapr_url,
         )
-        agent_system_prompt = agent_config.get("system_prompt", "")
-        if agent_system_prompt:
-            system_prompt = agent_system_prompt + "\n\n" + system_prompt
 
         # Load existing transcript
         transcript: list[Message] = await load_transcript(session_id, _dapr_url)
@@ -155,7 +164,7 @@ def create_session_app(dapr_url: str | None = None) -> FastAPI:
         payload = {
             "system_prompt": system_prompt,
             "messages": [m.model_dump() for m in transcript],
-            "config": {"provider": provider_name},
+            "config": {"provider": provider_name, "tools": routing_table_dict.get("_tool_specs", [])},
             "routing_table": routing_table_dict,
             "session_id": session_id,
         }
@@ -207,13 +216,22 @@ def create_session_app(dapr_url: str | None = None) -> FastAPI:
                 if provider_name == "mock" and agent_config.get("default_provider"):
                     provider_name = agent_config["default_provider"]
 
-                # Assemble the system prompt from workspace content, prepend agent prompt
-                system_prompt: str = assemble_system_prompt(
-                    routing_table_dict, request.workspace_content, _dapr_url
+                # Convert workspace content dict to formatted string for prompt assembly
+                workspace_content_str: str | None = None
+                if request.workspace_content:
+                    ws_parts = [
+                        f'<context_file path="{path}">\n{content}\n</context_file>'
+                        for path, content in request.workspace_content.items()
+                    ]
+                    workspace_content_str = "\n\n".join(ws_parts)
+
+                # Assemble the system prompt: agent prompt + service content + workspace
+                system_prompt: str = await assemble_system_prompt(
+                    routing_table_dict,
+                    workspace_content=workspace_content_str,
+                    agent_system_prompt=agent_config.get("system_prompt"),
+                    dapr_url=_dapr_url,
                 )
-                agent_system_prompt = agent_config.get("system_prompt", "")
-                if agent_system_prompt:
-                    system_prompt = agent_system_prompt + "\n\n" + system_prompt
 
                 # Load existing transcript
                 transcript: list[Message] = await load_transcript(session_id, _dapr_url)
@@ -226,7 +244,7 @@ def create_session_app(dapr_url: str | None = None) -> FastAPI:
                 payload = {
                     "system_prompt": system_prompt,
                     "messages": [m.model_dump() for m in transcript],
-                    "config": {"provider": provider_name},
+                    "config": {"provider": provider_name, "tools": routing_table_dict.get("_tool_specs", [])},
                     "routing_table": routing_table_dict,
                     "session_id": session_id,
                 }
