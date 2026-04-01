@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import json
 
-import pytest
-
 
 class TestStreamEventType:
     """Tests for the StreamEventType enum."""
@@ -50,20 +48,22 @@ class TestFormatSseEvent:
         data_line = next(
             line for line in result.splitlines() if line.startswith("data: ")
         )
-        payload = json.loads(data_line[len("data: "):])
+        payload = json.loads(data_line[len("data: ") :])
         assert payload["text"] == "Hello"
 
     def test_format_tool_call_event(self) -> None:
         """format_sse_event produces valid SSE string for a tool_call event."""
         from session_service.streaming import StreamEventType, format_sse_event  # noqa: PLC0415
 
-        result = format_sse_event(StreamEventType.tool_call, {"name": "bash", "input": {}})
+        result = format_sse_event(
+            StreamEventType.tool_call, {"name": "bash", "input": {}}
+        )
 
         assert "event: tool_call\n" in result
         data_line = next(
             line for line in result.splitlines() if line.startswith("data: ")
         )
-        payload = json.loads(data_line[len("data: "):])
+        payload = json.loads(data_line[len("data: ") :])
         assert payload["name"] == "bash"
 
     def test_format_complete_event(self) -> None:
@@ -76,20 +76,22 @@ class TestFormatSseEvent:
         data_line = next(
             line for line in result.splitlines() if line.startswith("data: ")
         )
-        payload = json.loads(data_line[len("data: "):])
+        payload = json.loads(data_line[len("data: ") :])
         assert payload["result"] == "done"
 
     def test_format_error_event(self) -> None:
         """format_sse_event produces valid SSE string for an error event."""
         from session_service.streaming import StreamEventType, format_sse_event  # noqa: PLC0415
 
-        result = format_sse_event(StreamEventType.error, {"message": "Something failed"})
+        result = format_sse_event(
+            StreamEventType.error, {"message": "Something failed"}
+        )
 
         assert "event: error\n" in result
         data_line = next(
             line for line in result.splitlines() if line.startswith("data: ")
         )
-        payload = json.loads(data_line[len("data: "):])
+        payload = json.loads(data_line[len("data: ") :])
         assert payload["message"] == "Something failed"
 
     def test_sse_format_has_double_newline_terminator(self) -> None:

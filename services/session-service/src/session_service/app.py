@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import json
 import os
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator
 from typing import Any
 
 import httpx
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from sse_starlette import EventSourceResponse
+from sse_starlette.sse import EventSourceResponse
 
 from amplifier_service_sdk.models import Message
 from amplifier_service_sdk.service import ServiceConfig, create_app
@@ -92,7 +92,8 @@ def create_session_app(dapr_url: str | None = None) -> FastAPI:
     """Create the session-service FastAPI application.
 
     Registers SDK standard endpoints (/healthz, /describe) and session
-    management endpoints (/sessions/{id}/turn, /sessions/{id}).
+    management endpoints (/sessions/{id}/turn, /sessions/{id}/turn/stream,
+    /sessions/{id}).
 
     Args:
         dapr_url: Base URL of the Dapr HTTP sidecar. Defaults to
@@ -170,9 +171,9 @@ def create_session_app(dapr_url: str | None = None) -> FastAPI:
 
     @app.post("/sessions/{session_id}/turn/stream")
     async def turn_stream(session_id: str, request: TurnRequest) -> EventSourceResponse:
-        """Execute a conversation turn and stream results as Server-Sent Events."""
+        """Execute a conversation turn and stream results as SSE events."""
 
-        async def event_generator() -> AsyncIterator[dict[str, str]]:
+        async def event_generator() -> AsyncGenerator[dict[str, Any], None]:
             try:
                 # Create session if it doesn't exist
                 if session_id not in _sessions:
@@ -232,8 +233,7 @@ def create_session_app(dapr_url: str | None = None) -> FastAPI:
                         }
                     ),
                 }
-
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001
                 yield {
                     "event": StreamEventType.error.value,
                     "data": json.dumps({"message": str(exc)}),
