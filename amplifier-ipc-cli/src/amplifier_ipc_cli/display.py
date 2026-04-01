@@ -117,7 +117,7 @@ class StreamingDisplay:
                 if len(str_value) > _DEFAULT_TOOL_ARG_VALUE_LEN:
                     str_value = str_value[:_DEFAULT_TOOL_ARG_VALUE_LEN] + "…"
                 self._console.print(
-                    f"  {key}: {str_value}", markup=False, highlight=False
+                    f"  {key}: {str_value}", markup=False, highlight=False, no_wrap=True
                 )
 
     def _handle_tool_result(self, data: Any) -> None:
