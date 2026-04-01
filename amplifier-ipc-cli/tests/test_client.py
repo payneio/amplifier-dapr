@@ -138,3 +138,39 @@ class TestSessionClient:
         assert events[0].data == {"text": "hello"}
         assert events[1].event == "done"
         assert events[1].data == {"text": ""}
+
+    async def test_close_is_safe_when_no_http_created(self) -> None:
+        """close() does not raise when _http has never been created."""
+        client = SessionClient()
+        await client.close()  # should not raise
+
+    async def test_async_context_manager(self) -> None:
+        """SessionClient supports 'async with' and closes cleanly on exit."""
+        async with SessionClient() as client:
+            assert isinstance(client, SessionClient)
+
+    async def test_healthcheck_returns_false_on_network_error(self) -> None:
+        """healthcheck() returns False instead of raising on connection error."""
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            raise httpx.ConnectError("Connection refused")
+
+        transport = httpx.MockTransport(handler)
+        async with httpx.AsyncClient(
+            base_url="http://localhost:8080", transport=transport
+        ) as http:
+            client = SessionClient()
+            client._http = http
+            result = await client.healthcheck()
+
+        assert result is False
+
+
+class TestSSEEventEdgeCases:
+    def test_from_lines_malformed_json_returns_raw_string(self) -> None:
+        """from_lines() with malformed JSON returns SSEEvent with the raw data string."""
+        raw = "event: delta\ndata: {not valid json}"
+        event = SSEEvent.from_lines(raw)
+        assert event is not None
+        assert event.event == "delta"
+        assert event.data == "{not valid json}"

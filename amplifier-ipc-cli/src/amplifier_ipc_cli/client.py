@@ -24,7 +24,8 @@ class SSEEvent:
         """Parse a raw SSE text block into an SSEEvent.
 
         Returns None for empty input. Defaults event type to 'message'
-        when no event field is present. Parses data field as JSON.
+        when no event field is present. Parses data field as JSON; falls
+        back to the raw string if JSON is malformed.
         """
         if not raw or not raw.strip():
             return None
@@ -38,7 +39,10 @@ class SSEEvent:
                 event_type = line[len("event:") :].strip()
             elif line.startswith("data:"):
                 raw_data = line[len("data:") :].strip()
-                data = json.loads(raw_data)
+                try:
+                    data = json.loads(raw_data)
+                except json.JSONDecodeError:
+                    data = raw_data
 
         return cls(event=event_type, data=data)
 
@@ -59,14 +63,47 @@ class SessionClient:
             )
         return self._http
 
+    async def close(self) -> None:
+        """Close the underlying HTTP client and release connection pool resources."""
+        if self._http is not None:
+            await self._http.aclose()
+            self._http = None
+
+    async def __aenter__(self) -> SessionClient:
+        return self
+
+    async def __aexit__(self, *_: object) -> None:
+        await self.close()
+
+    def _build_turn_body(
+        self,
+        prompt: str,
+        workspace_content: str | None,
+        provider_name: str | None,
+        services: list[dict[str, Any]] | None,
+    ) -> dict[str, Any]:
+        """Build the request body for turn endpoints."""
+        body: dict[str, Any] = {"prompt": prompt}
+        if workspace_content is not None:
+            body["workspace_content"] = workspace_content
+        if provider_name is not None:
+            body["provider_name"] = provider_name
+        if services is not None:
+            body["services"] = services
+        return body
+
     async def healthcheck(self) -> bool:
         """Check if the service is healthy.
 
-        Returns True if the service responds with HTTP 200, False otherwise.
+        Returns True if the service responds with HTTP 200, False if the
+        service is unreachable or returns a non-200 status.
         """
         http = self._get_http()
-        response = await http.get("/healthz")
-        return response.status_code == 200
+        try:
+            response = await http.get("/healthz")
+            return response.status_code == 200
+        except httpx.HTTPError:
+            return False
 
     async def send_turn(
         self,
@@ -81,14 +118,7 @@ class SessionClient:
         POST /sessions/{session_id}/turn
         """
         http = self._get_http()
-        body: dict[str, Any] = {"prompt": prompt}
-        if workspace_content is not None:
-            body["workspace_content"] = workspace_content
-        if provider_name is not None:
-            body["provider_name"] = provider_name
-        if services is not None:
-            body["services"] = services
-
+        body = self._build_turn_body(prompt, workspace_content, provider_name, services)
         response = await http.post(
             f"/sessions/{session_id}/turn",
             json=body,
@@ -110,13 +140,7 @@ class SessionClient:
         Uses buffer-based SSE parsing, splitting on double newlines.
         """
         http = self._get_http()
-        body: dict[str, Any] = {"prompt": prompt}
-        if workspace_content is not None:
-            body["workspace_content"] = workspace_content
-        if provider_name is not None:
-            body["provider_name"] = provider_name
-        if services is not None:
-            body["services"] = services
+        body = self._build_turn_body(prompt, workspace_content, provider_name, services)
 
         async with http.stream(
             "POST",
