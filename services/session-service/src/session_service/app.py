@@ -160,6 +160,9 @@ def create_session_app(dapr_url: str | None = None) -> FastAPI:
         # Save transcript
         await save_transcript(session_id, messages, _dapr_url)
 
+        # Store routing table for later metadata queries
+        _sessions[session_id]["routing_table"] = routing_table_dict
+
         # Increment turn count
         _sessions[session_id]["turn_count"] += 1
 
@@ -253,6 +256,28 @@ def create_session_app(dapr_url: str | None = None) -> FastAPI:
             status=session["status"],
             turn_count=session["turn_count"],
         ).model_dump()
+
+    @app.get("/sessions/{session_id}/tools")
+    async def session_tools(session_id: str) -> dict[str, Any]:
+        """Return tools available to a session from its routing table."""
+        session = _sessions.get(session_id)
+        if session is None:
+            return {"tools": []}
+        routing_table = session.get("routing_table")
+        if routing_table is None:
+            return {"tools": []}
+        return {"tools": routing_table.get("_tool_specs", [])}
+
+    @app.get("/sessions/{session_id}/modes")
+    async def session_modes(session_id: str) -> dict[str, Any]:
+        """Return modes available to a session (placeholder for future integration)."""
+        return {"modes": []}
+
+    @app.post("/sessions/{session_id}/clear")
+    async def session_clear(session_id: str) -> dict[str, Any]:
+        """Reset session state to initial values."""
+        _sessions[session_id] = {"turn_count": 0, "status": "active"}
+        return {"status": "cleared"}
 
     return app
 

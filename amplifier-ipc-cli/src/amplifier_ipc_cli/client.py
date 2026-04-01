@@ -174,19 +174,9 @@ class SessionClient:
         GET /sessions/{session_id}/tools
         """
         http = self._get_http()
-        response = await http.get(f"/sessions/{session_id}/tools")
+        response = await http.get(f"/sessions/{session_id}/tools", timeout=10.0)
         response.raise_for_status()
-        return response.json()
-
-    async def clear_session(self, session_id: str) -> dict[str, Any]:
-        """Clear the history of a session.
-
-        DELETE /sessions/{session_id}/history
-        """
-        http = self._get_http()
-        response = await http.delete(f"/sessions/{session_id}/history")
-        response.raise_for_status()
-        return response.json()
+        return response.json().get("tools", [])
 
     async def get_modes(self, session_id: str) -> list[dict[str, Any]]:
         """Get the list of available modes for a session.
@@ -194,6 +184,16 @@ class SessionClient:
         GET /sessions/{session_id}/modes
         """
         http = self._get_http()
-        response = await http.get(f"/sessions/{session_id}/modes")
+        response = await http.get(f"/sessions/{session_id}/modes", timeout=10.0)
         response.raise_for_status()
-        return response.json()
+        return response.json().get("modes", [])
+
+    async def clear_session(self, session_id: str) -> bool:
+        """Reset session state to initial values.
+
+        POST /sessions/{session_id}/clear
+        """
+        http = self._get_http()
+        response = await http.post(f"/sessions/{session_id}/clear", timeout=10.0)
+        response.raise_for_status()
+        return response.json().get("status") == "cleared"

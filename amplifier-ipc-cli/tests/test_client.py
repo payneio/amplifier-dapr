@@ -174,3 +174,82 @@ class TestSSEEventEdgeCases:
         assert event is not None
         assert event.event == "delta"
         assert event.data == "{not valid json}"
+
+
+class TestSessionClientMetadataMethods:
+    """Tests for get_tools, get_modes, and clear_session methods."""
+
+    async def test_get_tools_returns_list(self) -> None:
+        """get_tools() performs GET /sessions/{id}/tools and returns the tools list."""
+        session_id = "test-session-tools"
+        tools_list = [{"name": "bash"}, {"name": "read_file"}]
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            assert request.method == "GET"
+            assert request.url.path == f"/sessions/{session_id}/tools"
+            return httpx.Response(200, json={"tools": tools_list})
+
+        transport = httpx.MockTransport(handler)
+        async with httpx.AsyncClient(
+            base_url="http://localhost:8080", transport=transport
+        ) as http:
+            client = SessionClient()
+            client._http = http
+            result = await client.get_tools(session_id)
+
+        assert result == tools_list
+
+    async def test_get_tools_returns_empty_list(self) -> None:
+        """get_tools() returns an empty list when server returns {tools: []}."""
+        session_id = "test-session-no-tools"
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, json={"tools": []})
+
+        transport = httpx.MockTransport(handler)
+        async with httpx.AsyncClient(
+            base_url="http://localhost:8080", transport=transport
+        ) as http:
+            client = SessionClient()
+            client._http = http
+            result = await client.get_tools(session_id)
+
+        assert result == []
+
+    async def test_get_modes_returns_list(self) -> None:
+        """get_modes() performs GET /sessions/{id}/modes and returns the modes list."""
+        session_id = "test-session-modes"
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            assert request.method == "GET"
+            assert request.url.path == f"/sessions/{session_id}/modes"
+            return httpx.Response(200, json={"modes": []})
+
+        transport = httpx.MockTransport(handler)
+        async with httpx.AsyncClient(
+            base_url="http://localhost:8080", transport=transport
+        ) as http:
+            client = SessionClient()
+            client._http = http
+            result = await client.get_modes(session_id)
+
+        assert result == []
+
+    async def test_clear_session_posts_to_correct_endpoint(self) -> None:
+        """clear_session() performs POST /sessions/{id}/clear and returns True."""
+        session_id = "test-session-clear"
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            assert request.method == "POST"
+            assert request.url.path == f"/sessions/{session_id}/clear"
+            return httpx.Response(200, json={"status": "cleared"})
+
+        transport = httpx.MockTransport(handler)
+        async with httpx.AsyncClient(
+            base_url="http://localhost:8080", transport=transport
+        ) as http:
+            client = SessionClient()
+            client._http = http
+            result = await client.clear_session(session_id)
+
+        assert result is True
