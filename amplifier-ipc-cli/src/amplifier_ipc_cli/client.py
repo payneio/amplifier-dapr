@@ -167,3 +167,33 @@ class SessionClient:
         response = await http.get(f"/sessions/{session_id}")
         response.raise_for_status()
         return response.json()
+
+    async def get_tools(self, session_id: str) -> list[dict[str, Any]]:
+        """Get the list of tools available to a session.
+
+        GET /sessions/{session_id}/tools
+        """
+        http = self._get_http()
+        response = await http.get(f"/sessions/{session_id}/tools")
+        response.raise_for_status()
+        return response.json()
+
+    async def clear_session(self, session_id: str) -> dict[str, Any]:
+        """Clear the history of a session.
+
+        DELETE /sessions/{session_id}/history
+        """
+        http = self._get_http()
+        response = await http.delete(f"/sessions/{session_id}/history")
+        response.raise_for_status()
+        return response.json()
+
+    async def get_modes(self, session_id: str) -> list[dict[str, Any]]:
+        """Get the list of available modes for a session.
+
+        GET /sessions/{session_id}/modes
+        """
+        http = self._get_http()
+        response = await http.get(f"/sessions/{session_id}/modes")
+        response.raise_for_status()
+        return response.json()
