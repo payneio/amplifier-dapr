@@ -1,4 +1,4 @@
-# Amplifier IPC Microservices Workspace
+# Amplifier Microservices Workspace
 
 This system is defined in docs/specs/amplifier-spec.md. This is the SoT about how the system is supposed to work. The code is the actual truth, though, so consult it to find out how things really work. If the code needs to be changed in a way that deviates from the spec, confirm with the user, and update the spec to match.
 
@@ -9,10 +9,12 @@ The design document at docs/design/amplifier-ipc-microservices-design.md provide
 The Dapr microservices framework is implemented and running:
 
 - **~29 services** are defined in docker-compose.yaml, each with Dapr sidecars
-- **Session CLI** (`amplifier-ipc`) works with streaming SSE, tool calls, and real LLM providers (Anthropic, OpenAI, etc.)
+- **Session CLI** (`amplifier-svc`) works with streaming SSE, tool calls, and real LLM providers (Anthropic, OpenAI, etc.)
 - **Docker compose** builds and runs successfully end-to-end
-- **All unit tests pass** across all services
+- **All unit tests pass** across all services (74 in ampctl, 95 in session-service)
 - The orchestrator agent loop, context management, hook pipeline, and content assembly are all functional
+- **Agent definition system** (`ampctl`) is implemented: YAML-based agent definitions, deterministic service name hashing, docker-compose generation, and a management CLI
+- **Session-service** loads agent definitions from YAML files with hardcoded fallback
 
 ## Recent Design Decisions
 
@@ -32,9 +34,11 @@ The Dapr microservices framework is implemented and running:
 In priority order:
 
 1. **Update the spec** (`docs/specs/amplifier-spec.md`) to reflect the new agent definition format and `ampctl` design
-2. **Implement `ampctl`** -- the management CLI (add, remove, list, update, compose, inspect)
-3. **Implement the definition system in session-service** -- replace the hardcoded `agents.py` with definition file loading
+2. ~~**Implement `ampctl`**~~ -- DONE. See `ampctl/` package.
+3. ~~**Implement the definition system in session-service**~~ -- DONE. See `services/session-service/src/session_service/agents.py`.
 4. **Implement remaining session CLI slash commands**: `/mode`, `/save`, `/status`, `/clear`, `/config`, `/rename`, `/fork`, `/skills`, `/skill`
+5. **Replace `docker-compose.yaml`** with a generated version from `ampctl compose` (currently the existing hand-written compose still works but `ampctl compose` can generate a new one)
+6. **Wire session-service to use service-map app-ids** for orchestrator/context routing instead of hardcoded `svc-orchestrator` / `svc-context` names
 
 ## Reference Material
 
@@ -46,6 +50,8 @@ In priority order:
 ## Workspace Layout
 
 ```
+ampctl/                   Management CLI for agent definitions. `ampctl add`, `ampctl compose`, etc.
+agents/                   Agent definition YAML files (foundation.yaml, default.yaml).
 amplifier-service-sdk/    Shared SDK: Pydantic v2 models, FastAPI app factory, content serving, amplifier-serve CLI.
 amplifier-ipc-cli/        The `amplifier-ipc` CLI. HTTP client to session-service with REPL, streaming display, workspace resolution.
 services/                 Dapr-native microservices. Each svc-* directory is an independent container.
@@ -77,7 +83,7 @@ tests/                    Integration tests for the microservices stack.
 
 ## Architecture
 
-Amplifier IPC is a Dapr-native microservices framework for AI agent orchestration. Every behavior (tool, hook, provider) runs as an independent container communicating via HTTP + Dapr service invocation and pub/sub.
+Amplifier is a Dapr-native microservices framework for AI agent orchestration. Every behavior (tool, hook, provider) runs as an independent container communicating via HTTP + Dapr service invocation and pub/sub.
 
 ```
 CLI (user's machine) --HTTP/SSE--> session-service (gateway)
