@@ -1,4 +1,4 @@
-## Amplifier IPC
+## Amplifier Dapr
 
 A Dapr-native microservices framework for AI agent orchestration. Every component (orchestrator, tools, hooks, providers, context manager) runs as its own container, communicating via HTTP and Dapr service invocation / pub/sub. This gives process-level isolation, per-service dependency management, and a path to multi-language services.
 
