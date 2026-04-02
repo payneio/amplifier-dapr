@@ -29,6 +29,7 @@ testpaths = ["tests"]
 pythonpath = [
     "amplifier-service-sdk/src",
     "amplifier-ipc-cli/src",
+    "ampctl/src",
     "services/svc-machine/src",
     "services/svc-bash/src",
     "services/svc-context/src",
@@ -57,6 +58,7 @@ pythonVersion = "3.11"
 extraPaths = [
     "amplifier-service-sdk/src",
     "amplifier-ipc-cli/src",
+    "ampctl/src",
     "services/svc-machine/src",
     "services/svc-bash/src",
     "services/svc-context/src",
