@@ -15,6 +15,7 @@ class ServiceEntry(BaseModel):
     config: dict[str, Any] | None = None
     environment: dict[str, str] | None = None
     volumes: list[str] | None = None
+    depends_on: list[str] | None = None
 
     @model_validator(mode="after")
     def _require_image_or_build(self) -> "ServiceEntry":

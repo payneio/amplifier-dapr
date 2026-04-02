@@ -8,7 +8,6 @@ from typing import Any
 import yaml
 
 from ampctl.models import AgentDefinition, ServiceEntry, ServiceMapEntry
-from ampctl.paths import agents_dir
 
 
 # ---------------------------------------------------------------------------
@@ -31,15 +30,22 @@ def _expand_build(build_path: str) -> dict[str, str]:
     return {"context": ".", "dockerfile": f"{clean}/Dockerfile"}
 
 
-def _get_service_name(role_key: str, sme: ServiceMapEntry) -> str:
-    """Resolve a role key to its Dapr app-id from the service map entry."""
-    if role_key == "orchestrator":
-        return sme.orchestrator
-    if role_key == "context_manager":
-        return sme.context_manager
-    if role_key == "providers":
-        return sme.providers
-    return sme.behaviors[role_key]
+def _derive_service_name(entry: ServiceEntry) -> str:
+    """Derive a Docker service name from the build path or image.
+
+    Examples:
+      ``./services/svc-bash``          -> ``svc-bash``
+      ``services/svc-bash/Dockerfile`` -> ``svc-bash``  (dict build)
+      ``ghcr.io/org/svc-bash:latest``  -> ``svc-bash``  (image)
+    """
+    if isinstance(entry.build, str):
+        return Path(entry.build).name
+    if isinstance(entry.build, dict):
+        df = entry.build.get("dockerfile", "")
+        return Path(df).parent.name
+    if entry.image is not None:
+        return entry.image.rsplit("/", 1)[-1].split(":")[0]
+    return "unknown"
 
 
 def _make_app_service(entry: ServiceEntry) -> dict[str, Any]:
@@ -116,7 +122,6 @@ def generate_compose(
     agents: dict[str, tuple[AgentDefinition, ServiceMapEntry]],
     session_service_build: str = ".",
     dapr_image: str = "daprio/daprd:1.14.4",
-    workspace_path: str = "${WORKSPACE_PATH:-.}",
 ) -> dict[str, Any]:
     """Generate a complete docker-compose dict from installed agents.
 
@@ -124,7 +129,6 @@ def generate_compose(
         agents: Mapping of agent ref -> (AgentDefinition, ServiceMapEntry).
         session_service_build: Build context for the session-service image.
         dapr_image: Dapr sidecar image tag to use for all sidecars.
-        workspace_path: Host path (or compose variable) for workspace mounts.
 
     Returns:
         A dict suitable for ``yaml.dump()`` as a valid docker-compose file.
@@ -137,12 +141,19 @@ def generate_compose(
         "ports": ["6379:6379"],
     }
 
-    # --- Agent-derived services (deduplicated by service name) ---
-    seen: set[str] = set()
-
-    for _agent_ref, (agent_def, sme) in agents.items():
+    # --- Pass 1: collect role_key -> service_name mapping ---
+    # Needed so that depends_on references can be resolved in pass 2 even when
+    # the dependency's entry appears later in iteration order.
+    all_role_names: dict[str, str] = {}
+    for _agent_ref, (agent_def, _sme) in agents.items():
         for role_key, service_entry in agent_def.all_service_entries():
-            service_name = _get_service_name(role_key, sme)
+            all_role_names[role_key] = _derive_service_name(service_entry)
+
+    # --- Pass 2: build services (deduplicated by derived name) ---
+    seen: set[str] = set()
+    for _agent_ref, (agent_def, _sme) in agents.items():
+        for role_key, service_entry in agent_def.all_service_entries():
+            service_name = _derive_service_name(service_entry)
 
             if service_name in seen:
                 # Deduplicated: merge any additional env/volumes from this definition.
@@ -150,26 +161,58 @@ def generate_compose(
                 continue
 
             seen.add(service_name)
-            services[service_name] = _make_app_service(service_entry)
+            svc = _make_app_service(service_entry)
+
+            # Resolve behavior-key depends_on references to dapr sidecar names.
+            if service_entry.depends_on:
+                deps: list[str] = svc["depends_on"]
+                for dep_key in service_entry.depends_on:
+                    dep_svc_name = all_role_names.get(dep_key)
+                    if dep_svc_name:
+                        dapr_dep = f"{dep_svc_name}-dapr"
+                        if dapr_dep not in deps:
+                            deps.append(dapr_dep)
+
+            services[service_name] = svc
             services[f"{service_name}-dapr"] = _make_dapr_sidecar(
                 service_name, dapr_image
             )
 
+    # --- Orchestrator depends_on: add context + providers + all behavior daprs ---
+    orch_name = all_role_names.get("orchestrator")
+    if orch_name and orch_name in services:
+        orch_deps: list[str] = services[orch_name]["depends_on"]
+        for key in ("context_manager", "providers"):
+            name = all_role_names.get(key)
+            if name:
+                dep = f"{name}-dapr"
+                if dep not in orch_deps:
+                    orch_deps.append(dep)
+        # Add all behavior daprs
+        for _agent_ref, (agent_def, _) in agents.items():
+            for role_key, entry in agent_def.all_service_entries():
+                if role_key not in ("orchestrator", "context_manager", "providers"):
+                    name = _derive_service_name(entry)
+                    dep = f"{name}-dapr"
+                    if dep not in orch_deps:
+                        orch_deps.append(dep)
+
     # --- Session service (always present) ---
-    agent_definitions_path = str(agents_dir())
+    all_dapr_services = sorted(name for name in services if name.endswith("-dapr"))
+    session_deps: list[str] = ["redis"] + all_dapr_services
     services["session-service"] = {
         "build": {
             "context": session_service_build,
             "dockerfile": "services/session-service/Dockerfile",
         },
-        "ports": ["8080:8000"],
+        "ports": ["${SESSION_SERVICE_PORT:-8090}:8000"],
         "environment": {
             "DAPR_HTTP_PORT": "3500",
             "AMPLIFIER_AGENTS_DIR": "/agents",
             "AMPLIFIER_SERVICE_MAP": "/agents/service-map.yaml",
         },
-        "volumes": [f"{agent_definitions_path}:/agents"],
-        "depends_on": ["redis"],
+        "volumes": ["./agents:/agents"],
+        "depends_on": session_deps,
     }
     services["session-service-dapr"] = _make_dapr_sidecar("session-service", dapr_image)
 

@@ -23,17 +23,25 @@ agent:
   behaviors:
     machine:
       build: ./services/svc-machine
+      environment:
+        WORKSPACE_DIR: /workspace
       volumes:
         - "${WORKSPACE_PATH:-.}:/workspace"
 
     bash:
       build: ./services/svc-bash
+      depends_on:
+        - machine
 
     filesystem:
       build: ./services/svc-filesystem
+      depends_on:
+        - machine
 
     search:
       build: ./services/svc-search
+      depends_on:
+        - machine
 
     web:
       build: ./services/svc-web
@@ -52,15 +60,23 @@ agent:
 
     hooks-approval:
       build: ./services/svc-hooks-approval
+      environment:
+        DENY_TOOLS: ""
 
     hooks-routing:
       build: ./services/svc-hooks-routing
+      environment:
+        ROUTING_MATRIX_PATH: ""
 
     hooks-async:
       build: ./services/svc-hooks-async
+      environment:
+        LOG_TEMPLATE: "~/.amplifier/logs/{session_id}/events.jsonl"
 
     hooks-shell:
       build: ./services/svc-hooks-shell
+      environment:
+        SHELL_HOOKS_DIR: ""
 
     content-core:
       build: ./services/svc-content-core

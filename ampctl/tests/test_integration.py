@@ -121,34 +121,22 @@ def test_full_workflow(tmp_path: Path) -> None:
         )
 
     # Deduplication: foundation and default share the same orchestrator build path
-    # → they must produce the same orchestrator service name, and it must appear only once.
-    sm_data = yaml.safe_load(sm_path.read_text())
-    foundation_orch = sm_data["agents"]["foundation"]["orchestrator"]
-    default_orch = sm_data["agents"]["default"]["orchestrator"]
-    assert foundation_orch == default_orch, (
-        f"Expected shared orchestrator service name, got {foundation_orch!r} vs {default_orch!r}"
-    )
-    orch_count = sum(1 for k in services if k == foundation_orch)
+    # → both derive to "svc-orchestrator"; it must appear exactly once in compose.
+    orch_count = sum(1 for k in services if k == "svc-orchestrator")
     assert orch_count == 1, (
-        f"Orchestrator service '{foundation_orch}' appears {orch_count} times (expected 1)"
+        f"Orchestrator service 'svc-orchestrator' appears {orch_count} times (expected 1)"
     )
 
-    # Broader dedup: collect all app-ids from both agents; shared ones must appear once
-    def _all_ids(entry: dict) -> set[str]:
-        ids = {entry["orchestrator"], entry["context_manager"], entry["providers"]}
-        ids.update(entry["behaviors"].values())
-        return ids
-
-    foundation_ids = _all_ids(sm_data["agents"]["foundation"])
-    default_ids = _all_ids(sm_data["agents"]["default"])
-    shared_ids = foundation_ids & default_ids
-    assert len(shared_ids) > 0, (
-        "Expected at least one shared service between foundation and default"
-    )
-    for shared_id in shared_ids:
-        count = sum(1 for k in services if k == shared_id)
+    # Broader dedup: every svc-* app service must appear exactly once (no duplicates
+    # from processing the same build path via two different agent files).
+    svc_names = [
+        k for k in services if k.startswith("svc-") and not k.endswith("-dapr")
+    ]
+    assert len(svc_names) > 0, "Expected svc-* services in compose output"
+    for svc_name in svc_names:
+        count = sum(1 for k in services if k == svc_name)
         assert count == 1, (
-            f"Shared service '{shared_id}' appears {count} times in compose (dedup failed)"
+            f"Service '{svc_name}' appears {count} times in compose (dedup failed)"
         )
 
     # -------------------------------------------------------------------------
