@@ -30,22 +30,15 @@ def _expand_build(build_path: str) -> dict[str, str]:
     return {"context": ".", "dockerfile": f"{clean}/Dockerfile"}
 
 
-def _derive_service_name(entry: ServiceEntry) -> str:
-    """Derive a Docker service name from the build path or image.
-
-    Examples:
-      ``./services/svc-bash``          -> ``svc-bash``
-      ``services/svc-bash/Dockerfile`` -> ``svc-bash``  (dict build)
-      ``ghcr.io/org/svc-bash:latest``  -> ``svc-bash``  (image)
-    """
-    if isinstance(entry.build, str):
-        return Path(entry.build).name
-    if isinstance(entry.build, dict):
-        df = entry.build.get("dockerfile", "")
-        return Path(df).parent.name
-    if entry.image is not None:
-        return entry.image.rsplit("/", 1)[-1].split(":")[0]
-    return "unknown"
+def _get_service_name(role_key: str, sme: ServiceMapEntry) -> str:
+    """Look up the hashed service name from the ServiceMapEntry."""
+    if role_key == "orchestrator":
+        return sme.orchestrator
+    if role_key == "context_manager":
+        return sme.context_manager
+    if role_key == "providers":
+        return sme.providers
+    return sme.behaviors.get(role_key, f"svc-{role_key}")
 
 
 def _make_app_service(entry: ServiceEntry) -> dict[str, Any]:
@@ -145,15 +138,15 @@ def generate_compose(
     # Needed so that depends_on references can be resolved in pass 2 even when
     # the dependency's entry appears later in iteration order.
     all_role_names: dict[str, str] = {}
-    for _agent_ref, (agent_def, _sme) in agents.items():
-        for role_key, service_entry in agent_def.all_service_entries():
-            all_role_names[role_key] = _derive_service_name(service_entry)
+    for _agent_ref, (agent_def, sme) in agents.items():
+        for role_key, _service_entry in agent_def.all_service_entries():
+            all_role_names[role_key] = _get_service_name(role_key, sme)
 
-    # --- Pass 2: build services (deduplicated by derived name) ---
+    # --- Pass 2: build services (deduplicated by hashed name) ---
     seen: set[str] = set()
-    for _agent_ref, (agent_def, _sme) in agents.items():
+    for _agent_ref, (agent_def, sme) in agents.items():
         for role_key, service_entry in agent_def.all_service_entries():
-            service_name = _derive_service_name(service_entry)
+            service_name = _get_service_name(role_key, sme)
 
             if service_name in seen:
                 # Deduplicated: merge any additional env/volumes from this definition.
@@ -189,10 +182,10 @@ def generate_compose(
                 if dep not in orch_deps:
                     orch_deps.append(dep)
         # Add all behavior daprs
-        for _agent_ref, (agent_def, _) in agents.items():
-            for role_key, entry in agent_def.all_service_entries():
+        for _agent_ref, (agent_def, sme) in agents.items():
+            for role_key, _entry in agent_def.all_service_entries():
                 if role_key not in ("orchestrator", "context_manager", "providers"):
-                    name = _derive_service_name(entry)
+                    name = _get_service_name(role_key, sme)
                     dep = f"{name}-dapr"
                     if dep not in orch_deps:
                         orch_deps.append(dep)

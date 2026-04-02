@@ -28,13 +28,34 @@ def _make_client(dapr_url: str = "http://localhost:3500") -> TestClient:
 class TestTurnAgentResolution:
     """Verify that agent_ref drives service discovery and provider selection."""
 
+    @pytest.fixture(autouse=True)
+    def isolate_from_yaml(self):
+        """Force get_agent_config to use the hardcoded AGENTS dict (no YAML loading).
+
+        Ensures tests are environment-agnostic regardless of whether YAML agent
+        definitions and a service-map are present on the local machine.
+        """
+        with patch(
+            "session_service.agents._load_from_yaml",
+            return_value=None,
+        ):
+            yield
+
     @pytest.fixture
     def mock_discover(self):
         """Patch discover_services to record calls and return an empty table."""
         with patch(
             "session_service.app.discover_services",
             new_callable=AsyncMock,
-            return_value={"tools": {}, "providers": {}, "hooks": {}, "_tool_specs": [], "context": "svc-context", "hook_endpoints": {}, "hook_priorities": {}},
+            return_value={
+                "tools": {},
+                "providers": {},
+                "hooks": {},
+                "_tool_specs": [],
+                "context": "svc-context",
+                "hook_endpoints": {},
+                "hook_priorities": {},
+            },
         ) as m:
             yield m
 
@@ -42,8 +63,14 @@ class TestTurnAgentResolution:
     def mock_transcript(self):
         """Patch load/save transcript so no Dapr I/O occurs."""
         with (
-            patch("session_service.app.load_transcript", new_callable=AsyncMock, return_value=[]) as load,
-            patch("session_service.app.save_transcript", new_callable=AsyncMock) as save,
+            patch(
+                "session_service.app.load_transcript",
+                new_callable=AsyncMock,
+                return_value=[],
+            ) as load,
+            patch(
+                "session_service.app.save_transcript", new_callable=AsyncMock
+            ) as save,
         ):
             yield load, save
 
@@ -103,7 +130,11 @@ class TestTurnAgentResolution:
         client = _make_client()
         client.post(
             "/sessions/s3/turn",
-            json={"prompt": "hello", "agent_ref": "foundation", "provider_name": "mock"},
+            json={
+                "prompt": "hello",
+                "agent_ref": "foundation",
+                "provider_name": "mock",
+            },
         )
         payload = mock_orchestrator.post.call_args[1]["json"]
         assert payload["config"]["provider"] == "anthropic", (
@@ -117,7 +148,11 @@ class TestTurnAgentResolution:
         client = _make_client()
         client.post(
             "/sessions/s4/turn",
-            json={"prompt": "hello", "agent_ref": "foundation", "provider_name": "openai"},
+            json={
+                "prompt": "hello",
+                "agent_ref": "foundation",
+                "provider_name": "openai",
+            },
         )
         payload = mock_orchestrator.post.call_args[1]["json"]
         assert payload["config"]["provider"] == "openai"
@@ -158,7 +193,59 @@ class TestTurnAgentResolution:
         custom_services = ["svc-bash", "svc-filesystem"]
         client.post(
             "/sessions/s7/turn",
-            json={"prompt": "hello", "agent_ref": "foundation", "services": custom_services},
+            json={
+                "prompt": "hello",
+                "agent_ref": "foundation",
+                "services": custom_services,
+            },
         )
         called_services = mock_discover.call_args[0][0]
         assert called_services == custom_services
+
+    def test_turn_passes_context_app_id_to_discover_services(
+        self, mock_discover, mock_transcript, mock_orchestrator
+    ) -> None:
+        """discover_services receives context_app_id from get_agent_config."""
+        hashed_context_id = "svc-context_manager-def456"
+        with patch(
+            "session_service.app.get_agent_config",
+            return_value={
+                "services": ["svc-bash"],
+                "default_provider": "anthropic",
+                "orchestrator_app_id": "svc-orchestrator-abc123",
+                "context_app_id": hashed_context_id,
+            },
+        ):
+            client = _make_client()
+            client.post(
+                "/sessions/s_ctx/turn",
+                json={"prompt": "hello", "agent_ref": "foundation"},
+            )
+        _args, kwargs = mock_discover.call_args
+        assert kwargs.get("context_app_id") == hashed_context_id, (
+            f"Expected context_app_id={hashed_context_id!r}, got: {kwargs}"
+        )
+
+    def test_turn_uses_orchestrator_app_id_from_agent_config(
+        self, mock_discover, mock_transcript, mock_orchestrator
+    ) -> None:
+        """Orchestrator is invoked using orchestrator_app_id from get_agent_config."""
+        hashed_orch_id = "svc-orchestrator-abc123"
+        with patch(
+            "session_service.app.get_agent_config",
+            return_value={
+                "services": ["svc-bash"],
+                "default_provider": "anthropic",
+                "orchestrator_app_id": hashed_orch_id,
+                "context_app_id": "svc-context_manager-def456",
+            },
+        ):
+            client = _make_client()
+            client.post(
+                "/sessions/s_orch/turn",
+                json={"prompt": "hello", "agent_ref": "foundation"},
+            )
+        call_url = mock_orchestrator.post.call_args[0][0]
+        assert hashed_orch_id in call_url, (
+            f"Expected hashed orchestrator id '{hashed_orch_id}' in URL, got: {call_url}"
+        )

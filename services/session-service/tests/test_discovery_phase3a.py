@@ -14,6 +14,8 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, patch
 
+import pytest
+
 from session_service.discovery import build_routing_table
 from session_service.app import DEFAULT_SERVICES
 
@@ -193,6 +195,15 @@ class TestDefaultServicesList:
 class TestTurnHandlerDefaultServices:
     """Turn handler uses DEFAULT_SERVICES when TurnRequest.services is empty."""
 
+    @pytest.fixture(autouse=True)
+    def isolate_from_yaml(self):
+        """Force get_agent_config to use the hardcoded AGENTS dict (no YAML loading)."""
+        with patch(
+            "session_service.agents._load_from_yaml",
+            return_value=None,
+        ):
+            yield
+
     def test_empty_services_triggers_default_list(self) -> None:
         """discover_services is called with DEFAULT_SERVICES when request.services == []."""
         import httpx  # noqa: PLC0415
@@ -203,7 +214,9 @@ class TestTurnHandlerDefaultServices:
 
         captured_app_ids: list[list[str]] = []
 
-        async def fake_discover(service_app_ids: list[str], dapr_url: str) -> dict:
+        async def fake_discover(
+            service_app_ids: list[str], dapr_url: str, **kwargs: object
+        ) -> dict:
             captured_app_ids.append(list(service_app_ids))
             return {
                 "tools": {},

@@ -121,10 +121,11 @@ def test_full_workflow(tmp_path: Path) -> None:
         )
 
     # Deduplication: foundation and default share the same orchestrator build path
-    # → both derive to "svc-orchestrator"; it must appear exactly once in compose.
-    orch_count = sum(1 for k in services if k == "svc-orchestrator")
+    # → same hash → hashed name must appear exactly once in compose.
+    orch_app_id = foundation_entry["orchestrator"]
+    orch_count = sum(1 for k in services if k == orch_app_id)
     assert orch_count == 1, (
-        f"Orchestrator service 'svc-orchestrator' appears {orch_count} times (expected 1)"
+        f"Orchestrator service '{orch_app_id}' appears {orch_count} times (expected 1)"
     )
 
     # Broader dedup: every svc-* app service must appear exactly once (no duplicates

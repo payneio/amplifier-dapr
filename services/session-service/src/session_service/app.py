@@ -15,7 +15,7 @@ from sse_starlette.sse import EventSourceResponse
 from amplifier_service_sdk.models import Message
 from amplifier_service_sdk.service import ServiceConfig, create_app
 
-from session_service.agents import resolve_agent
+from session_service.agents import get_agent_config
 from session_service.content import assemble_system_prompt
 from session_service.discovery import discover_services
 from session_service.state import load_transcript, save_transcript
@@ -121,12 +121,14 @@ def create_session_app(dapr_url: str | None = None) -> FastAPI:
             _sessions[session_id] = {"turn_count": 0, "status": "active"}
 
         # Resolve agent configuration
-        agent_config = resolve_agent(request.agent_ref)
+        agent_config = get_agent_config(request.agent_ref)
 
         # Discover services — caller-supplied list takes priority over agent default
         service_ids = request.services if request.services else agent_config["services"]
         routing_table_dict: dict[str, Any] = await discover_services(
-            service_ids, _dapr_url
+            service_ids,
+            _dapr_url,
+            context_app_id=agent_config.get("context_app_id", "svc-context"),
         )
 
         # Resolve provider — agent default overrides the bare "mock" sentinel
@@ -158,13 +160,19 @@ def create_session_app(dapr_url: str | None = None) -> FastAPI:
         transcript.append(Message(role="user", content=request.prompt))
 
         # Invoke orchestrator via Dapr service invocation
+        orchestrator_app_id = agent_config.get(
+            "orchestrator_app_id", "svc-orchestrator"
+        )
         invoke_url = (
-            f"{_dapr_url}/v1.0/invoke/svc-orchestrator/method/orchestrator/execute"
+            f"{_dapr_url}/v1.0/invoke/{orchestrator_app_id}/method/orchestrator/execute"
         )
         payload = {
             "system_prompt": system_prompt,
             "messages": [m.model_dump() for m in transcript],
-            "config": {"provider": provider_name, "tools": routing_table_dict.get("_tool_specs", [])},
+            "config": {
+                "provider": provider_name,
+                "tools": routing_table_dict.get("_tool_specs", []),
+            },
             "routing_table": routing_table_dict,
             "session_id": session_id,
         }
@@ -211,14 +219,16 @@ def create_session_app(dapr_url: str | None = None) -> FastAPI:
                     _sessions[session_id] = {"turn_count": 0, "status": "active"}
 
                 # Resolve agent configuration
-                agent_config = resolve_agent(request.agent_ref)
+                agent_config = get_agent_config(request.agent_ref)
 
                 # Discover services — caller-supplied list takes priority over agent default
                 service_ids = (
                     request.services if request.services else agent_config["services"]
                 )
                 routing_table_dict: dict[str, Any] = await discover_services(
-                    service_ids, _dapr_url
+                    service_ids,
+                    _dapr_url,
+                    context_app_id=agent_config.get("context_app_id", "svc-context"),
                 )
 
                 # Resolve provider — agent default overrides the bare "mock" sentinel
@@ -252,8 +262,11 @@ def create_session_app(dapr_url: str | None = None) -> FastAPI:
                 # because Dapr service invocation buffers the entire response
                 # before returning it, which defeats SSE streaming.
                 # In Docker Compose, services reach each other by container name.
+                orchestrator_app_id = agent_config.get(
+                    "orchestrator_app_id", "svc-orchestrator"
+                )
                 orch_direct_url = os.environ.get(
-                    "ORCHESTRATOR_DIRECT_URL", "http://svc-orchestrator:8000"
+                    "ORCHESTRATOR_DIRECT_URL", f"http://{orchestrator_app_id}:8000"
                 )
                 stream_url = f"{orch_direct_url}/orchestrator/execute/stream"
                 payload: dict[str, Any] = {
@@ -316,9 +329,9 @@ def create_session_app(dapr_url: str | None = None) -> FastAPI:
                                         )
 
                                         # Update session state
-                                        _sessions[session_id][
-                                            "routing_table"
-                                        ] = routing_table_dict
+                                        _sessions[session_id]["routing_table"] = (
+                                            routing_table_dict
+                                        )
                                         _sessions[session_id]["turn_count"] += 1
 
                                         yield {
@@ -377,7 +390,9 @@ def create_session_app(dapr_url: str | None = None) -> FastAPI:
         list on demand and caches the result so subsequent calls are fast.
         """
         session = _sessions.get(session_id)
-        routing_table: dict[str, Any] | None = session.get("routing_table") if session else None
+        routing_table: dict[str, Any] | None = (
+            session.get("routing_table") if session else None
+        )
         if routing_table is None:
             routing_table = await discover_services(DEFAULT_SERVICES, _dapr_url)
             # Cache for later: create the session entry if it doesn't exist yet.
@@ -397,7 +412,9 @@ def create_session_app(dapr_url: str | None = None) -> FastAPI:
         discovery, flowing through the same pipeline as tools.
         """
         session = _sessions.get(session_id)
-        routing_table: dict[str, Any] | None = session.get("routing_table") if session else None
+        routing_table: dict[str, Any] | None = (
+            session.get("routing_table") if session else None
+        )
         if routing_table is None:
             routing_table = await discover_services(DEFAULT_SERVICES, _dapr_url)
             # Cache for later: create the session entry if it doesn't exist yet.
@@ -417,7 +434,9 @@ def create_session_app(dapr_url: str | None = None) -> FastAPI:
         discovery, flowing through the same pipeline as tools and modes.
         """
         session = _sessions.get(session_id)
-        routing_table: dict[str, Any] | None = session.get("routing_table") if session else None
+        routing_table: dict[str, Any] | None = (
+            session.get("routing_table") if session else None
+        )
         if routing_table is None:
             routing_table = await discover_services(DEFAULT_SERVICES, _dapr_url)
             # Cache for later: create the session entry if it doesn't exist yet.

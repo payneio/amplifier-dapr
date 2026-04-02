@@ -59,11 +59,8 @@ def test_generate_compose_single_agent() -> None:
     result = generate_compose({"test/build-agent": (agent, sme)})
     services = result["services"]
 
-    # Names are derived from build paths, not hashed.
-    # _make_build_agent uses ./services/svc-orchestrator, ./services/svc-context,
-    # ./services/svc-providers -> derived names are svc-orchestrator, svc-context,
-    # svc-providers.
-    for service_name in ["svc-orchestrator", "svc-context", "svc-providers"]:
+    # Names come from the ServiceMapEntry (hashed), not derived from build paths.
+    for service_name in [sme.orchestrator, sme.context_manager, sme.providers]:
         assert service_name in services, f"Missing service: {service_name}"
         assert f"{service_name}-dapr" in services, (
             f"Missing sidecar: {service_name}-dapr"
@@ -101,9 +98,7 @@ def test_generate_compose_deduplication() -> None:
     )
     agent2 = AgentDefinition(
         ref="test/agent2",
-        orchestrator=ServiceEntry(
-            image=shared_image
-        ),  # same image -> same derived name
+        orchestrator=ServiceEntry(image=shared_image),  # same image -> same hash
         context_manager=ServiceEntry(image="ctx2:latest"),
         providers=ServiceEntry(image="prov2:latest"),
     )
@@ -118,8 +113,9 @@ def test_generate_compose_deduplication() -> None:
     )
     services = result["services"]
 
-    # Both agents have ghcr.io/shared/orchestrator:latest -> derived name "orchestrator"
-    orch_name = "orchestrator"
+    # Both agents share the same source_key for orchestrator -> same hash -> one entry
+    orch_name = sme1.orchestrator
+    assert orch_name == sme2.orchestrator, "Same image must produce same hashed name"
     matching = [k for k in services if k == orch_name]
     assert len(matching) == 1
 
@@ -139,8 +135,8 @@ def test_compose_environment_passthrough() -> None:
     result = generate_compose({"test/env-agent": (agent, sme)})
     services = result["services"]
 
-    # ghcr.io/example/orchestrator:latest -> derived name "orchestrator"
-    orch = services["orchestrator"]
+    # Service is registered under its hashed name
+    orch = services[sme.orchestrator]
     assert orch["environment"]["API_KEY"] == "secret"
     assert orch["environment"]["LOG_LEVEL"] == "debug"
     # DAPR_HTTP_PORT always present
@@ -162,8 +158,8 @@ def test_compose_volume_passthrough() -> None:
     result = generate_compose({"test/vol-agent": (agent, sme)})
     services = result["services"]
 
-    # ghcr.io/example/orchestrator:latest -> derived name "orchestrator"
-    orch = services["orchestrator"]
+    # Service is registered under its hashed name
+    orch = services[sme.orchestrator]
     assert "./data:/data" in orch["volumes"]
     assert "./config:/config" in orch["volumes"]
 
@@ -174,8 +170,8 @@ def test_compose_dapr_sidecar_format() -> None:
     result = generate_compose({"test/image-agent": (agent, sme)})
     services = result["services"]
 
-    # ghcr.io/example/orchestrator:latest -> derived name "orchestrator"
-    orch_name = "orchestrator"
+    # Sidecar is named <hashed_service_name>-dapr
+    orch_name = sme.orchestrator
     dapr_name = f"{orch_name}-dapr"
     assert dapr_name in services
 
@@ -209,30 +205,37 @@ def test_compose_build_path_expansion() -> None:
     result = generate_compose({"test/bash-agent": (agent, sme)})
     services = result["services"]
 
-    # orchestrator uses build="./services/svc-bash" -> derived name "svc-bash"
-    orch = services["svc-bash"]
+    # orchestrator uses build="./services/svc-bash" -> hashed service name
+    orch = services[sme.orchestrator]
     assert isinstance(orch["build"], dict)
     assert orch["build"]["context"] == "."
     assert orch["build"]["dockerfile"] == "services/svc-bash/Dockerfile"
 
 
 # ---------------------------------------------------------------------------
-# New behavior tests (RED: these fail before fixes are applied)
+# Hashed naming tests
 # ---------------------------------------------------------------------------
 
 
-def test_compose_service_name_derived_not_hashed() -> None:
-    """Service names are derived from build paths, not content-hash strings."""
+def test_compose_service_name_uses_hashed_names() -> None:
+    """Service names use hashed names from ServiceMapEntry, not derived simple names."""
     agent, sme = _make_build_agent()
     result = generate_compose({"test/build-agent": (agent, sme)})
     services = result["services"]
-    # Derived from ./services/svc-orchestrator -> "svc-orchestrator"
-    assert "svc-orchestrator" in services, (
-        "Expected derived name 'svc-orchestrator', got only hashed names"
+
+    # Hashed names ARE present
+    assert sme.orchestrator in services, (
+        f"Expected hashed name '{sme.orchestrator}' in services"
     )
-    assert "svc-orchestrator-dapr" in services
-    assert "svc-context" in services
-    assert "svc-providers" in services
+    assert sme.context_manager in services
+    assert sme.providers in services
+
+    # Simple derived names are NOT present
+    assert "svc-orchestrator" not in services, (
+        "Simple derived name 'svc-orchestrator' must not be used"
+    )
+    assert "svc-context" not in services
+    assert "svc-providers" not in services
 
 
 def test_compose_session_service_port_variable() -> None:
@@ -268,9 +271,13 @@ def test_compose_behavior_depends_on() -> None:
     sme = build_service_map_entry(agent)
     result = generate_compose({"test/deps-agent": (agent, sme)})
     services = result["services"]
-    bash_svc = services["svc-bash"]
-    assert "svc-machine-dapr" in bash_svc["depends_on"], (
-        f"Expected svc-machine-dapr in bash depends_on, got: {bash_svc['depends_on']}"
+
+    # Bash service is registered under its hashed name
+    bash_name = sme.behaviors["bash"]
+    machine_name = sme.behaviors["machine"]
+    bash_svc = services[bash_name]
+    assert f"{machine_name}-dapr" in bash_svc["depends_on"], (
+        f"Expected {machine_name}-dapr in bash depends_on, got: {bash_svc['depends_on']}"
     )
 
 
@@ -279,12 +286,13 @@ def test_compose_orchestrator_depends_on_context_and_providers() -> None:
     agent, sme = _make_build_agent()
     result = generate_compose({"test/build-agent": (agent, sme)})
     services = result["services"]
-    orch_deps = services["svc-orchestrator"]["depends_on"]
-    assert "svc-context-dapr" in orch_deps, (
-        f"Expected svc-context-dapr in orchestrator depends_on, got: {orch_deps}"
+
+    orch_deps = services[sme.orchestrator]["depends_on"]
+    assert f"{sme.context_manager}-dapr" in orch_deps, (
+        f"Expected {sme.context_manager}-dapr in orchestrator depends_on, got: {orch_deps}"
     )
-    assert "svc-providers-dapr" in orch_deps, (
-        f"Expected svc-providers-dapr in orchestrator depends_on, got: {orch_deps}"
+    assert f"{sme.providers}-dapr" in orch_deps, (
+        f"Expected {sme.providers}-dapr in orchestrator depends_on, got: {orch_deps}"
     )
 
 
