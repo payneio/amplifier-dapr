@@ -35,6 +35,7 @@ class StreamingDisplay:
         self._console = console
         self._show_thinking = show_thinking
         self._response: str | None = None
+        self._tokens_received: bool = False
 
     @property
     def response(self) -> str | None:
@@ -72,7 +73,9 @@ class StreamingDisplay:
     def _handle_token(self, data: Any) -> None:
         """Print token text without markup or syntax highlighting."""
         text = data.get("text", "") if isinstance(data, dict) else str(data)
-        self._console.print(text, end="", highlight=False, markup=False)
+        if text:
+            self._tokens_received = True
+            self._console.print(text, end="", highlight=False, markup=False)
 
     def _handle_thinking(self, data: Any) -> None:
         """Print thinking text in 'cyan dim' style (skipped when show_thinking=False)."""
@@ -198,10 +201,11 @@ class StreamingDisplay:
         self._console.print(f"[red]Error: {message}[/red]")
 
     def _handle_complete(self, data: Any) -> None:
-        """Store the final response text and print it if no tokens were streamed."""
+        """Store the final response text. Print only if no tokens were streamed."""
         if isinstance(data, dict):
             self._response = data.get("result", "") or data.get("response", "")
-        # If the response came as a batch (no token events), print the text
-        if self._response:
+        # Only print the response if no token events were received
+        # (avoids duplication when tokens already printed the text)
+        if self._response and not self._tokens_received:
             self._console.print(self._response, highlight=False, markup=False)
         self._console.print()
