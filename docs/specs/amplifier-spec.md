@@ -1,6 +1,6 @@
-# Amplifier IPC Specification
+# Amplifier Specification
 
-> **Status:** Authoritative source-of-truth for the amplifier-ipc architecture.
+> **Status:** Authoritative source-of-truth for the amplifier architecture.
 > This document supersedes all prior specs and design documents.
 
 ---
@@ -26,7 +26,7 @@
 
 ## 1. Overview
 
-Amplifier IPC is a **Dapr-native microservices framework** for AI agent orchestration. Every behavior runs as an independent container communicating via **HTTP and Dapr service invocation/pub/sub**. A Session Service acts as the gateway, an Orchestrator drives the agent loop, and capability services (tools, providers, hooks) expose standard HTTP endpoints. Redis backs state storage and pub/sub messaging. Dapr sidecars provide mTLS, retries, circuit breakers, and observability for every container.
+Amplifier is a **Dapr-native microservices framework** for AI agent orchestration. Every behavior runs as an independent container communicating via **HTTP and Dapr service invocation/pub/sub**. A Session Service acts as the gateway, an Orchestrator drives the agent loop, and capability services (tools, providers, hooks) expose standard HTTP endpoints. Redis backs state storage and pub/sub messaging. Dapr sidecars provide mTLS, retries, circuit breakers, and observability for every container.
 
 ### Goals
 
@@ -39,7 +39,7 @@ Amplifier IPC is a **Dapr-native microservices framework** for AI agent orchestr
 
 ### What Changed
 
-Amplifier IPC replaced the prior architecture's:
+Amplifier replaced the prior architecture's:
 - **stdio JSON-RPC transport** with HTTP + Dapr service invocation and pub/sub
 - **Per-turn process spawning** with long-lived containers
 - **Host monolith** (1248-line message broker) with a thin Session Service for lifecycle only
