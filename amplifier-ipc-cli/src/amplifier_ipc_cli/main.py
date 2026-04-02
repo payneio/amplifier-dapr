@@ -62,17 +62,12 @@ async def _run_impl(
     # Resolve session ID
     effective_session_id: str = session_id or str(uuid.uuid4())
 
-    # Resolve workspace content
+    # Resolve workspace content — sent as a dict to the server, which
+    # handles formatting into <context_file> blocks for the system prompt.
     workspace_path = Path(workspace)
-    workspace_files = resolve_workspace_content(workspace_path)
-    workspace_content: str | None = None
-    if workspace_files:
-        blocks = []
-        for rel_path, content in workspace_files.items():
-            blocks.append(
-                f'<context_file path="{rel_path}">\n{content}\n</context_file>'
-            )
-        workspace_content = "\n".join(blocks)
+    workspace_content: dict[str, str] | None = (
+        resolve_workspace_content(workspace_path) or None
+    )
 
     # Determine prompt from message or piped stdin
     prompt: str | None = message
@@ -102,7 +97,9 @@ async def _run_impl(
                         agent_ref=agent,
                     ):
                         if event.event == "complete" and isinstance(event.data, dict):
-                            accumulated_response = event.data.get("result", "") or event.data.get("response", "")
+                            accumulated_response = event.data.get(
+                                "result", ""
+                            ) or event.data.get("response", "")
                         elif event.event == "error":
                             error_msg = (
                                 event.data.get("message", str(event.data))

@@ -79,7 +79,7 @@ class SessionClient:
     def _build_turn_body(
         self,
         prompt: str,
-        workspace_content: str | None,
+        workspace_content: dict[str, str] | None,
         provider_name: str | None,
         services: list[dict[str, Any]] | None,
         agent_ref: str | None = None,
@@ -113,7 +113,7 @@ class SessionClient:
         self,
         session_id: str,
         prompt: str,
-        workspace_content: str | None = None,
+        workspace_content: dict[str, str] | None = None,
         provider_name: str | None = None,
         services: list[dict[str, Any]] | None = None,
         agent_ref: str | None = None,
@@ -123,7 +123,9 @@ class SessionClient:
         POST /sessions/{session_id}/turn
         """
         http = self._get_http()
-        body = self._build_turn_body(prompt, workspace_content, provider_name, services, agent_ref)
+        body = self._build_turn_body(
+            prompt, workspace_content, provider_name, services, agent_ref
+        )
         response = await http.post(
             f"/sessions/{session_id}/turn",
             json=body,
@@ -135,7 +137,7 @@ class SessionClient:
         self,
         session_id: str,
         prompt: str,
-        workspace_content: str | None = None,
+        workspace_content: dict[str, str] | None = None,
         provider_name: str | None = None,
         services: list[dict[str, Any]] | None = None,
         agent_ref: str | None = None,
@@ -146,7 +148,9 @@ class SessionClient:
         Uses buffer-based SSE parsing, splitting on double newlines.
         """
         http = self._get_http()
-        body = self._build_turn_body(prompt, workspace_content, provider_name, services, agent_ref)
+        body = self._build_turn_body(
+            prompt, workspace_content, provider_name, services, agent_ref
+        )
 
         async with http.stream(
             "POST",

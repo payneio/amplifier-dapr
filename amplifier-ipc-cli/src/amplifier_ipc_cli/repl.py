@@ -180,7 +180,7 @@ async def interactive_repl(
     client: SessionClient,
     session_id: str,
     provider_name: str | None,
-    workspace_content: str | None,
+    workspace_content: dict[str, str] | None,
     console: Console,
     history_path: str | None = None,
     agent_ref: str | None = None,
