@@ -247,11 +247,15 @@ def create_session_app(dapr_url: str | None = None) -> FastAPI:
                 transcript: list[Message] = await load_transcript(session_id, _dapr_url)
                 transcript.append(Message(role="user", content=request.prompt))
 
-                # Build the payload for the orchestrator streaming endpoint
-                stream_url = (
-                    f"{_dapr_url}/v1.0/invoke/svc-orchestrator"
-                    "/method/orchestrator/execute/stream"
+                # Build the payload for the orchestrator streaming endpoint.
+                # NOTE: We call the orchestrator DIRECTLY (not through Dapr)
+                # because Dapr service invocation buffers the entire response
+                # before returning it, which defeats SSE streaming.
+                # In Docker Compose, services reach each other by container name.
+                orch_direct_url = os.environ.get(
+                    "ORCHESTRATOR_DIRECT_URL", "http://svc-orchestrator:8000"
                 )
+                stream_url = f"{orch_direct_url}/orchestrator/execute/stream"
                 payload: dict[str, Any] = {
                     "system_prompt": system_prompt,
                     "messages": [m.model_dump() for m in transcript],
