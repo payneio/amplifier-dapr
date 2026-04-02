@@ -6,6 +6,7 @@ import os
 from typing import Any
 
 from fastapi import FastAPI
+from sse_starlette.sse import EventSourceResponse
 
 from amplifier_service_sdk.models import Message, RoutingTable, ToolCapability
 from amplifier_service_sdk.service import ServiceConfig, create_app
@@ -96,6 +97,37 @@ def create_orchestrator_app(dapr_url: str | None = None) -> FastAPI:
             session_id=request.session_id,
         )
         return ExecuteResponse(result=result, messages=messages).model_dump()
+
+    @app.post("/orchestrator/execute/stream")
+    async def execute_stream(request: ExecuteRequest) -> EventSourceResponse:
+        """Execute an orchestration session, streaming SSE events as they happen.
+
+        Streams the following event types to the caller:
+        - ``stream.thinking`` -- thinking block content (if provider supports it)
+        - ``stream.token`` -- assistant text after each provider call
+        - ``stream.tool_call_start`` -- tool name, emitted before tool dispatch
+        - ``stream.tool_call`` -- tool name + arguments, emitted before dispatch
+        - ``stream.tool_result`` -- tool name, success flag, truncated output
+        - ``stream.complete`` -- final result + full message list when done
+        - ``stream.error`` -- error message if an exception occurs
+        """
+        orch = Orchestrator(dapr=dapr)
+
+        async def generator():  # type: ignore[return]
+            async for event in orch.execute_stream(
+                system_prompt=request.system_prompt,
+                messages=request.messages,
+                config=request.config,
+                routing_table=request.routing_table,
+                session_id=request.session_id,
+            ):
+                # Strip the "stream." prefix so the SSE event type matches
+                # what sse-starlette / CLI consumers expect (e.g. "token",
+                # "tool_call", "complete").
+                event_name = event["event"].replace("stream.", "")
+                yield {"event": event_name, "data": event["data"]}
+
+        return EventSourceResponse(generator())
 
     @app.post("/orchestrator/delegate")
     async def delegate(request: DelegateRequest) -> dict[str, Any]:

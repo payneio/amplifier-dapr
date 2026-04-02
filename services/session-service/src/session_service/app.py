@@ -194,7 +194,15 @@ def create_session_app(dapr_url: str | None = None) -> FastAPI:
 
     @app.post("/sessions/{session_id}/turn/stream")
     async def turn_stream(session_id: str, request: TurnRequest) -> EventSourceResponse:
-        """Execute a conversation turn and stream results as SSE events."""
+        """Execute a conversation turn and stream results as SSE events.
+
+        Relays SSE events from the orchestrator's streaming endpoint directly to
+        the CLI as they arrive.  The session-service acts as a transparent SSE
+        relay — it opens a streaming HTTP connection to
+        ``/orchestrator/execute/stream``, parses each event, and forwards it
+        immediately.  No buffering occurs until the final ``complete`` event,
+        at which point the transcript is saved before the event is forwarded.
+        """
 
         async def event_generator() -> AsyncGenerator[dict[str, Any], None]:
             try:
@@ -206,7 +214,9 @@ def create_session_app(dapr_url: str | None = None) -> FastAPI:
                 agent_config = resolve_agent(request.agent_ref)
 
                 # Discover services — caller-supplied list takes priority over agent default
-                service_ids = request.services if request.services else agent_config["services"]
+                service_ids = (
+                    request.services if request.services else agent_config["services"]
+                )
                 routing_table_dict: dict[str, Any] = await discover_services(
                     service_ids, _dapr_url
                 )
@@ -233,52 +243,106 @@ def create_session_app(dapr_url: str | None = None) -> FastAPI:
                     dapr_url=_dapr_url,
                 )
 
-                # Load existing transcript
+                # Load existing transcript and append the new user message
                 transcript: list[Message] = await load_transcript(session_id, _dapr_url)
-
-                # Add user message to transcript
                 transcript.append(Message(role="user", content=request.prompt))
 
-                # Invoke orchestrator via Dapr service invocation
-                invoke_url = f"{_dapr_url}/v1.0/invoke/svc-orchestrator/method/orchestrator/execute"
-                payload = {
+                # Build the payload for the orchestrator streaming endpoint
+                stream_url = (
+                    f"{_dapr_url}/v1.0/invoke/svc-orchestrator"
+                    "/method/orchestrator/execute/stream"
+                )
+                payload: dict[str, Any] = {
                     "system_prompt": system_prompt,
                     "messages": [m.model_dump() for m in transcript],
-                    "config": {"provider": provider_name, "tools": routing_table_dict.get("_tool_specs", [])},
+                    "config": {
+                        "provider": provider_name,
+                        "tools": routing_table_dict.get("_tool_specs", []),
+                    },
                     "routing_table": routing_table_dict,
                     "session_id": session_id,
                 }
-                async with httpx.AsyncClient() as client:
-                    response = await client.post(
-                        invoke_url, json=payload, timeout=120.0
-                    )
-                    response.raise_for_status()
-                    orch_result: dict[str, Any] = response.json()
 
-                result_text: str = orch_result.get("result", "")
-                result_messages: list[dict[str, Any]] = orch_result.get("messages", [])
-                messages = [Message(**m) for m in result_messages]
+                # ---------------------------------------------------------------
+                # Open a streaming HTTP connection to the orchestrator and relay
+                # SSE events to the CLI as they arrive.
+                # ---------------------------------------------------------------
+                async with httpx.AsyncClient() as http_client:
+                    async with http_client.stream(
+                        "POST", stream_url, json=payload, timeout=300.0
+                    ) as response:
+                        response.raise_for_status()
 
-                # Save transcript
-                await save_transcript(session_id, messages, _dapr_url)
+                        # SSE state machine: accumulate event / data per SSE block
+                        current_event: str | None = None
+                        current_data: str | None = None
 
-                # Store routing table for later metadata queries
-                _sessions[session_id]["routing_table"] = routing_table_dict
+                        async for line in response.aiter_lines():
+                            if line.startswith("event:"):
+                                current_event = line[6:].strip()
+                            elif line.startswith("data:"):
+                                current_data = line[5:].strip()
+                            elif line == "":
+                                # Blank line marks the end of an SSE event block
+                                if (
+                                    current_event is not None
+                                    and current_data is not None
+                                ):
+                                    if current_event == "complete":
+                                        # On complete: persist transcript, enrich
+                                        # the event with session_id, then forward.
+                                        try:
+                                            orch_complete = json.loads(current_data)
+                                        except json.JSONDecodeError:
+                                            orch_complete = {}
 
-                # Increment turn count
-                _sessions[session_id]["turn_count"] += 1
+                                        result_text: str = orch_complete.get(
+                                            "result", ""
+                                        )
+                                        raw_msgs: list[dict[str, Any]] = (
+                                            orch_complete.get("messages", [])
+                                        )
+                                        final_messages = [
+                                            Message(**m) for m in raw_msgs
+                                        ]
 
-                # Emit complete event
-                yield {
-                    "event": StreamEventType.complete.value,
-                    "data": json.dumps(
-                        {
-                            "session_id": session_id,
-                            "result": result_text,
-                            "messages": [m.model_dump() for m in messages],
-                        }
-                    ),
-                }
+                                        # Save transcript
+                                        await save_transcript(
+                                            session_id, final_messages, _dapr_url
+                                        )
+
+                                        # Update session state
+                                        _sessions[session_id][
+                                            "routing_table"
+                                        ] = routing_table_dict
+                                        _sessions[session_id]["turn_count"] += 1
+
+                                        yield {
+                                            "event": StreamEventType.complete.value,
+                                            "data": json.dumps(
+                                                {
+                                                    "session_id": session_id,
+                                                    "result": result_text,
+                                                    "messages": [
+                                                        m.model_dump()
+                                                        for m in final_messages
+                                                    ],
+                                                }
+                                            ),
+                                        }
+                                    else:
+                                        # All other events (token, thinking,
+                                        # tool_call_start, tool_call, tool_result,
+                                        # error) are forwarded verbatim.
+                                        yield {
+                                            "event": current_event,
+                                            "data": current_data,
+                                        }
+
+                                # Reset for next event block
+                                current_event = None
+                                current_data = None
+
             except Exception as exc:  # noqa: BLE001
                 yield {
                     "event": StreamEventType.error.value,

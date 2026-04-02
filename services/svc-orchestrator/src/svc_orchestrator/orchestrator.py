@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from collections.abc import AsyncGenerator
 from typing import Any
 
 from amplifier_service_sdk.models import (
@@ -183,6 +184,225 @@ class Orchestrator:
         )
 
         return result_text, final_messages
+
+    async def execute_stream(
+        self,
+        system_prompt: str,
+        messages: list[Message],
+        config: dict[str, Any],
+        routing_table: RoutingTable,
+        session_id: str = "",
+    ) -> AsyncGenerator[dict[str, Any], None]:
+        """Execute an orchestration session, yielding SSE events as they happen.
+
+        This is the streaming counterpart to :meth:`execute`.  Events are yielded
+        as dicts with ``event`` and ``data`` keys compatible with sse-starlette's
+        ``EventSourceResponse``.
+
+        Event types yielded (``event`` key values):
+        - ``stream.thinking`` -- thinking block content, if any
+        - ``stream.token`` -- assistant text after each provider call
+        - ``stream.tool_call_start`` -- tool name, emitted before dispatch
+        - ``stream.tool_call`` -- tool name + arguments, emitted before dispatch
+        - ``stream.tool_result`` -- tool name, success flag, truncated output
+        - ``stream.complete`` -- final result text + full message list
+        - ``stream.error`` -- error message if an exception occurs
+
+        Args:
+            system_prompt: System prompt for the session.
+            messages: Conversation history as a list of Message objects.
+            config: Arbitrary configuration dict (same keys as :meth:`execute`).
+            routing_table: Routing configuration mapping tools/providers/hooks.
+            session_id: Optional session identifier.
+
+        Yields:
+            Dicts with ``event`` (str) and ``data`` (JSON string) keys.
+        """
+        # Use a nested async generator so we can cleanly wrap the whole thing
+        # in a try/except that yields a stream.error event on failure.
+        async def _inner() -> AsyncGenerator[dict[str, Any], None]:
+            # ------------------------------------------------------------------
+            # Extract config (mirrors execute())
+            # ------------------------------------------------------------------
+            max_iterations: int = config.get("max_iterations", -1)
+            provider_name: str = config.get("provider", "mock")
+            tools_config: list[Any] = config.get("tools", [])
+
+            context_app_id = routing_table.context
+            provider_app_id = routing_table.providers.get(provider_name, provider_name)
+
+            # Seed context with initial messages
+            for msg in messages:
+                await self._context_add_message(context_app_id, msg.model_dump())
+
+            await self._hooks.dispatch_post(
+                "session:start", {"session_id": session_id}
+            )
+
+            # Build ToolCapability list
+            tools: list[ToolCapability] | None = None
+            if tools_config:
+                tools = []
+                for t in tools_config:
+                    if isinstance(t, ToolCapability):
+                        tools.append(t)
+                    elif isinstance(t, dict):
+                        tools.append(ToolCapability(**t))
+
+            # ------------------------------------------------------------------
+            # Main agent loop
+            # ------------------------------------------------------------------
+            result_text = ""
+            iteration = 0
+
+            while True:
+                if max_iterations >= 0 and iteration >= max_iterations:
+                    break
+
+                context_msgs = await self._context_get_messages(context_app_id)
+                chat_messages = [
+                    Message(**m)
+                    for m in context_msgs
+                    if m.get("role") != "system"
+                ]
+
+                pre_result = await self._hooks.dispatch_pre(
+                    "provider:request",
+                    {"session_id": session_id, "iteration": iteration},
+                    routing_table,
+                )
+                effective_system = system_prompt
+                if pre_result.action == "INJECT_CONTEXT":
+                    injection = (pre_result.data or {}).get("context_injection", "")
+                    if injection:
+                        effective_system = f"{injection}\n\n{system_prompt}"
+
+                chat_request = ChatRequest(
+                    messages=chat_messages,
+                    tools=tools,
+                    system=effective_system,
+                )
+                response_data = await self._call_provider(
+                    provider_app_id, provider_name, chat_request.model_dump()
+                )
+                chat_response = ChatResponse(**response_data)
+                result_text = self._extract_text(chat_response.content)
+
+                # Emit thinking blocks (if any)
+                if isinstance(chat_response.content, list):
+                    for block in chat_response.content:
+                        if isinstance(block, dict) and block.get("type") == "thinking":
+                            thinking_text = block.get("thinking", "")
+                            if thinking_text:
+                                yield {
+                                    "event": "stream.thinking",
+                                    "data": json.dumps({"thinking": thinking_text}),
+                                }
+
+                # Emit token event with assistant text
+                yield {
+                    "event": "stream.token",
+                    "data": json.dumps({"text": result_text}),
+                }
+
+                # Persist assistant message
+                assistant_msg = Message(
+                    role="assistant",
+                    content=chat_response.content,
+                    tool_calls=chat_response.tool_calls,
+                )
+                await self._context_add_message(
+                    context_app_id, assistant_msg.model_dump()
+                )
+
+                iteration += 1
+
+                # No tool calls → done
+                if not chat_response.tool_calls:
+                    break
+
+                # Guard against max_iterations before dispatching tools
+                if max_iterations >= 0 and iteration >= max_iterations:
+                    break
+
+                # Emit tool_call_start / tool_call events BEFORE dispatch so the
+                # client sees them immediately while tools are executing.
+                for tc in chat_response.tool_calls:
+                    yield {
+                        "event": "stream.tool_call_start",
+                        "data": json.dumps({"tool_name": tc.name}),
+                    }
+                    yield {
+                        "event": "stream.tool_call",
+                        "data": json.dumps(
+                            {
+                                "tool_name": tc.name,
+                                "arguments": tc.arguments,
+                            }
+                        ),
+                    }
+
+                # Dispatch all tool calls in parallel (same semantics as execute())
+                tool_result_msgs = await self._dispatch_tools(
+                    chat_response.tool_calls, routing_table, session_id
+                )
+
+                # Emit tool_result events after all tools complete
+                for tc, msg in zip(
+                    chat_response.tool_calls, tool_result_msgs, strict=False
+                ):
+                    raw_output = (
+                        msg.content
+                        if isinstance(msg.content, str)
+                        else json.dumps(msg.content)
+                    )
+                    truncated = raw_output[:2000] if raw_output else ""
+                    yield {
+                        "event": "stream.tool_result",
+                        "data": json.dumps(
+                            {
+                                "tool_name": tc.name,
+                                "success": True,
+                                "output": truncated,
+                            }
+                        ),
+                    }
+
+                # Persist tool results into context
+                for tool_msg in tool_result_msgs:
+                    await self._context_add_message(
+                        context_app_id, tool_msg.model_dump()
+                    )
+
+            # ------------------------------------------------------------------
+            # Finalise — emit complete with result + full message list
+            # ------------------------------------------------------------------
+            final_msgs = await self._context_get_messages(context_app_id)
+            final_messages = [Message(**m) for m in final_msgs]
+
+            await self._hooks.dispatch_post(
+                "session:end", {"session_id": session_id, "result": result_text}
+            )
+
+            yield {
+                "event": "stream.complete",
+                "data": json.dumps(
+                    {
+                        "result": result_text,
+                        "messages": [m.model_dump() for m in final_messages],
+                    }
+                ),
+            }
+
+        # Wrap _inner so any unhandled exception becomes a stream.error event
+        try:
+            async for event in _inner():
+                yield event
+        except Exception as exc:  # noqa: BLE001
+            yield {
+                "event": "stream.error",
+                "data": json.dumps({"error": str(exc)}),
+            }
 
     # ------------------------------------------------------------------
     # Context helpers
