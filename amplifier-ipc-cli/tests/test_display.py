@@ -112,7 +112,7 @@ class TestStreamingDisplay:
         assert "value11" not in output
 
     def test_handle_tool_result_success(self) -> None:
-        """_handle_tool_result prints green checkmark symbol for successful result."""
+        """_handle_tool_result prints green ✅ emoji for successful result."""
         console, buf = make_console()
         display = StreamingDisplay(console)
         event = SSEEvent(
@@ -121,11 +121,11 @@ class TestStreamingDisplay:
         )
         display.handle_sse_event(event)
         output = buf.getvalue()
-        assert "✓" in output
+        assert "\u2705" in output  # ✅ green checkmark emoji
         assert "hello from bash" in output
 
     def test_handle_tool_result_failure(self) -> None:
-        """_handle_tool_result prints red X symbol for failed result."""
+        """_handle_tool_result prints red ❌ emoji for failed result."""
         console, buf = make_console()
         display = StreamingDisplay(console)
         event = SSEEvent(
@@ -138,7 +138,7 @@ class TestStreamingDisplay:
         )
         display.handle_sse_event(event)
         output = buf.getvalue()
-        assert "✗" in output
+        assert "\u274c" in output  # ❌ red cross emoji
         assert "error: command not found" in output
 
     def test_handle_tool_result_truncates_output(self) -> None:
