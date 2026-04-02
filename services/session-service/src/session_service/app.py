@@ -370,19 +370,47 @@ def create_session_app(dapr_url: str | None = None) -> FastAPI:
 
     @app.get("/sessions/{session_id}/tools")
     async def session_tools(session_id: str) -> dict[str, Any]:
-        """Return tools available to a session from its routing table."""
+        """Return tools available to a session from its routing table.
+
+        If the session has no cached routing table yet (e.g. before the first
+        turn has been sent), runs service discovery against the default service
+        list on demand and caches the result so subsequent calls are fast.
+        """
         session = _sessions.get(session_id)
-        if session is None:
-            return {"tools": []}
-        routing_table = session.get("routing_table")
+        routing_table: dict[str, Any] | None = session.get("routing_table") if session else None
         if routing_table is None:
-            return {"tools": []}
+            routing_table = await discover_services(DEFAULT_SERVICES, _dapr_url)
+            # Cache for later: create the session entry if it doesn't exist yet.
+            if session_id not in _sessions:
+                _sessions[session_id] = {"turn_count": 0, "status": "active"}
+            _sessions[session_id]["routing_table"] = routing_table
         return {"tools": routing_table.get("_tool_specs", [])}
 
     @app.get("/sessions/{session_id}/modes")
     async def session_modes(session_id: str) -> dict[str, Any]:
-        """Return modes available to a session (placeholder for future integration)."""
-        return {"modes": []}
+        """Return modes available from svc-modes via Dapr service invocation.
+
+        Calls the svc-modes ``mode`` tool with operation ``list``, which
+        discovers mode definitions from ``.amplifier/modes/`` directories and
+        returns their name and description.  Falls back to an empty list if
+        svc-modes is unreachable.
+        """
+        try:
+            invoke_url = (
+                f"{_dapr_url}/v1.0/invoke/svc-modes/method/tools/mode/execute"
+            )
+            async with httpx.AsyncClient() as http_client:
+                response = await http_client.post(
+                    invoke_url,
+                    json={"input": {"operation": "list"}},
+                    timeout=10.0,
+                )
+                response.raise_for_status()
+                result: dict[str, Any] = response.json()
+            modes: list[dict[str, Any]] = result.get("output", {}).get("modes", [])
+            return {"modes": modes}
+        except Exception:  # noqa: BLE001
+            return {"modes": []}
 
     @app.post("/sessions/{session_id}/clear")
     async def session_clear(session_id: str) -> dict[str, Any]:
