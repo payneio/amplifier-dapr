@@ -23,6 +23,13 @@ class ModeCapability(BaseModel):
     description: str = ""
 
 
+class AgentCapability(BaseModel):
+    """Describes an agent advertised by a service."""
+
+    name: str
+    description: str = ""
+
+
 class ToolRequest(BaseModel):
     """A request to invoke a tool."""
 
@@ -81,6 +88,7 @@ class DescribeResponse(BaseModel):
     providers: list[dict[str, Any]] = Field(default_factory=list)
     content_paths: list[str] = Field(default_factory=list)
     modes: list[ModeCapability] = Field(default_factory=list)
+    agents: list[AgentCapability] = Field(default_factory=list)
 
 
 class HealthResponse(BaseModel):

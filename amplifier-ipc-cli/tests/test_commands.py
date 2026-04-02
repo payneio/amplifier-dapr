@@ -68,6 +68,12 @@ class TestDispatchSlash:
                 {"name": "brainstorm", "description": "Brainstorm mode"},
             ]
         )
+        client.get_agents = AsyncMock(
+            return_value=[
+                {"name": "zen-architect", "description": "Designs module specs"},
+                {"name": "modular-builder", "description": "Builds modules"},
+            ]
+        )
         return client
 
     async def test_exit(self) -> None:
@@ -185,3 +191,23 @@ class TestDispatchSlash:
         result = await dispatch_slash("/mode brainstorm off", client, "sess-1", console)
         assert isinstance(result, SlashResult)
         assert result.new_mode is None
+
+    async def test_agents(self) -> None:
+        """/agents calls client.get_agents and renders a Table."""
+        console = self._make_console()
+        client = self._make_client()
+        result = await dispatch_slash("/agents", client, "sess-1", console)
+        assert isinstance(result, SlashResult)
+        assert result.should_exit is False
+        client.get_agents.assert_awaited_once_with("sess-1")
+        console.print.assert_called()
+
+    async def test_agents_exception_handled(self) -> None:
+        """/agents catches exceptions and prints a yellow warning."""
+        console = self._make_console()
+        client = self._make_client()
+        client.get_agents = AsyncMock(side_effect=Exception("Connection failed"))
+        result = await dispatch_slash("/agents", client, "sess-1", console)
+        assert isinstance(result, SlashResult)
+        assert result.should_exit is False
+        console.print.assert_called()

@@ -200,6 +200,18 @@ class SessionClient:
         response.raise_for_status()
         return response.json().get("modes", [])
 
+    async def get_agents(self, session_id: str) -> list[dict[str, Any]]:
+        """Get the list of available agents for a session.
+
+        GET /sessions/{session_id}/agents
+        """
+        http = self._get_http()
+        response = await http.get(
+            f"/sessions/{session_id}/agents", timeout=_METADATA_TIMEOUT
+        )
+        response.raise_for_status()
+        return response.json().get("agents", [])
+
     async def clear_session(self, session_id: str) -> bool:
         """Reset session state to initial values.
 

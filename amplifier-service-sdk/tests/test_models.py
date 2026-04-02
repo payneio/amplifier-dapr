@@ -3,6 +3,7 @@
 import json
 
 from amplifier_service_sdk import (
+    AgentCapability,
     ContentFile,
     DescribeResponse,
     HealthResponse,
@@ -93,6 +94,25 @@ class TestModeCapability:
         assert recovered.description == original.description
 
 
+class TestAgentCapability:
+    def test_fields(self):
+        agent = AgentCapability(name="zen-architect", description="Designs module specs")
+        assert agent.name == "zen-architect"
+        assert agent.description == "Designs module specs"
+
+    def test_description_defaults_to_empty(self):
+        agent = AgentCapability(name="explorer")
+        assert agent.name == "explorer"
+        assert agent.description == ""
+
+    def test_json_roundtrip(self):
+        original = AgentCapability(name="bug-hunter", description="Hunts bugs")
+        dumped = json.loads(original.model_dump_json())
+        recovered = AgentCapability.model_validate(dumped)
+        assert recovered.name == original.name
+        assert recovered.description == original.description
+
+
 class TestDescribeResponse:
     def test_minimal(self):
         resp = DescribeResponse(name="my-service")
@@ -103,6 +123,7 @@ class TestDescribeResponse:
         assert resp.providers == []
         assert resp.content_paths == []
         assert resp.modes == []
+        assert resp.agents == []
 
     def test_with_tools(self):
         tool = ToolCapability(name="do_thing", description="Does the thing")
@@ -129,6 +150,26 @@ class TestDescribeResponse:
         assert len(recovered.modes) == 1
         assert recovered.modes[0].name == "strict"
         assert recovered.modes[0].description == "Strict mode"
+
+    def test_with_agents(self):
+        agents = [
+            AgentCapability(name="zen-architect", description="Designs module specs"),
+            AgentCapability(name="modular-builder", description="Builds modules"),
+        ]
+        resp = DescribeResponse(name="svc-content-core", agents=agents)
+        assert len(resp.agents) == 2
+        assert resp.agents[0].name == "zen-architect"
+        assert resp.agents[1].name == "modular-builder"
+
+    def test_json_roundtrip_with_agents(self):
+        agents = [AgentCapability(name="explorer", description="Explores codebases")]
+        original = DescribeResponse(name="svc", version="1.2.3", agents=agents)
+        dumped = json.loads(original.model_dump_json())
+        recovered = DescribeResponse.model_validate(dumped)
+        assert recovered.name == "svc"
+        assert len(recovered.agents) == 1
+        assert recovered.agents[0].name == "explorer"
+        assert recovered.agents[0].description == "Explores codebases"
 
     def test_json_roundtrip(self):
         tool = ToolCapability(name="search", description="Search")

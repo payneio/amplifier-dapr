@@ -46,6 +46,7 @@ def build_routing_table(
         - 'hooks': {event: [app_id, ...]}
         - '_tool_specs': list of raw tool spec dicts
         - '_modes': list of raw mode spec dicts
+        - '_agents': list of raw agent spec dicts
         - 'context': context_app_id
     """
     tools: dict[str, str] = {}
@@ -55,6 +56,7 @@ def build_routing_table(
     hook_priorities: dict[str, int] = {}
     tool_specs: list[dict[str, Any]] = []
     modes: list[dict[str, Any]] = []
+    agents: list[dict[str, Any]] = []
 
     for app_id, describe in describe_results.items():
         # Map tools: tool_name -> app_id
@@ -67,6 +69,10 @@ def build_routing_table(
         # Collect modes advertised by this service
         for mode in describe.get("modes", []):
             modes.append(mode)
+
+        # Collect agents advertised by this service
+        for agent in describe.get("agents", []):
+            agents.append(agent)
 
         # Map providers: provider_name -> app_id
         for provider in describe.get("providers", []):
@@ -111,6 +117,7 @@ def build_routing_table(
         "hook_priorities": hook_priorities,
         "_tool_specs": tool_specs,
         "_modes": modes,
+        "_agents": agents,
         "_content_services": content_services,
         "context": context_app_id,
     }

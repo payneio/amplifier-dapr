@@ -1,3 +1,12 @@
 name: svc-content-core
 version: '0.1.0'
 content_dir: content
+agents:
+  - name: zen-architect
+    description: Translates requirements into precise module specifications and architectural designs
+  - name: modular-builder
+    description: Builds self-contained modules from specifications following the bricks-and-studs philosophy
+  - name: foundation-expert
+    description: Deep expert on the Amplifier foundation, kernel, and core context files
+  - name: core-expert
+    description: Expert on Amplifier core systems, architecture, and implementation patterns

@@ -406,6 +406,26 @@ def create_session_app(dapr_url: str | None = None) -> FastAPI:
             _sessions[session_id]["routing_table"] = routing_table
         return {"modes": routing_table.get("_modes", [])}
 
+    @app.get("/sessions/{session_id}/agents")
+    async def session_agents(session_id: str) -> dict[str, Any]:
+        """Return agents available to a session from its routing table.
+
+        If the session has no cached routing table yet (e.g. before the first
+        turn has been sent), runs service discovery against the default service
+        list on demand and caches the result so subsequent calls are fast.
+        Agents are collected from each service's /describe response during
+        discovery, flowing through the same pipeline as tools and modes.
+        """
+        session = _sessions.get(session_id)
+        routing_table: dict[str, Any] | None = session.get("routing_table") if session else None
+        if routing_table is None:
+            routing_table = await discover_services(DEFAULT_SERVICES, _dapr_url)
+            # Cache for later: create the session entry if it doesn't exist yet.
+            if session_id not in _sessions:
+                _sessions[session_id] = {"turn_count": 0, "status": "active"}
+            _sessions[session_id]["routing_table"] = routing_table
+        return {"agents": routing_table.get("_agents", [])}
+
     @app.post("/sessions/{session_id}/clear")
     async def session_clear(session_id: str) -> dict[str, Any]:
         """Reset session state to initial values."""

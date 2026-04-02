@@ -253,3 +253,43 @@ class TestSessionClientMetadataMethods:
             result = await client.clear_session(session_id)
 
         assert result is True
+
+    async def test_get_agents_returns_list(self) -> None:
+        """get_agents() performs GET /sessions/{id}/agents and returns the agents list."""
+        session_id = "test-session-agents"
+        agents_list = [
+            {"name": "zen-architect", "description": "Designs module specs"},
+            {"name": "modular-builder", "description": "Builds modules"},
+        ]
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            assert request.method == "GET"
+            assert request.url.path == f"/sessions/{session_id}/agents"
+            return httpx.Response(200, json={"agents": agents_list})
+
+        transport = httpx.MockTransport(handler)
+        async with httpx.AsyncClient(
+            base_url="http://localhost:8090", transport=transport
+        ) as http:
+            client = SessionClient()
+            client._http = http
+            result = await client.get_agents(session_id)
+
+        assert result == agents_list
+
+    async def test_get_agents_returns_empty_list(self) -> None:
+        """get_agents() returns an empty list when server returns {agents: []}."""
+        session_id = "test-session-no-agents"
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, json={"agents": []})
+
+        transport = httpx.MockTransport(handler)
+        async with httpx.AsyncClient(
+            base_url="http://localhost:8090", transport=transport
+        ) as http:
+            client = SessionClient()
+            client._http = http
+            result = await client.get_agents(session_id)
+
+        assert result == []

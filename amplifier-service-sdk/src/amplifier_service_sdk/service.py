@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 
 from amplifier_service_sdk.content import ContentManager
 from amplifier_service_sdk.models import (
+    AgentCapability,
     DescribeResponse,
     HealthResponse,
     HookRegistration,
@@ -29,6 +30,7 @@ class ServiceConfig(BaseModel):
     content_paths: list[str] = Field(default_factory=list)
     content_dir: str | None = None
     modes: list[ModeCapability] = Field(default_factory=list)
+    agents: list[AgentCapability] = Field(default_factory=list)
 
 
 def create_app(config: ServiceConfig) -> FastAPI:
@@ -76,6 +78,7 @@ def create_app(config: ServiceConfig) -> FastAPI:
             providers=config.providers,
             content_paths=content_paths,
             modes=config.modes,
+            agents=config.agents,
         )
         return response.model_dump()
 

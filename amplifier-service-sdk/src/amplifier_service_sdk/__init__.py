@@ -1,6 +1,7 @@
 """Amplifier Service SDK — Python package for building Amplifier-compatible microservices."""
 
 from amplifier_service_sdk.models import (
+    AgentCapability,
     ChatRequest,
     ChatResponse,
     ContentFile,
@@ -23,6 +24,7 @@ from amplifier_service_sdk.models import (
 )
 
 __all__ = [
+    "AgentCapability",
     "ChatRequest",
     "ChatResponse",
     "ContentFile",

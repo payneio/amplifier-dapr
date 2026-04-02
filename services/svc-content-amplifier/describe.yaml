@@ -1,3 +1,12 @@
 name: svc-content-amplifier
 version: '0.1.0'
 content_dir: content
+agents:
+  - name: amplifier-expert
+    description: Expert on Amplifier system capabilities, services, and integration patterns
+  - name: ecosystem-expert
+    description: Expert on the broader Amplifier ecosystem, tooling, and deployment workflows
+  - name: session-analyst
+    description: Analyzes session history, turn patterns, and conversation quality
+  - name: integration-specialist
+    description: Specializes in wiring services together and end-to-end integration

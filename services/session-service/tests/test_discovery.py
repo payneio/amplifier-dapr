@@ -21,6 +21,7 @@ def _make_describe(
     providers: list[dict] | None = None,
     hooks: list[dict] | None = None,
     modes: list[dict] | None = None,
+    agents: list[dict] | None = None,
 ) -> dict:
     """Build a minimal describe response dict."""
     return {
@@ -31,6 +32,7 @@ def _make_describe(
         "hooks": hooks or [],
         "content_paths": [],
         "modes": modes or [],
+        "agents": agents or [],
     }
 
 
@@ -221,3 +223,45 @@ class TestDiscoverServices:
 
         # Routing table contains tools from both
         assert "fake_tool" in routing["tools"]
+
+    def test_collects_agents(self) -> None:
+        """Agent specs from describe responses are collected in _agents."""
+        describe_results = {
+            "svc-content-core": _make_describe(
+                agents=[
+                    {"name": "zen-architect", "description": "Designs module specs"},
+                    {"name": "modular-builder", "description": "Builds modules"},
+                ]
+            )
+        }
+        routing = build_routing_table(describe_results, context_app_id="svc-context")
+
+        assert len(routing["_agents"]) == 2
+        assert routing["_agents"][0]["name"] == "zen-architect"
+        assert routing["_agents"][1]["name"] == "modular-builder"
+
+    def test_agents_aggregated_across_services(self) -> None:
+        """Agents from multiple services are all collected into _agents."""
+        describe_results = {
+            "svc-content-core": _make_describe(
+                agents=[{"name": "zen-architect", "description": "Designs module specs"}]
+            ),
+            "svc-content-amplifier": _make_describe(
+                agents=[{"name": "ecosystem-expert", "description": "Ecosystem expertise"}]
+            ),
+        }
+        routing = build_routing_table(describe_results, context_app_id="svc-context")
+
+        agent_names = {a["name"] for a in routing["_agents"]}
+        assert agent_names == {"zen-architect", "ecosystem-expert"}
+
+    def test_agents_empty_when_none_advertised(self) -> None:
+        """_agents is an empty list when no services advertise agents."""
+        describe_results = {
+            "svc-bash": _make_describe(
+                tools=[{"name": "bash", "description": "Run shell", "input_schema": {}}]
+            )
+        }
+        routing = build_routing_table(describe_results, context_app_id="svc-context")
+
+        assert routing["_agents"] == []

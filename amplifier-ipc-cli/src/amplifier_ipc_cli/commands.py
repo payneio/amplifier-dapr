@@ -23,6 +23,7 @@ Available slash commands:
   /modes          List available modes
   /mode NAME on   Activate a mode by name
   /mode NAME off  Deactivate the current mode
+  /agents         List available agents
 """
 
 
@@ -70,6 +71,9 @@ async def dispatch_slash(
 
     if cmd == "/modes":
         return await _handle_modes(client, session_id, console)
+
+    if cmd == "/agents":
+        return await _handle_agents(client, session_id, console)
 
     if cmd == "/mode":
         return _handle_mode(args, console)
@@ -168,6 +172,33 @@ async def _handle_modes(
         console.print(table)
     except Exception as exc:
         console.print(f"[yellow]Could not retrieve modes: {exc}[/yellow]")
+
+    return SlashResult()
+
+
+async def _handle_agents(
+    client: SessionClient,
+    session_id: str,
+    console: Console,
+) -> SlashResult:
+    """Handle the /agents command."""
+    try:
+        agents: list[dict[str, Any]] = await client.get_agents(session_id)
+
+        table = Table(show_header=True, header_style="bold")
+        table.add_column("Name")
+        table.add_column("Description")
+
+        for agent in agents:
+            name = str(agent.get("name", ""))
+            description = str(agent.get("description", ""))
+            if len(description) > 80:
+                description = description[:77] + "..."
+            table.add_row(name, description)
+
+        console.print(table)
+    except Exception as exc:
+        console.print(f"[yellow]Could not retrieve agents: {exc}[/yellow]")
 
     return SlashResult()
 

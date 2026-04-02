@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 from pydantic import BaseModel
 
 from amplifier_service_sdk import ToolCapability
-from amplifier_service_sdk.models import HookRegistration
+from amplifier_service_sdk.models import AgentCapability, HookRegistration, ModeCapability
 from amplifier_service_sdk.service import ServiceConfig, create_app
 
 
@@ -167,3 +167,68 @@ class TestServiceConfigHooks:
         hook_names = [h["name"] for h in data["hooks"]]
         assert "pre-tool" in hook_names
         assert "post-response" in hook_names
+
+
+# ---------------------------------------------------------------------------
+# TestServiceConfigAgents
+# ---------------------------------------------------------------------------
+
+
+class TestServiceConfigAgents:
+    def test_service_config_accepts_agents(self) -> None:
+        """ServiceConfig accepts an agents list of AgentCapability objects."""
+        agents = [
+            AgentCapability(name="zen-architect", description="Designs module specs"),
+            AgentCapability(name="modular-builder", description="Builds modules"),
+        ]
+        config = ServiceConfig(name="svc-content-core", agents=agents)
+        assert len(config.agents) == 2
+        assert config.agents[0].name == "zen-architect"
+        assert isinstance(config.agents[0], AgentCapability)
+
+    def test_service_config_agents_default_empty(self) -> None:
+        """ServiceConfig.agents defaults to an empty list."""
+        config = ServiceConfig(name="my-svc")
+        assert config.agents == []
+
+    def test_describe_endpoint_includes_agents(self) -> None:
+        """GET /describe returns agents list with correct names and descriptions."""
+        agents = [
+            AgentCapability(name="zen-architect", description="Designs module specs"),
+            AgentCapability(name="modular-builder", description="Builds modules"),
+        ]
+        config = ServiceConfig(name="svc-content-core", agents=agents)
+        app = create_app(config)
+        client = TestClient(app)
+        response = client.get("/describe")
+        assert response.status_code == 200
+        data = response.json()
+        assert "agents" in data
+        agent_names = [a["name"] for a in data["agents"]]
+        assert "zen-architect" in agent_names
+        assert "modular-builder" in agent_names
+
+    def test_describe_endpoint_agents_empty_by_default(self) -> None:
+        """GET /describe returns agents=[] when no agents are configured."""
+        config = ServiceConfig(name="svc-no-agents")
+        app = create_app(config)
+        client = TestClient(app)
+        response = client.get("/describe")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["agents"] == []
+
+    def test_describe_endpoint_modes_and_agents_together(self) -> None:
+        """GET /describe returns both modes and agents when both are configured."""
+        modes = [ModeCapability(name="plan", description="Think and discuss")]
+        agents = [AgentCapability(name="zen-architect", description="Designs specs")]
+        config = ServiceConfig(name="svc-full", modes=modes, agents=agents)
+        app = create_app(config)
+        client = TestClient(app)
+        response = client.get("/describe")
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["modes"]) == 1
+        assert data["modes"][0]["name"] == "plan"
+        assert len(data["agents"]) == 1
+        assert data["agents"][0]["name"] == "zen-architect"

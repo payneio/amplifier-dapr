@@ -8,7 +8,12 @@ from typing import Any
 
 import yaml
 
-from amplifier_service_sdk.models import HookRegistration, ToolCapability
+from amplifier_service_sdk.models import (
+    AgentCapability,
+    HookRegistration,
+    ModeCapability,
+    ToolCapability,
+)
 from amplifier_service_sdk.service import ServiceConfig, create_app
 
 
@@ -18,6 +23,8 @@ def load_config_from_yaml(config_path: Path) -> ServiceConfig:
     - Reads YAML with yaml.safe_load
     - Resolves content_dir relative to the YAML file's parent directory
     - Converts the tools list to ToolCapability objects via model_validate
+    - Converts the modes list to ModeCapability objects via model_validate
+    - Converts the agents list to AgentCapability objects via model_validate
     - Returns a fully populated ServiceConfig
     """
     raw: dict[str, Any] = yaml.safe_load(config_path.read_text()) or {}
@@ -36,6 +43,12 @@ def load_config_from_yaml(config_path: Path) -> ServiceConfig:
         HookRegistration.model_validate(h) for h in raw.get("hooks") or []
     ]
     providers: list[dict[str, Any]] = raw.get("providers") or []
+    modes: list[ModeCapability] = [
+        ModeCapability.model_validate(m) for m in raw.get("modes") or []
+    ]
+    agents: list[AgentCapability] = [
+        AgentCapability.model_validate(a) for a in raw.get("agents") or []
+    ]
 
     return ServiceConfig(
         name=name,
@@ -44,6 +57,8 @@ def load_config_from_yaml(config_path: Path) -> ServiceConfig:
         tools=tools,
         hooks=hooks,
         providers=providers,
+        modes=modes,
+        agents=agents,
     )
 
 

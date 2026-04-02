@@ -19,6 +19,7 @@ _EMPTY_ROUTING_TABLE: dict[str, Any] = {
     "hook_priorities": {},
     "_tool_specs": [],
     "_modes": [],
+    "_agents": [],
     "_content_services": {},
     "context": "svc-context",
 }
@@ -36,6 +37,10 @@ _SAMPLE_ROUTING_TABLE: dict[str, Any] = {
     "_modes": [
         {"name": "plan", "description": "Think and discuss"},
         {"name": "review", "description": "Code review mode"},
+    ],
+    "_agents": [
+        {"name": "zen-architect", "description": "Designs module specs"},
+        {"name": "modular-builder", "description": "Builds modules"},
     ],
     "_content_services": {},
     "context": "svc-context",
@@ -238,3 +243,74 @@ def test_clear_session_resets_turn_count(client: TestClient) -> None:
     # Verify session state was reset
     assert _sessions[session_id]["turn_count"] == 0
     assert _sessions[session_id]["status"] == "active"
+
+
+# ---------------------------------------------------------------------------
+# /agents
+# ---------------------------------------------------------------------------
+
+
+def test_get_agents_runs_discovery_when_no_routing_table(client: TestClient) -> None:
+    """/agents runs service discovery when no routing table is cached yet."""
+    with patch(
+        "session_service.app.discover_services",
+        new=AsyncMock(return_value=_EMPTY_ROUTING_TABLE),
+    ) as mock_discover:
+        response = client.get("/sessions/test-session/agents")
+
+    assert response.status_code == 200
+    assert response.json() == {"agents": []}
+    mock_discover.assert_awaited_once()
+
+
+def test_get_agents_returns_agents_from_discovered_routing_table(client: TestClient) -> None:
+    """/agents returns agent specs populated by on-demand discovery."""
+    with patch(
+        "session_service.app.discover_services",
+        new=AsyncMock(return_value=_SAMPLE_ROUTING_TABLE),
+    ):
+        response = client.get("/sessions/test-session/agents")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data["agents"]) == 2
+    names = {a["name"] for a in data["agents"]}
+    assert names == {"zen-architect", "modular-builder"}
+
+
+def test_get_agents_returns_agents_from_cached_routing_table(client: TestClient) -> None:
+    """/agents reads agent specs from the session's stored routing table (no re-discovery)."""
+    session_id = "cached-agents-session"
+    _sessions[session_id] = {
+        "turn_count": 1,
+        "status": "active",
+        "routing_table": _SAMPLE_ROUTING_TABLE,
+    }
+
+    with patch(
+        "session_service.app.discover_services",
+        new=AsyncMock(return_value=_EMPTY_ROUTING_TABLE),
+    ) as mock_discover:
+        response = client.get(f"/sessions/{session_id}/agents")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data["agents"]) == 2
+    # Discovery should NOT have been called because we had a cached table.
+    mock_discover.assert_not_awaited()
+
+
+def test_get_agents_caches_routing_table_for_subsequent_calls(client: TestClient) -> None:
+    """/agents stores the discovered routing table so repeat calls skip re-discovery."""
+    session_id = "new-agents-session"
+
+    with patch(
+        "session_service.app.discover_services",
+        new=AsyncMock(return_value=_SAMPLE_ROUTING_TABLE),
+    ) as mock_discover:
+        # First call — triggers discovery
+        client.get(f"/sessions/{session_id}/agents")
+        # Second call — should use cached routing table
+        client.get(f"/sessions/{session_id}/agents")
+
+    assert mock_discover.await_count == 1, "Discovery should only run once; second call uses cache"
