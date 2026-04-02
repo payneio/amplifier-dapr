@@ -1,0 +1,78 @@
+agent:
+  ref: default
+  description: Development agent with mock provider for testing
+
+  orchestrator:
+    build: ./services/svc-orchestrator
+
+  context_manager:
+    build: ./services/svc-context
+
+  providers:
+    build: ./services/svc-mock-provider
+
+  behaviors:
+    machine:
+      build: ./services/svc-machine
+      volumes:
+        - "${WORKSPACE_PATH:-.}:/workspace"
+
+    bash:
+      build: ./services/svc-bash
+
+    filesystem:
+      build: ./services/svc-filesystem
+
+    search:
+      build: ./services/svc-search
+
+    web:
+      build: ./services/svc-web
+
+    skills:
+      build: ./services/svc-skills
+
+    todo:
+      build: ./services/svc-todo
+
+    modes:
+      build: ./services/svc-modes
+
+    delegation:
+      build: ./services/svc-delegation
+
+    hooks-approval:
+      build: ./services/svc-hooks-approval
+
+    hooks-routing:
+      build: ./services/svc-hooks-routing
+
+    hooks-async:
+      build: ./services/svc-hooks-async
+
+    hooks-shell:
+      build: ./services/svc-hooks-shell
+
+    content-core:
+      build: ./services/svc-content-core
+
+    content-amplifier:
+      build: ./services/svc-content-amplifier
+
+    content-browser-tester:
+      build: ./services/svc-content-browser-tester
+
+    content-design-intelligence:
+      build: ./services/svc-content-design-intelligence
+
+    content-filesystem:
+      build: ./services/svc-content-filesystem
+
+    content-recipes:
+      build: ./services/svc-content-recipes
+
+    content-superpowers:
+      build: ./services/svc-content-superpowers
+
+    content-system-design-intelligence:
+      build: ./services/svc-content-system-design-intelligence
