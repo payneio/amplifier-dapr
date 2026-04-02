@@ -6,7 +6,7 @@ from typing import Any
 
 from fastapi import FastAPI
 
-from amplifier_service_sdk.models import ToolCapability, ToolRequest
+from amplifier_service_sdk.models import ModeCapability, ToolCapability, ToolRequest
 from amplifier_service_sdk.service import ServiceConfig, create_app
 
 from svc_modes.hook import ModeHooks
@@ -19,6 +19,14 @@ def create_mode_app() -> FastAPI:
     mode_tool = ModeTool()
     mode_tool._mode_hooks = mode_hooks  # wire hook into tool
 
+    # Discover modes from .amplifier/modes/ at startup so they appear in /describe.
+    # This mirrors how tools are registered: capabilities declared at startup time.
+    discovered_modes = mode_tool._discover_modes()
+    mode_capabilities = [
+        ModeCapability(name=m.name, description=m.description)
+        for m in discovered_modes
+    ]
+
     config = ServiceConfig(
         name="svc-modes",
         version="0.1.0",
@@ -29,6 +37,7 @@ def create_mode_app() -> FastAPI:
                 input_schema=mode_tool.input_schema,
             ),
         ],
+        modes=mode_capabilities,
     )
     fastapi_app = create_app(config)
 

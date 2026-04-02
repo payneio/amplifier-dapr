@@ -16,6 +16,13 @@ class ToolCapability(BaseModel):
     input_schema: dict[str, Any] = Field(default_factory=dict)
 
 
+class ModeCapability(BaseModel):
+    """Describes a runtime mode advertised by a service."""
+
+    name: str
+    description: str = ""
+
+
 class ToolRequest(BaseModel):
     """A request to invoke a tool."""
 
@@ -73,6 +80,7 @@ class DescribeResponse(BaseModel):
     hooks: list["HookRegistration"] = Field(default_factory=list)
     providers: list[dict[str, Any]] = Field(default_factory=list)
     content_paths: list[str] = Field(default_factory=list)
+    modes: list[ModeCapability] = Field(default_factory=list)
 
 
 class HealthResponse(BaseModel):

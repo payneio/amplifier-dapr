@@ -13,6 +13,7 @@ from amplifier_service_sdk.models import (
     DescribeResponse,
     HealthResponse,
     HookRegistration,
+    ModeCapability,
     ToolCapability,
 )
 
@@ -27,6 +28,7 @@ class ServiceConfig(BaseModel):
     providers: list[dict[str, Any]] = Field(default_factory=list)
     content_paths: list[str] = Field(default_factory=list)
     content_dir: str | None = None
+    modes: list[ModeCapability] = Field(default_factory=list)
 
 
 def create_app(config: ServiceConfig) -> FastAPI:
@@ -73,6 +75,7 @@ def create_app(config: ServiceConfig) -> FastAPI:
             hooks=config.hooks,
             providers=config.providers,
             content_paths=content_paths,
+            modes=config.modes,
         )
         return response.model_dump()
 

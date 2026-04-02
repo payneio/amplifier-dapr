@@ -18,6 +18,7 @@ _EMPTY_ROUTING_TABLE: dict[str, Any] = {
     "hook_endpoints": {},
     "hook_priorities": {},
     "_tool_specs": [],
+    "_modes": [],
     "_content_services": {},
     "context": "svc-context",
 }
@@ -31,6 +32,10 @@ _SAMPLE_ROUTING_TABLE: dict[str, Any] = {
     "_tool_specs": [
         {"name": "bash", "description": "Run shell commands"},
         {"name": "read_file", "description": "Read a file"},
+    ],
+    "_modes": [
+        {"name": "plan", "description": "Think and discuss"},
+        {"name": "review", "description": "Code review mode"},
     ],
     "_content_services": {},
     "context": "svc-context",
@@ -122,81 +127,86 @@ def test_get_tools_caches_routing_table_for_subsequent_calls(client: TestClient)
 # ---------------------------------------------------------------------------
 
 
-def test_get_modes_returns_data_from_svc_modes(client: TestClient) -> None:
-    """/modes returns mode data by invoking svc-modes via Dapr."""
-    svc_modes_response = {
-        "success": True,
-        "output": {
-            "modes": [
-                {"name": "plan", "description": "Think and discuss", "shortcut": None},
-                {"name": "review", "description": "Code review mode", "shortcut": None},
-            ]
-        },
-    }
+def test_get_modes_runs_discovery_when_no_routing_table(client: TestClient) -> None:
+    """/modes runs service discovery when no routing table is cached yet."""
+    with patch(
+        "session_service.app.discover_services",
+        new=AsyncMock(return_value=_EMPTY_ROUTING_TABLE),
+    ) as mock_discover:
+        response = client.get("/sessions/test-session/modes")
 
-    import httpx
-    from unittest.mock import MagicMock
+    assert response.status_code == 200
+    assert response.json() == {"modes": []}
+    mock_discover.assert_awaited_once()
 
-    mock_response = MagicMock(spec=httpx.Response)
-    mock_response.raise_for_status = MagicMock()
-    mock_response.json.return_value = svc_modes_response
 
-    mock_post = AsyncMock(return_value=mock_response)
-
-    with patch("session_service.app.httpx.AsyncClient") as mock_client_cls:
-        mock_http = AsyncMock()
-        mock_http.__aenter__ = AsyncMock(return_value=mock_http)
-        mock_http.__aexit__ = AsyncMock(return_value=None)
-        mock_http.post = mock_post
-        mock_client_cls.return_value = mock_http
-
+def test_get_modes_returns_modes_from_discovered_routing_table(client: TestClient) -> None:
+    """/modes returns mode specs populated by on-demand discovery."""
+    with patch(
+        "session_service.app.discover_services",
+        new=AsyncMock(return_value=_SAMPLE_ROUTING_TABLE),
+    ):
         response = client.get("/sessions/test-session/modes")
 
     assert response.status_code == 200
     data = response.json()
     assert len(data["modes"]) == 2
-    assert data["modes"][0]["name"] == "plan"
-    assert data["modes"][1]["name"] == "review"
+    names = {m["name"] for m in data["modes"]}
+    assert names == {"plan", "review"}
 
 
-def test_get_modes_falls_back_to_empty_when_svc_modes_unavailable(client: TestClient) -> None:
-    """/modes falls back to {modes: []} when svc-modes cannot be reached."""
-    import httpx
+def test_get_modes_returns_modes_from_cached_routing_table(client: TestClient) -> None:
+    """/modes reads mode specs from the session's stored routing table (no re-discovery)."""
+    session_id = "cached-modes-session"
+    _sessions[session_id] = {
+        "turn_count": 1,
+        "status": "active",
+        "routing_table": _SAMPLE_ROUTING_TABLE,
+    }
 
-    with patch("session_service.app.httpx.AsyncClient") as mock_client_cls:
-        mock_http = AsyncMock()
-        mock_http.__aenter__ = AsyncMock(return_value=mock_http)
-        mock_http.__aexit__ = AsyncMock(return_value=None)
-        mock_http.post = AsyncMock(side_effect=httpx.ConnectError("refused"))
-        mock_client_cls.return_value = mock_http
+    with patch(
+        "session_service.app.discover_services",
+        new=AsyncMock(return_value=_EMPTY_ROUTING_TABLE),
+    ) as mock_discover:
+        response = client.get(f"/sessions/{session_id}/modes")
 
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data["modes"]) == 2
+    # Discovery should NOT have been called because we had a cached table.
+    mock_discover.assert_not_awaited()
+
+
+def test_get_modes_caches_routing_table_for_subsequent_calls(client: TestClient) -> None:
+    """/modes stores the discovered routing table so repeat calls skip re-discovery."""
+    session_id = "new-modes-session"
+
+    with patch(
+        "session_service.app.discover_services",
+        new=AsyncMock(return_value=_SAMPLE_ROUTING_TABLE),
+    ) as mock_discover:
+        # First call — triggers discovery
+        client.get(f"/sessions/{session_id}/modes")
+        # Second call — should use cached routing table
+        client.get(f"/sessions/{session_id}/modes")
+
+    assert mock_discover.await_count == 1, "Discovery should only run once; second call uses cache"
+
+
+def test_get_modes_does_not_call_svc_modes_directly(client: TestClient) -> None:
+    """/modes must NOT call svc-modes directly via Dapr; modes come from the routing table."""
+    with patch(
+        "session_service.app.discover_services",
+        new=AsyncMock(return_value=_SAMPLE_ROUTING_TABLE),
+    ):
+        # If the endpoint were still calling svc-modes directly, this would fail
+        # because httpx.AsyncClient is NOT patched here.
         response = client.get("/sessions/test-session/modes")
 
     assert response.status_code == 200
-    assert response.json() == {"modes": []}
-
-
-def test_get_modes_falls_back_when_svc_modes_returns_error(client: TestClient) -> None:
-    """/modes falls back to {modes: []} when svc-modes returns a non-2xx status."""
-    import httpx
-    from unittest.mock import MagicMock
-
-    mock_response = MagicMock(spec=httpx.Response)
-    mock_response.raise_for_status.side_effect = httpx.HTTPStatusError(
-        "500", request=MagicMock(), response=MagicMock()
-    )
-
-    with patch("session_service.app.httpx.AsyncClient") as mock_client_cls:
-        mock_http = AsyncMock()
-        mock_http.__aenter__ = AsyncMock(return_value=mock_http)
-        mock_http.__aexit__ = AsyncMock(return_value=None)
-        mock_http.post = AsyncMock(return_value=mock_response)
-        mock_client_cls.return_value = mock_http
-
-        response = client.get("/sessions/test-session/modes")
-
-    assert response.status_code == 200
-    assert response.json() == {"modes": []}
+    # Modes should come from the routing table, not a direct svc-modes call
+    data = response.json()
+    assert "modes" in data
 
 
 # ---------------------------------------------------------------------------

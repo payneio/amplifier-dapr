@@ -8,6 +8,7 @@ from amplifier_service_sdk import (
     HealthResponse,
     HookEvent,
     HookResult,
+    ModeCapability,
     ProviderRequest,
     ProviderResponse,
     ToolCapability,
@@ -73,6 +74,25 @@ class TestToolCapability:
         assert cap.input_schema == {}
 
 
+class TestModeCapability:
+    def test_fields(self):
+        mode = ModeCapability(name="plan", description="Think and discuss")
+        assert mode.name == "plan"
+        assert mode.description == "Think and discuss"
+
+    def test_description_defaults_to_empty(self):
+        mode = ModeCapability(name="review")
+        assert mode.name == "review"
+        assert mode.description == ""
+
+    def test_json_roundtrip(self):
+        original = ModeCapability(name="strict", description="Strict mode")
+        dumped = json.loads(original.model_dump_json())
+        recovered = ModeCapability.model_validate(dumped)
+        assert recovered.name == original.name
+        assert recovered.description == original.description
+
+
 class TestDescribeResponse:
     def test_minimal(self):
         resp = DescribeResponse(name="my-service")
@@ -82,12 +102,33 @@ class TestDescribeResponse:
         assert resp.hooks == []
         assert resp.providers == []
         assert resp.content_paths == []
+        assert resp.modes == []
 
     def test_with_tools(self):
         tool = ToolCapability(name="do_thing", description="Does the thing")
         resp = DescribeResponse(name="my-service", tools=[tool])
         assert len(resp.tools) == 1
         assert resp.tools[0].name == "do_thing"
+
+    def test_with_modes(self):
+        modes = [
+            ModeCapability(name="plan", description="Think and discuss"),
+            ModeCapability(name="review", description="Code review mode"),
+        ]
+        resp = DescribeResponse(name="svc-modes", modes=modes)
+        assert len(resp.modes) == 2
+        assert resp.modes[0].name == "plan"
+        assert resp.modes[1].name == "review"
+
+    def test_json_roundtrip_with_modes(self):
+        modes = [ModeCapability(name="strict", description="Strict mode")]
+        original = DescribeResponse(name="svc", version="1.2.3", modes=modes)
+        dumped = json.loads(original.model_dump_json())
+        recovered = DescribeResponse.model_validate(dumped)
+        assert recovered.name == "svc"
+        assert len(recovered.modes) == 1
+        assert recovered.modes[0].name == "strict"
+        assert recovered.modes[0].description == "Strict mode"
 
     def test_json_roundtrip(self):
         tool = ToolCapability(name="search", description="Search")

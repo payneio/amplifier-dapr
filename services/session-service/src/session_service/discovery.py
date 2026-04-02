@@ -45,6 +45,7 @@ def build_routing_table(
         - 'providers': {provider_name: app_id}
         - 'hooks': {event: [app_id, ...]}
         - '_tool_specs': list of raw tool spec dicts
+        - '_modes': list of raw mode spec dicts
         - 'context': context_app_id
     """
     tools: dict[str, str] = {}
@@ -53,6 +54,7 @@ def build_routing_table(
     hook_endpoints: dict[str, str] = {}
     hook_priorities: dict[str, int] = {}
     tool_specs: list[dict[str, Any]] = []
+    modes: list[dict[str, Any]] = []
 
     for app_id, describe in describe_results.items():
         # Map tools: tool_name -> app_id
@@ -61,6 +63,10 @@ def build_routing_table(
             if name:
                 tools[name] = app_id
                 tool_specs.append(tool)
+
+        # Collect modes advertised by this service
+        for mode in describe.get("modes", []):
+            modes.append(mode)
 
         # Map providers: provider_name -> app_id
         for provider in describe.get("providers", []):
@@ -104,6 +110,7 @@ def build_routing_table(
         "hook_endpoints": hook_endpoints,
         "hook_priorities": hook_priorities,
         "_tool_specs": tool_specs,
+        "_modes": modes,
         "_content_services": content_services,
         "context": context_app_id,
     }

@@ -20,6 +20,7 @@ def _make_describe(
     tools: list[dict] | None = None,
     providers: list[dict] | None = None,
     hooks: list[dict] | None = None,
+    modes: list[dict] | None = None,
 ) -> dict:
     """Build a minimal describe response dict."""
     return {
@@ -29,6 +30,7 @@ def _make_describe(
         "providers": providers or [],
         "hooks": hooks or [],
         "content_paths": [],
+        "modes": modes or [],
     }
 
 
@@ -104,6 +106,48 @@ class TestBuildRoutingTable:
 
         assert len(routing["_tool_specs"]) == 1
         assert routing["_tool_specs"][0] == tool_spec
+
+    def test_collects_modes(self) -> None:
+        """Mode specs from describe responses are collected in _modes."""
+        describe_results = {
+            "svc-modes": _make_describe(
+                modes=[
+                    {"name": "plan", "description": "Think and discuss"},
+                    {"name": "review", "description": "Code review mode"},
+                ]
+            )
+        }
+        routing = build_routing_table(describe_results, context_app_id="svc-context")
+
+        assert len(routing["_modes"]) == 2
+        assert routing["_modes"][0]["name"] == "plan"
+        assert routing["_modes"][1]["name"] == "review"
+
+    def test_modes_aggregated_across_services(self) -> None:
+        """Modes from multiple services are all collected into _modes."""
+        describe_results = {
+            "svc-modes": _make_describe(
+                modes=[{"name": "plan", "description": "Think and discuss"}]
+            ),
+            "svc-other": _make_describe(
+                modes=[{"name": "strict", "description": "Strict mode"}]
+            ),
+        }
+        routing = build_routing_table(describe_results, context_app_id="svc-context")
+
+        mode_names = {m["name"] for m in routing["_modes"]}
+        assert mode_names == {"plan", "strict"}
+
+    def test_modes_empty_when_none_advertised(self) -> None:
+        """_modes is an empty list when no services advertise modes."""
+        describe_results = {
+            "svc-bash": _make_describe(
+                tools=[{"name": "bash", "description": "Run shell", "input_schema": {}}]
+            )
+        }
+        routing = build_routing_table(describe_results, context_app_id="svc-context")
+
+        assert routing["_modes"] == []
 
     def test_multiple_services(self) -> None:
         """Tools, providers, and hooks from multiple services are all merged."""
