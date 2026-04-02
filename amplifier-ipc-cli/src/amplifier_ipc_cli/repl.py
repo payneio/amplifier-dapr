@@ -228,9 +228,9 @@ async def interactive_repl(
                 break
 
             if user_input.startswith("/"):
-                from amplifier_ipc_cli import slash_commands  # type: ignore[attr-defined]  # lazy import
+                from amplifier_ipc_cli import commands  # lazy import
 
-                handled = await slash_commands.dispatch_slash(
+                handled = await commands.dispatch_slash(
                     user_input, client, session_id, console
                 )
                 if handled:
