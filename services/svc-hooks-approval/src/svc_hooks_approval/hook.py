@@ -1,15 +1,37 @@
-"""Approval pre-hook: denies tools matching configured glob patterns."""
+"""Approval pre-hook: allow-list, deny-list, argument inspection, and risk metadata checks."""
 
 from __future__ import annotations
 
 import fnmatch
+import re
 from typing import Any, Literal
 
 from amplifier_service_sdk.models import HookResult
 
+# ---------------------------------------------------------------------------
+# Dangerous bash command patterns — compiled once at import time
+# ---------------------------------------------------------------------------
+
+_DANGEROUS_BASH_PATTERNS: list[re.Pattern[str]] = [
+    # rm with recursive flag targeting / (e.g. "rm -rf /", "rm -r /")
+    re.compile(r"rm\s+-[^\s]*r[^\s]*\s+/"),
+    # sudo rm in any form
+    re.compile(r"sudo\s+rm\b"),
+    # make-filesystem commands (mkfs, mkfs.ext4, mkswap …)
+    re.compile(r"\bmkfs\b"),
+    # dd writing to a raw device (of=/dev/…)
+    re.compile(r"\bdd\b.*\bof=/dev/"),
+    # chmod 777 on root
+    re.compile(r"chmod\s+777\s+/"),
+    # fork-bomb pattern  :(){:|:&};:
+    re.compile(r":\(\)\s*\{.*:\s*\|.*:&"),
+    # redirecting to a raw block/char device
+    re.compile(r">\s*/dev/[shd]"),
+]
+
 
 class ApprovalHook:
-    """Sync pre-hook that blocks tools matching deny-list glob patterns."""
+    """Sync pre-hook with allow-list, deny-list, argument inspection, and risk metadata."""
 
     name: str = "approval"
     events: list[str] = ["tool:pre"]
@@ -18,9 +40,19 @@ class ApprovalHook:
 
     def __init__(self, config: dict[str, Any]) -> None:
         self.deny_tools: list[str] = config.get("deny_tools", [])
+        self.allow_tools: list[str] = config.get("allow_tools", [])
 
     async def handle(self, event: str, data: dict[str, Any]) -> HookResult:
-        """Evaluate a hook event and return CONTINUE or DENY."""
+        """Evaluate a hook event and return CONTINUE or DENY.
+
+        Check order:
+          1. Non-tool:pre events → CONTINUE
+          2. Missing tool_name → CONTINUE
+          3. Deny-list (takes precedence over allow-list)
+          4. Allow-list (if configured, unlisted tools are denied)
+          5. Risk metadata (requires_approval flag)
+          6. Bash argument inspection
+        """
         if event != "tool:pre":
             return HookResult(action="CONTINUE")
 
@@ -28,11 +60,54 @@ class ApprovalHook:
         if not tool_name:
             return HookResult(action="CONTINUE")
 
+        # ------------------------------------------------------------------
+        # 1. Deny-list check (highest priority)
+        # ------------------------------------------------------------------
         for pattern in self.deny_tools:
             if fnmatch.fnmatch(tool_name, pattern):
                 return HookResult(
                     action="DENY",
                     reason=f"Tool '{tool_name}' is denied by pattern '{pattern}'",
                 )
+
+        # ------------------------------------------------------------------
+        # 2. Allow-list check (only applied when allow_tools is non-empty)
+        # ------------------------------------------------------------------
+        if self.allow_tools:
+            allowed = any(fnmatch.fnmatch(tool_name, p) for p in self.allow_tools)
+            if not allowed:
+                return HookResult(
+                    action="DENY",
+                    reason=f"Tool '{tool_name}' is not in allow-list",
+                )
+
+        # ------------------------------------------------------------------
+        # 3. Risk metadata check
+        # ------------------------------------------------------------------
+        metadata: dict[str, Any] = data.get("metadata") or {}
+        if metadata.get("requires_approval") is True:
+            risk_level = metadata.get("risk_level", "unknown")
+            return HookResult(
+                action="DENY",
+                reason=(
+                    f"Tool '{tool_name}' requires approval (risk_level={risk_level})"
+                ),
+            )
+
+        # ------------------------------------------------------------------
+        # 4. Bash argument inspection
+        # ------------------------------------------------------------------
+        if tool_name == "bash":
+            arguments: dict[str, Any] = data.get("arguments") or {}
+            command: str = arguments.get("command", "")
+            for dangerous in _DANGEROUS_BASH_PATTERNS:
+                if dangerous.search(command):
+                    return HookResult(
+                        action="DENY",
+                        reason=(
+                            f"Dangerous command pattern detected in bash arguments: "
+                            f"{dangerous.pattern!r}"
+                        ),
+                    )
 
         return HookResult(action="CONTINUE")
