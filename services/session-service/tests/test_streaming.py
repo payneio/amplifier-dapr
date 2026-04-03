@@ -9,20 +9,22 @@ class TestStreamEventType:
     """Tests for the StreamEventType enum."""
 
     def test_all_event_types_defined(self) -> None:
-        """StreamEventType must have all 12 required event types."""
+        """StreamEventType must have all required event types."""
         from session_service.streaming import StreamEventType  # noqa: PLC0415
 
         required_types = [
             "token",
-            "thinking",
             "tool_call_start",
             "tool_call",
             "tool_result",
             "todo_update",
             "child_session_start",
             "child_session_end",
-            "content_block_start",
-            "content_block_end",
+            "content_block:start",
+            "content_block:end",
+            "content_block:delta",
+            "thinking:delta",
+            "thinking:final",
             "error",
             "complete",
         ]
@@ -31,6 +33,15 @@ class TestStreamEventType:
             assert event_type in defined_values, (
                 f"StreamEventType missing required value: {event_type}"
             )
+
+    def test_thinking_removed_from_enum(self) -> None:
+        """The legacy 'thinking' value must no longer be in StreamEventType."""
+        from session_service.streaming import StreamEventType  # noqa: PLC0415
+
+        defined_values = {e.value for e in StreamEventType}
+        assert "thinking" not in defined_values, (
+            "StreamEventType should not contain the legacy 'thinking' value"
+        )
 
 
 class TestFormatSseEvent:

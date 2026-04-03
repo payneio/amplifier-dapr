@@ -302,16 +302,50 @@ class Orchestrator:
                     total_input_tokens += chat_response.usage.input_tokens
                     total_output_tokens += chat_response.usage.output_tokens
 
-                # Emit thinking blocks (if any)
+                # Emit fine-grained content block events (if content is a list)
                 if isinstance(chat_response.content, list):
-                    for block in chat_response.content:
-                        if isinstance(block, dict) and block.get("type") == "thinking":
+                    for index, block in enumerate(chat_response.content):
+                        if not isinstance(block, dict):
+                            continue
+                        block_type = block.get("type", "")
+                        yield {
+                            "event": "stream.content_block:start",
+                            "data": json.dumps(
+                                {"block_type": block_type, "index": index}
+                            ),
+                        }
+                        if block_type == "thinking":
                             thinking_text = block.get("thinking", "")
-                            if thinking_text:
-                                yield {
-                                    "event": "stream.thinking",
-                                    "data": json.dumps({"thinking": thinking_text}),
-                                }
+                            yield {
+                                "event": "stream.thinking:delta",
+                                "data": json.dumps(
+                                    {"index": index, "delta": thinking_text}
+                                ),
+                            }
+                            yield {
+                                "event": "stream.thinking:final",
+                                "data": json.dumps(
+                                    {"index": index, "text": thinking_text}
+                                ),
+                            }
+                        elif block_type == "text":
+                            text_delta = block.get("text", "")
+                            yield {
+                                "event": "stream.content_block:delta",
+                                "data": json.dumps(
+                                    {
+                                        "index": index,
+                                        "block_type": "text",
+                                        "delta": text_delta,
+                                    }
+                                ),
+                            }
+                        yield {
+                            "event": "stream.content_block:end",
+                            "data": json.dumps(
+                                {"block_type": block_type, "index": index}
+                            ),
+                        }
 
                 # Emit token event with assistant text
                 yield {

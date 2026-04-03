@@ -63,9 +63,12 @@ class StreamingDisplay:
     def handle_sse_event(self, event: SSEEvent) -> None:
         """Dispatch an SSE event to the appropriate ``_handle_*`` method.
 
+        Colons in event names are normalised to underscores so that names like
+        ``content_block:start`` map to ``_handle_content_block_start``.
         Unknown event types are silently ignored.
         """
-        handler = getattr(self, f"_handle_{event.event}", None)
+        safe_name = event.event.replace(":", "_")
+        handler = getattr(self, f"_handle_{safe_name}", None)
         if handler is not None:
             handler(event.data)
 
@@ -116,7 +119,12 @@ class StreamingDisplay:
 
     def _handle_content_block_start(self, data: Any) -> None:
         """Print thinking block header with unicode double-line border."""
-        block_type = data.get("type", "") if isinstance(data, dict) else ""
+        # Support both legacy ``type`` key and new ``block_type`` key.
+        block_type = (
+            data.get("block_type") or data.get("type", "")
+            if isinstance(data, dict)
+            else ""
+        )
         if block_type != "thinking" or not self._show_thinking:
             return
         self._in_thinking_block = True
@@ -126,12 +134,39 @@ class StreamingDisplay:
 
     def _handle_content_block_end(self, data: Any) -> None:
         """Print closing double-line border for thinking blocks."""
-        block_type = data.get("type", "") if isinstance(data, dict) else ""
+        # Support both legacy ``type`` key and new ``block_type`` key.
+        block_type = (
+            data.get("block_type") or data.get("type", "")
+            if isinstance(data, dict)
+            else ""
+        )
         if block_type != "thinking" or not self._in_thinking_block:
             return
         self._in_thinking_block = False
         border = "\u255a" + "\u2550" * 50 + "\u255d"  # ╚══...══╝
         self._console.print("\n" + border, style="dim", markup=False)
+
+    def _handle_thinking_delta(self, data: Any) -> None:
+        """Print thinking delta text in 'cyan dim' style (skipped when show_thinking=False)."""
+        if not self._show_thinking:
+            return
+        text = data.get("delta", "") if isinstance(data, dict) else str(data)
+        if text:
+            self._console.print(text, end="", style="cyan dim", markup=False)
+
+    def _handle_thinking_final(self, data: Any) -> None:
+        """No-op: thinking:final marks end of thinking content, no display action needed."""
+
+    def _handle_content_block_delta(self, data: Any) -> None:
+        """Print delta text for text-type content blocks."""
+        if not isinstance(data, dict):
+            return
+        block_type = data.get("block_type", "")
+        if block_type != "text":
+            return
+        delta = data.get("delta", "")
+        if delta:
+            self._console.print(delta, end="", highlight=False, markup=False)
 
     def _handle_tool_call_start(self, data: Any) -> None:
         """Print tool name dimly to signal the start of a tool call."""

@@ -492,3 +492,94 @@ class TestStreamingDisplay:
         assert "tokens" not in output.lower(), (
             f"Expected no 'tokens' in output, got: {output!r}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Tests for colon-separated content block event names
+# ---------------------------------------------------------------------------
+
+
+class TestContentBlockEvents:
+    """Colon-separated event names dispatch correctly and render expected output."""
+
+    def test_colon_events_dispatch_correctly(self) -> None:
+        """content_block:start (colon) dispatches to _handle_content_block_start."""
+        console, buf = make_console()
+        display = StreamingDisplay(console, show_thinking=True)
+        # Simulate event with colon in name (as it arrives after stream. prefix strip)
+        event = SSEEvent(
+            event="content_block:start", data={"block_type": "thinking", "index": 0}
+        )
+        # Should not raise; should call _handle_content_block_start
+        display.handle_sse_event(event)
+        output = buf.getvalue()
+        # Thinking block should print the border header
+        assert "Thinking" in output, (
+            f"Expected 'Thinking' header from content_block:start, got: {output!r}"
+        )
+
+    def test_thinking_delta_displays_text(self) -> None:
+        """thinking:delta prints the delta text in dim style."""
+        console, buf = make_console()
+        display = StreamingDisplay(console, show_thinking=True)
+        event = SSEEvent(
+            event="thinking:delta",
+            data={"index": 0, "delta": "I reason about this..."},
+        )
+        display.handle_sse_event(event)
+        output = buf.getvalue()
+        assert "I reason about this..." in output, (
+            f"Expected delta text in output, got: {output!r}"
+        )
+
+    def test_thinking_delta_hidden_when_disabled(self) -> None:
+        """thinking:delta skips output when show_thinking=False."""
+        console, buf = make_console()
+        display = StreamingDisplay(console, show_thinking=False)
+        event = SSEEvent(
+            event="thinking:delta",
+            data={"index": 0, "delta": "secret thought"},
+        )
+        display.handle_sse_event(event)
+        output = buf.getvalue()
+        assert "secret thought" not in output, (
+            f"Expected no output when show_thinking=False, got: {output!r}"
+        )
+
+    def test_content_block_delta_displays_text(self) -> None:
+        """content_block:delta prints the delta text for text block_type."""
+        console, buf = make_console()
+        display = StreamingDisplay(console)
+        event = SSEEvent(
+            event="content_block:delta",
+            data={"index": 1, "block_type": "text", "delta": "Hello from delta"},
+        )
+        display.handle_sse_event(event)
+        output = buf.getvalue()
+        assert "Hello from delta" in output, (
+            f"Expected delta text in output, got: {output!r}"
+        )
+
+    def test_content_block_end_closes_thinking_border(self) -> None:
+        """content_block:end with block_type thinking closes the border."""
+        console, buf = make_console()
+        display = StreamingDisplay(console, show_thinking=True)
+        # First open the thinking block
+        display.handle_sse_event(
+            SSEEvent(
+                event="content_block:start", data={"block_type": "thinking", "index": 0}
+            )
+        )
+        buf.truncate(0)
+        buf.seek(0)
+        # Now close it
+        display.handle_sse_event(
+            SSEEvent(
+                event="content_block:end", data={"block_type": "thinking", "index": 0}
+            )
+        )
+        output = buf.getvalue()
+        # Bottom border character should appear
+        assert "\u255a" in output, (
+            f"Expected bottom-border \\u255a in output, got: {output!r}"
+        )
