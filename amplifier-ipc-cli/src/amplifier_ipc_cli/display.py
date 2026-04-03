@@ -204,10 +204,22 @@ class StreamingDisplay:
                     highlight=False,
                 )
 
+    def _build_progress_bar(self, completed: int, total: int) -> Text:
+        """Return a Rich Text progress bar: filled █ + empty ░ + count."""
+        filled = int(_TODO_BAR_WIDTH * completed / total) if total > 0 else 0
+        bar = Text()
+        bar.append("█" * filled, style="green")
+        bar.append("░" * (_TODO_BAR_WIDTH - filled), style="dim")
+        bar.append(f" {completed}/{total}", style="dim")
+        return bar
+
     def _todo_line(self, inner: Text, box_width: int) -> Text:
         """Return a bordered line ``│ {inner padded to box_width-4} │`` as a Rich Text."""
         inner_width = box_width - 4
-        padding = max(0, inner_width - len(inner))
+        # Clip if the inner content is wider than the box allows
+        if len(inner) > inner_width:
+            inner = inner[:inner_width]
+        padding = inner_width - len(inner)
         line = Text()
         line.append("│ ")
         line.append_text(inner)
@@ -278,24 +290,17 @@ class StreamingDisplay:
             self._console.print(empty_line, markup=False)
 
             # Progress bar line
-            filled = int(_TODO_BAR_WIDTH * completed_count / total) if total > 0 else 0
-            empty = _TODO_BAR_WIDTH - filled
-            bar_inner = Text()
-            bar_inner.append("█" * filled, style="green")
-            bar_inner.append("░" * empty, style="dim")
-            bar_inner.append(f" {completed_count}/{total}", style="dim")
-            self._console.print(self._todo_line(bar_inner, box_width))
+            self._console.print(
+                self._todo_line(
+                    self._build_progress_bar(completed_count, total), box_width
+                )
+            )
 
             self._console.print(empty_line, markup=False)
 
         else:
             # Condensed mode: single line — bar + count + current in-progress task
-            filled = int(_TODO_BAR_WIDTH * completed_count / total) if total > 0 else 0
-            empty_bar = _TODO_BAR_WIDTH - filled
-            content_inner = Text()
-            content_inner.append("█" * filled, style="green")
-            content_inner.append("░" * empty_bar, style="dim")
-            content_inner.append(f" {completed_count}/{total}", style="dim")
+            content_inner = self._build_progress_bar(completed_count, total)
 
             if in_progress_item is not None:
                 active_form = str(

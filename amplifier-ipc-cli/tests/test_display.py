@@ -15,11 +15,12 @@ from amplifier_ipc_cli.display import StreamingDisplay
 # ---------------------------------------------------------------------------
 
 
-def make_console() -> tuple[Console, StringIO]:
+def make_console(width: int = 10_000) -> tuple[Console, StringIO]:
     """Create a Rich console that captures output in a StringIO buffer.
 
-    Uses a very wide width (10 000) so Rich never wraps long strings, making
-    substring assertions on raw content reliable.
+    Uses a very wide width (10 000) by default so Rich never wraps long strings,
+    making substring assertions on raw content reliable. Pass a smaller ``width``
+    to simulate a narrow terminal.
     """
     buf: StringIO = StringIO()
     console = Console(
@@ -27,7 +28,7 @@ def make_console() -> tuple[Console, StringIO]:
         force_terminal=False,
         markup=True,
         highlight=False,
-        width=10_000,
+        width=width,
     )
     return console, buf
 
@@ -311,7 +312,7 @@ class TestStreamingDisplay:
         assert "┌" in output
         assert "└" in output
 
-    def test_full_mode_activeForm_for_in_progress(self) -> None:
+    def test_full_mode_active_form_for_in_progress(self) -> None:
         """Full mode shows activeForm for in_progress items, NOT content."""
         console, buf = make_console()
         display = StreamingDisplay(console)
@@ -414,3 +415,29 @@ class TestStreamingDisplay:
         output = buf.getvalue()
         assert "3/3" in output
         assert "░" not in output  # no empty segments when fully complete
+
+    def test_todo_line_clips_long_content(self) -> None:
+        """Long task names are clipped to fit within the box width.
+
+        Without clipping, Rich wraps the oversized Text and produces a
+        ``│``-starting fragment shorter than box_width (e.g. 38 chars for
+        width=40).  After clipping the inner text in ``_todo_line``, every
+        ``│``-bordered line must be exactly box_width characters.
+        """
+        console, buf = make_console(width=40)
+        display = StreamingDisplay(console)
+        todos = [
+            {
+                "content": "This is an extremely long task name that should be clipped",
+                "status": "in_progress",
+                "activeForm": "Working on an extremely long task name that should be clipped",
+            }
+        ]
+        event = SSEEvent(event="todo_update", data={"todos": todos})
+        display.handle_sse_event(event)
+        output = buf.getvalue()
+        # Every line that starts with │ must be exactly box_width (40) chars.
+        # A wrapped (unclipped) line would be shorter (e.g. 38), failing here.
+        for line in output.splitlines():
+            if line.startswith("│"):
+                assert len(line) == 40, f"Expected 40 chars, got {len(line)}: {line!r}"
