@@ -76,6 +76,18 @@ class FileGrepRequest(BaseModel):
 
     pattern: str
     path: str = "."
+    output_mode: str = "files_with_matches"
+    glob: str | None = None
+    type: str | None = None
+    after_context: int | None = None
+    before_context: int | None = None
+    context: int | None = None
+    case_insensitive: bool = False
+    line_numbers: bool = True
+    head_limit: int | None = None
+    offset: int = 0
+    include_ignored: bool = False
+    multiline: bool = False
 
 
 def create_machine_app(workspace_dir: Path) -> FastAPI:
@@ -188,12 +200,27 @@ def create_machine_app(workspace_dir: Path) -> FastAPI:
         return {"matches": matches}
 
     @app.post("/files/grep")
-    def grep_files(request: FileGrepRequest) -> dict:
+    async def grep_files(request: FileGrepRequest) -> dict:
         """Search file contents with a regex pattern within the workspace."""
-        matches = backend.file_grep(request.pattern, request.path)
-        if matches is None:
+        result = await backend.file_grep(
+            pattern=request.pattern,
+            path=request.path,
+            output_mode=request.output_mode,
+            glob_pattern=request.glob,
+            file_type=request.type,
+            after_context=request.after_context,
+            before_context=request.before_context,
+            context=request.context,
+            case_insensitive=request.case_insensitive,
+            line_numbers=request.line_numbers,
+            head_limit=request.head_limit,
+            offset=request.offset,
+            include_ignored=request.include_ignored,
+            multiline=request.multiline,
+        )
+        if result is None:
             raise HTTPException(status_code=404, detail="Path not found")
-        return {"matches": matches}
+        return result
 
     return app
 

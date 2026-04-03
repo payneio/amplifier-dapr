@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import os
-import re
 import signal
 import subprocess as _subprocess_module
 from dataclasses import dataclass
@@ -43,6 +42,25 @@ class FileEditResult:
 
 class LocalBackend:
     """Execute shell commands in a sandboxed workspace directory."""
+
+    _GREP_EXCLUDED_DIRS: list[str] = [
+        "node_modules",
+        ".venv",
+        ".git",
+        "__pycache__",
+        "build",
+        "dist",
+        ".mypy_cache",
+        ".pytest_cache",
+        ".tox",
+        ".eggs",
+    ]
+
+    _GREP_HEAD_LIMITS: dict[str, int] = {
+        "files_with_matches": 200,
+        "count": 200,
+        "content": 500,
+    }
 
     def __init__(self, workspace_dir: Path) -> None:
         self.workspace_dir = workspace_dir.resolve()
@@ -278,53 +296,179 @@ class LocalBackend:
             matches.append(rel.as_posix())
         return matches
 
-    def file_grep(self, pattern: str, path: str = ".") -> list[dict[str, Any]] | None:
-        """Search file contents with a regex pattern within the workspace.
+    async def file_grep(
+        self,
+        pattern: str,
+        path: str = ".",
+        output_mode: str = "files_with_matches",
+        glob_pattern: str | None = None,
+        file_type: str | None = None,
+        after_context: int | None = None,
+        before_context: int | None = None,
+        context: int | None = None,
+        case_insensitive: bool = False,
+        line_numbers: bool = True,
+        head_limit: int | None = None,
+        offset: int = 0,
+        include_ignored: bool = False,
+        multiline: bool = False,
+    ) -> dict[str, Any] | None:
+        """Search file contents using ripgrep within the workspace.
 
         Args:
             pattern: Regular expression pattern to search for.
             path: Relative path to a file or directory (default '.').
-                  If a file, searches that file.
-                  If a directory, searches recursively.
+            output_mode: One of 'files_with_matches', 'count', 'content'.
+            glob_pattern: Glob pattern to filter files (e.g. '*.py').
+            file_type: File type filter (e.g. 'py', 'js').
+            after_context: Lines of context after each match (content mode only).
+            before_context: Lines of context before each match (content mode only).
+            context: Lines of context around each match (content mode only).
+            case_insensitive: Perform case-insensitive search.
+            line_numbers: Include line numbers in content mode output.
+            head_limit: Maximum number of results to return.
+            offset: Number of results to skip before returning.
+            include_ignored: Include normally-excluded directories in search.
+            multiline: Enable multiline matching.
 
         Returns:
-            List of dicts with 'file', 'line', and 'content' for each match.
-            Returns empty list if the pattern is invalid or has no matches.
-            Returns None if the path escapes the workspace.
+            Dict with 'matches' list and optional 'total_matches' count,
+            or None if path escapes the workspace.
         """
         resolved = self._resolve_path(path)
         if resolved is None:
             return None
 
-        try:
-            compiled = re.compile(pattern)
-        except re.error:
-            return []
+        # Compute relative path from workspace_dir for rg
+        rel_path = resolved.relative_to(self.workspace_dir)
 
-        results: list[dict[str, Any]] = []
+        cmd = ["rg", "--no-heading"]
 
-        def _search_file(file_path: Path) -> None:
-            try:
-                text = file_path.read_text(encoding="utf-8", errors="replace")
-            except OSError:
-                return
-            for line_num, line_content in enumerate(text.splitlines(), start=1):
-                if compiled.search(line_content):
-                    rel = file_path.relative_to(self.workspace_dir)
-                    results.append(
-                        {
-                            "file": rel.as_posix(),
-                            "line": line_num,
-                            "content": line_content,
-                        }
-                    )
+        # Output mode flags
+        if output_mode == "files_with_matches":
+            cmd.append("--files-with-matches")
+        elif output_mode == "count":
+            cmd.append("--count")
+        # content mode: default rg output, no extra flag
 
-        if resolved.is_file():
-            _search_file(resolved)
-        elif resolved.is_dir():
-            for file_path in sorted(resolved.rglob("*")):
-                if file_path.is_file():
-                    _search_file(file_path)
+        # Default exclusions (unless include_ignored)
+        if not include_ignored:
+            for excluded_dir in self._GREP_EXCLUDED_DIRS:
+                cmd.extend(["--glob", f"!{excluded_dir}"])
+
+        # Glob filter
+        if glob_pattern is not None:
+            cmd.extend(["--glob", glob_pattern])
+
+        # File type filter
+        if file_type is not None:
+            cmd.extend(["--type", file_type])
+
+        # Case insensitive
+        if case_insensitive:
+            cmd.append("--ignore-case")
+
+        # Multiline
+        if multiline:
+            cmd.extend(["--multiline", "--multiline-dotall"])
+
+        # Context options (content mode only)
+        if output_mode == "content":
+            if line_numbers:
+                cmd.append("--line-number")
+            if context is not None:
+                cmd.extend(["--context", str(context)])
+            else:
+                if after_context is not None:
+                    cmd.extend(["--after-context", str(after_context)])
+                if before_context is not None:
+                    cmd.extend(["--before-context", str(before_context)])
+
+        # Pattern and search path
+        cmd.extend([pattern, str(rel_path)])
+
+        # Execute rg
+        process = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            cwd=str(self.workspace_dir),
+        )
+        stdout_bytes, _ = await process.communicate()
+        output = stdout_bytes.decode("utf-8", errors="replace")
+
+        # Parse output into list of matches
+        all_matches = self._parse_grep_output(output, output_mode)
+        total = len(all_matches)
+
+        if total == 0:
+            return {"matches": []}
+
+        # Apply offset + head_limit pagination
+        page = all_matches[offset:]
+        if head_limit is not None:
+            page = page[:head_limit]
+        else:
+            default_limit = self._GREP_HEAD_LIMITS.get(output_mode, 500)
+            page = page[:default_limit]
+
+        return {"matches": page, "total_matches": total}
+
+    def _parse_grep_output(self, output: str, output_mode: str) -> list[Any]:
+        """Parse ripgrep output into a list of matches by output mode.
+
+        Args:
+            output: Raw stdout from rg.
+            output_mode: One of 'files_with_matches', 'count', 'content'.
+
+        Returns:
+            For files_with_matches: list of relative path strings.
+            For count: list of {'file', 'count'} dicts.
+            For content: list of {'file', 'line', 'content'} dicts.
+        """
+        lines = [line for line in output.splitlines() if line.strip()]
+        results: list[Any] = []
+
+        if output_mode == "files_with_matches":
+            for line in lines:
+                path = line.strip()
+                if path.startswith("./"):
+                    path = path[2:]
+                results.append(path)
+
+        elif output_mode == "count":
+            for line in lines:
+                line = line.strip()
+                if ":" not in line:
+                    continue
+                # Format: file:count — split from right to handle paths with colons
+                colon_idx = line.rfind(":")
+                file_path = line[:colon_idx]
+                count_str = line[colon_idx + 1 :]
+                if file_path.startswith("./"):
+                    file_path = file_path[2:]
+                try:
+                    results.append({"file": file_path, "count": int(count_str)})
+                except ValueError:
+                    continue
+
+        elif output_mode == "content":
+            for line in lines:
+                line = line.strip()
+                # Format: file:line_number:content (with --no-heading --line-number)
+                parts = line.split(":", 2)
+                if len(parts) < 3:
+                    continue
+                file_path = parts[0]
+                if file_path.startswith("./"):
+                    file_path = file_path[2:]
+                try:
+                    line_num = int(parts[1])
+                except ValueError:
+                    continue
+                results.append(
+                    {"file": file_path, "line": line_num, "content": parts[2]}
+                )
 
         return results
 
