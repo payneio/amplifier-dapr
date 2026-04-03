@@ -113,3 +113,99 @@ class TestGlobTool:
         assert result.success is False
         assert result.error is not None
         assert "unreachable" in result.error["message"]
+
+
+# ---------------------------------------------------------------------------
+# Additional parameter-forwarding and schema tests (RED phase — task-14)
+# ---------------------------------------------------------------------------
+
+
+class TestGrepToolParamForwarding:
+    """Tests for GrepTool extended parameter forwarding and schema completeness."""
+
+    @pytest.fixture
+    def tool(self) -> GrepTool:
+        """Create a GrepTool pointed at a fake machine URL."""
+        return GrepTool(machine_base_url="http://fake-machine:8080")
+
+    async def test_execute_forwards_output_mode(self, tool: GrepTool) -> None:
+        """execute() forwards output_mode parameter to the machine payload."""
+        mock_result: dict[str, Any] = {"matches": [], "total_matches": 0}
+        mock_call = AsyncMock(return_value=mock_result)
+        with patch.object(tool, "_call_machine", new=mock_call):
+            await tool.execute({"pattern": "hello", "output_mode": "content"})
+
+        payload = mock_call.call_args[0][1]
+        assert payload["output_mode"] == "content"
+
+    async def test_execute_forwards_context_params(self, tool: GrepTool) -> None:
+        """execute() forwards after_context, before_context, and case_insensitive to payload."""
+        mock_result: dict[str, Any] = {"matches": [], "total_matches": 0}
+        mock_call = AsyncMock(return_value=mock_result)
+        with patch.object(tool, "_call_machine", new=mock_call):
+            await tool.execute(
+                {
+                    "pattern": "hello",
+                    "after_context": 3,
+                    "before_context": 2,
+                    "case_insensitive": True,
+                }
+            )
+
+        payload = mock_call.call_args[0][1]
+        assert payload["after_context"] == 3
+        assert payload["before_context"] == 2
+        assert payload["case_insensitive"] is True
+
+    async def test_schema_has_full_params(self, tool: GrepTool) -> None:
+        """GrepTool.input_schema contains all 14 expected parameter keys."""
+        expected_keys = {
+            "pattern",
+            "path",
+            "output_mode",
+            "glob",
+            "type",
+            "after_context",
+            "before_context",
+            "context",
+            "case_insensitive",
+            "line_numbers",
+            "head_limit",
+            "offset",
+            "include_ignored",
+            "multiline",
+        }
+        actual_keys = set(tool.input_schema["properties"].keys())
+        assert expected_keys == actual_keys
+
+
+class TestGlobToolParamForwarding:
+    """Tests for GlobTool extended parameter forwarding and schema completeness."""
+
+    @pytest.fixture
+    def tool(self) -> GlobTool:
+        """Create a GlobTool pointed at a fake machine URL."""
+        return GlobTool(machine_base_url="http://fake-machine:8080")
+
+    async def test_execute_forwards_exclude(self, tool: GlobTool) -> None:
+        """execute() forwards exclude list and type parameter to the machine payload."""
+        mock_result: dict[str, Any] = {"matches": [], "total_files": 0}
+        mock_call = AsyncMock(return_value=mock_result)
+        with patch.object(tool, "_call_machine", new=mock_call):
+            await tool.execute(
+                {
+                    "pattern": "**/*.py",
+                    "exclude": ["*.test.py"],
+                    "type": "file",
+                }
+            )
+
+        payload = mock_call.call_args[0][1]
+        assert payload["exclude"] == ["*.test.py"]
+        assert payload["type"] == "file"
+
+    async def test_schema_has_full_params(self, tool: GlobTool) -> None:
+        """GlobTool.input_schema contains all 5 expected parameter keys."""
+        expected_keys = {"pattern", "path", "exclude", "type", "include_ignored"}
+        actual_keys = set(tool.input_schema["properties"].keys())
+        assert expected_keys == actual_keys
