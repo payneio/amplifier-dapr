@@ -1236,3 +1236,108 @@ class TestOrchestratorSessionEvents:
         assert provider_idx < end_idx, (
             f"Expected provider_call before session.end, got order: {event_order}"
         )
+
+
+# ---------------------------------------------------------------------------
+# TestContextURLPaths - session_id in URL paths
+# ---------------------------------------------------------------------------
+
+
+class TestContextURLPaths:
+    """Context service URLs include session_id in the path."""
+
+    @pytest.mark.asyncio
+    async def test_context_add_uses_session_keyed_path(self) -> None:
+        """_context_add_message should use context/{session_id}/messages path."""
+        dapr = _make_dapr()
+        context_invoke_paths: list[str] = []
+
+        async def mock_invoke(
+            app_id: str, method: str, data: dict[str, Any], **kwargs: Any
+        ) -> dict[str, Any]:
+            if app_id == "svc-context":
+                context_invoke_paths.append(method)
+            if app_id == "svc-provider-mock" and "complete" in method:
+                return {
+                    "content": "Done!",
+                    "tool_calls": None,
+                    "usage": None,
+                    "stop_reason": "end_turn",
+                }
+            return {"ok": True}
+
+        async def mock_invoke_get(
+            app_id: str, method: str, **kwargs: Any
+        ) -> dict[str, Any]:
+            return {"messages": [{"role": "user", "content": "Hello"}]}
+
+        async def mock_publish(*args: Any, **kwargs: Any) -> None:
+            pass
+
+        dapr.invoke = mock_invoke  # type: ignore[method-assign]
+        dapr.invoke_get = mock_invoke_get  # type: ignore[method-assign]
+        dapr.publish = mock_publish  # type: ignore[method-assign]
+
+        orch = Orchestrator(dapr=dapr)
+        await orch.execute(
+            system_prompt="You are helpful.",
+            messages=[Message(role="user", content="Hello")],
+            config={"provider": "mock"},
+            routing_table=_routing_table(),
+            session_id="test-session-abc",
+        )
+
+        # All context POSTs must use the session-keyed path
+        assert len(context_invoke_paths) > 0, "No context invoke calls recorded"
+        for path in context_invoke_paths:
+            assert path == "context/test-session-abc/messages", (
+                f"Expected 'context/test-session-abc/messages', got {path!r}"
+            )
+
+    @pytest.mark.asyncio
+    async def test_context_get_uses_session_keyed_path(self) -> None:
+        """_context_get_messages should use context/{session_id}/messages path."""
+        dapr = _make_dapr()
+        context_get_paths: list[str] = []
+
+        async def mock_invoke(
+            app_id: str, method: str, data: dict[str, Any], **kwargs: Any
+        ) -> dict[str, Any]:
+            if app_id == "svc-provider-mock" and "complete" in method:
+                return {
+                    "content": "Done!",
+                    "tool_calls": None,
+                    "usage": None,
+                    "stop_reason": "end_turn",
+                }
+            return {"ok": True}
+
+        async def mock_invoke_get(
+            app_id: str, method: str, **kwargs: Any
+        ) -> dict[str, Any]:
+            if app_id == "svc-context":
+                context_get_paths.append(method)
+            return {"messages": [{"role": "user", "content": "Hello"}]}
+
+        async def mock_publish(*args: Any, **kwargs: Any) -> None:
+            pass
+
+        dapr.invoke = mock_invoke  # type: ignore[method-assign]
+        dapr.invoke_get = mock_invoke_get  # type: ignore[method-assign]
+        dapr.publish = mock_publish  # type: ignore[method-assign]
+
+        orch = Orchestrator(dapr=dapr)
+        await orch.execute(
+            system_prompt="You are helpful.",
+            messages=[Message(role="user", content="Hello")],
+            config={"provider": "mock"},
+            routing_table=_routing_table(),
+            session_id="test-session-xyz",
+        )
+
+        # All context GETs must use the session-keyed path
+        assert len(context_get_paths) > 0, "No context invoke_get calls recorded"
+        for path in context_get_paths:
+            assert path == "context/test-session-xyz/messages", (
+                f"Expected 'context/test-session-xyz/messages', got {path!r}"
+            )

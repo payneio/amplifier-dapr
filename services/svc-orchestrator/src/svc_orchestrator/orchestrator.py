@@ -78,7 +78,9 @@ class Orchestrator:
         # as a context message to avoid duplicating it on every turn.
         # ------------------------------------------------------------------
         for msg in messages:
-            await self._context_add_message(context_app_id, msg.model_dump())
+            await self._context_add_message(
+                context_app_id, msg.model_dump(), session_id
+            )
 
         # Publish session:start event (best-effort)
         await self._hooks.dispatch_post("session:start", {"session_id": session_id})
@@ -108,7 +110,7 @@ class Orchestrator:
 
             # Fetch current context window; strip any persisted system messages
             # since the system prompt is always delivered via ChatRequest.system.
-            context_msgs = await self._context_get_messages(context_app_id)
+            context_msgs = await self._context_get_messages(context_app_id, session_id)
             chat_messages = [
                 Message(**m) for m in context_msgs if m.get("role") != "system"
             ]
@@ -150,7 +152,9 @@ class Orchestrator:
                 content=chat_response.content,
                 tool_calls=chat_response.tool_calls,
             )
-            await self._context_add_message(context_app_id, assistant_msg.model_dump())
+            await self._context_add_message(
+                context_app_id, assistant_msg.model_dump(), session_id
+            )
 
             iteration += 1
 
@@ -170,12 +174,14 @@ class Orchestrator:
 
             # Persist tool results into context
             for tool_msg in tool_result_msgs:
-                await self._context_add_message(context_app_id, tool_msg.model_dump())
+                await self._context_add_message(
+                    context_app_id, tool_msg.model_dump(), session_id
+                )
 
         # ------------------------------------------------------------------
         # Return final state
         # ------------------------------------------------------------------
-        final_msgs = await self._context_get_messages(context_app_id)
+        final_msgs = await self._context_get_messages(context_app_id, session_id)
         final_messages = [Message(**m) for m in final_msgs]
 
         # Publish session:end event (best-effort)
@@ -218,6 +224,7 @@ class Orchestrator:
         Yields:
             Dicts with ``event`` (str) and ``data`` (JSON string) keys.
         """
+
         # Use a nested async generator so we can cleanly wrap the whole thing
         # in a try/except that yields a stream.error event on failure.
         async def _inner() -> AsyncGenerator[dict[str, Any], None]:
@@ -233,11 +240,11 @@ class Orchestrator:
 
             # Seed context with initial messages
             for msg in messages:
-                await self._context_add_message(context_app_id, msg.model_dump())
+                await self._context_add_message(
+                    context_app_id, msg.model_dump(), session_id
+                )
 
-            await self._hooks.dispatch_post(
-                "session:start", {"session_id": session_id}
-            )
+            await self._hooks.dispatch_post("session:start", {"session_id": session_id})
 
             # Build ToolCapability list
             tools: list[ToolCapability] | None = None
@@ -259,11 +266,11 @@ class Orchestrator:
                 if max_iterations >= 0 and iteration >= max_iterations:
                     break
 
-                context_msgs = await self._context_get_messages(context_app_id)
+                context_msgs = await self._context_get_messages(
+                    context_app_id, session_id
+                )
                 chat_messages = [
-                    Message(**m)
-                    for m in context_msgs
-                    if m.get("role") != "system"
+                    Message(**m) for m in context_msgs if m.get("role") != "system"
                 ]
 
                 pre_result = await self._hooks.dispatch_pre(
@@ -312,7 +319,7 @@ class Orchestrator:
                     tool_calls=chat_response.tool_calls,
                 )
                 await self._context_add_message(
-                    context_app_id, assistant_msg.model_dump()
+                    context_app_id, assistant_msg.model_dump(), session_id
                 )
 
                 iteration += 1
@@ -371,13 +378,13 @@ class Orchestrator:
                 # Persist tool results into context
                 for tool_msg in tool_result_msgs:
                     await self._context_add_message(
-                        context_app_id, tool_msg.model_dump()
+                        context_app_id, tool_msg.model_dump(), session_id
                     )
 
             # ------------------------------------------------------------------
             # Finalise — emit complete with result + full message list
             # ------------------------------------------------------------------
-            final_msgs = await self._context_get_messages(context_app_id)
+            final_msgs = await self._context_get_messages(context_app_id, session_id)
             final_messages = [Message(**m) for m in final_msgs]
 
             await self._hooks.dispatch_post(
@@ -409,14 +416,20 @@ class Orchestrator:
     # ------------------------------------------------------------------
 
     async def _context_add_message(
-        self, context_app_id: str, message: dict[str, Any]
+        self, context_app_id: str, message: dict[str, Any], session_id: str = ""
     ) -> None:
         """POST a single message to the context service."""
-        await self._dapr.invoke(context_app_id, "context/messages", message)
+        await self._dapr.invoke(
+            context_app_id, f"context/{session_id}/messages", message
+        )
 
-    async def _context_get_messages(self, context_app_id: str) -> list[dict[str, Any]]:
+    async def _context_get_messages(
+        self, context_app_id: str, session_id: str = ""
+    ) -> list[dict[str, Any]]:
         """GET the current message list from the context service."""
-        result = await self._dapr.invoke_get(context_app_id, "context/messages")
+        result = await self._dapr.invoke_get(
+            context_app_id, f"context/{session_id}/messages"
+        )
         msgs: list[dict[str, Any]] = result.get("messages", [])
         return msgs
 
