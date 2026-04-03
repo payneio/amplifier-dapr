@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 from collections.abc import AsyncGenerator
 from typing import Any
@@ -83,6 +84,73 @@ DEFAULT_SERVICES: list[str] = [
 
 _sessions: dict[str, dict[str, Any]] = {}
 
+_logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Shared turn-setup helper
+# ---------------------------------------------------------------------------
+
+
+async def _prepare_turn_payload(
+    request: TurnRequest,
+    session_id: str,
+    dapr_url: str,
+) -> tuple[dict[str, Any], str, str, str]:
+    """Resolve agent config, discover services, and assemble the system prompt.
+
+    Both the blocking ``turn`` endpoint and the streaming ``turn_stream_child``
+    endpoint require the same session-setup work: look up the agent
+    configuration, discover the relevant services, override the provider
+    sentinel, format any workspace content, and build the system prompt.
+    This helper centralises that logic so changes only need to be made in
+    one place.
+
+    Args:
+        request:   Incoming :class:`TurnRequest` from the caller.
+        session_id: Active session identifier (used for logging context only).
+        dapr_url:  Base URL of the Dapr HTTP sidecar.
+
+    Returns:
+        A 4-tuple of
+        ``(routing_table_dict, system_prompt, provider_name, orchestrator_app_id)``.
+    """
+    agent_config = get_agent_config(request.agent_ref)
+    orchestrator_app_id: str = agent_config.get(
+        "orchestrator_app_id", "svc-orchestrator"
+    )
+
+    # Discover services — caller-supplied list takes priority over agent default
+    service_ids = request.services if request.services else agent_config["services"]
+    routing_table_dict: dict[str, Any] = await discover_services(
+        service_ids,
+        dapr_url,
+        context_app_id=agent_config.get("context_app_id", "svc-context"),
+    )
+
+    # Resolve provider — agent default overrides the bare "mock" sentinel
+    provider_name = request.provider_name
+    if provider_name == "mock" and agent_config.get("default_provider"):
+        provider_name = agent_config["default_provider"]
+
+    # Convert workspace content dict to formatted string for prompt assembly
+    workspace_content_str: str | None = None
+    if request.workspace_content:
+        ws_parts = [
+            f'<context_file path="{path}">\n{content}\n</context_file>'
+            for path, content in request.workspace_content.items()
+        ]
+        workspace_content_str = "\n\n".join(ws_parts)
+
+    # Assemble the system prompt: agent prompt + service content + workspace
+    system_prompt: str = await assemble_system_prompt(
+        routing_table_dict,
+        workspace_content=workspace_content_str,
+        agent_system_prompt=agent_config.get("system_prompt"),
+        dapr_url=dapr_url,
+    )
+    return routing_table_dict, system_prompt, provider_name, orchestrator_app_id
+
 
 # ---------------------------------------------------------------------------
 # App factory
@@ -120,38 +188,13 @@ def create_session_app(dapr_url: str | None = None) -> FastAPI:
         if session_id not in _sessions:
             _sessions[session_id] = {"turn_count": 0, "status": "active"}
 
-        # Resolve agent configuration
-        agent_config = get_agent_config(request.agent_ref)
-
-        # Discover services — caller-supplied list takes priority over agent default
-        service_ids = request.services if request.services else agent_config["services"]
-        routing_table_dict: dict[str, Any] = await discover_services(
-            service_ids,
-            _dapr_url,
-            context_app_id=agent_config.get("context_app_id", "svc-context"),
-        )
-
-        # Resolve provider — agent default overrides the bare "mock" sentinel
-        provider_name = request.provider_name
-        if provider_name == "mock" and agent_config.get("default_provider"):
-            provider_name = agent_config["default_provider"]
-
-        # Convert workspace content dict to formatted string for prompt assembly
-        workspace_content_str: str | None = None
-        if request.workspace_content:
-            ws_parts = [
-                f'<context_file path="{path}">\n{content}\n</context_file>'
-                for path, content in request.workspace_content.items()
-            ]
-            workspace_content_str = "\n\n".join(ws_parts)
-
-        # Assemble the system prompt: agent prompt + service content + workspace
-        system_prompt: str = await assemble_system_prompt(
+        # Resolve agent config, discover services, assemble system prompt
+        (
             routing_table_dict,
-            workspace_content=workspace_content_str,
-            agent_system_prompt=agent_config.get("system_prompt"),
-            dapr_url=_dapr_url,
-        )
+            system_prompt,
+            provider_name,
+            orchestrator_app_id,
+        ) = await _prepare_turn_payload(request, session_id, _dapr_url)
 
         # Load existing transcript
         transcript: list[Message] = await load_transcript(session_id, _dapr_url)
@@ -160,9 +203,6 @@ def create_session_app(dapr_url: str | None = None) -> FastAPI:
         transcript.append(Message(role="user", content=request.prompt))
 
         # Invoke orchestrator via Dapr service invocation
-        orchestrator_app_id = agent_config.get(
-            "orchestrator_app_id", "svc-orchestrator"
-        )
         invoke_url = (
             f"{_dapr_url}/v1.0/invoke/{orchestrator_app_id}/method/orchestrator/execute"
         )
@@ -224,40 +264,13 @@ def create_session_app(dapr_url: str | None = None) -> FastAPI:
                 if session_id not in _sessions:
                     _sessions[session_id] = {"turn_count": 0, "status": "active"}
 
-                # Resolve agent configuration
-                agent_config = get_agent_config(request.agent_ref)
-
-                # Discover services — caller-supplied list takes priority over agent default
-                service_ids = (
-                    request.services if request.services else agent_config["services"]
-                )
-                routing_table_dict: dict[str, Any] = await discover_services(
-                    service_ids,
-                    _dapr_url,
-                    context_app_id=agent_config.get("context_app_id", "svc-context"),
-                )
-
-                # Resolve provider — agent default overrides the bare "mock" sentinel
-                provider_name = request.provider_name
-                if provider_name == "mock" and agent_config.get("default_provider"):
-                    provider_name = agent_config["default_provider"]
-
-                # Convert workspace content dict to formatted string for prompt assembly
-                workspace_content_str: str | None = None
-                if request.workspace_content:
-                    ws_parts = [
-                        f'<context_file path="{path}">\n{content}\n</context_file>'
-                        for path, content in request.workspace_content.items()
-                    ]
-                    workspace_content_str = "\n\n".join(ws_parts)
-
-                # Assemble the system prompt: agent prompt + service content + workspace
-                system_prompt: str = await assemble_system_prompt(
+                # Resolve agent config, discover services, assemble system prompt
+                (
                     routing_table_dict,
-                    workspace_content=workspace_content_str,
-                    agent_system_prompt=agent_config.get("system_prompt"),
-                    dapr_url=_dapr_url,
-                )
+                    system_prompt,
+                    provider_name,
+                    orchestrator_app_id,
+                ) = await _prepare_turn_payload(request, session_id, _dapr_url)
 
                 # Build the payload with the current message only.
                 # Child sessions do not load or persist transcript — each turn
@@ -268,9 +281,6 @@ def create_session_app(dapr_url: str | None = None) -> FastAPI:
                 # because Dapr service invocation buffers the entire response
                 # before returning it, which defeats SSE streaming.
                 # In Docker Compose, services reach each other by container name.
-                orchestrator_app_id = agent_config.get(
-                    "orchestrator_app_id", "svc-orchestrator"
-                )
                 orch_direct_url = os.environ.get(
                     "ORCHESTRATOR_DIRECT_URL", f"http://{orchestrator_app_id}:8000"
                 )
@@ -323,7 +333,8 @@ def create_session_app(dapr_url: str | None = None) -> FastAPI:
                                 current_event = None
                                 current_data = None
 
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:  # noqa: BLE001 — intentional: all errors must surface as SSE error events
+                _logger.exception("turn_stream_child failed for session %s", session_id)
                 yield {
                     "event": StreamEventType.error.value,
                     "data": json.dumps({"message": str(exc)}),
