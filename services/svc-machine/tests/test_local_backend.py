@@ -265,39 +265,91 @@ class TestFileGlob:
 
 
 class TestFileGrep:
-    """Tests for LocalBackend.file_grep()."""
+    """Tests for LocalBackend.file_grep() — ripgrep-based implementation."""
 
     @pytest.fixture
     def backend(self, tmp_path: Path) -> LocalBackend:
         """Create a LocalBackend with a temporary workspace directory."""
         return LocalBackend(workspace_dir=tmp_path)
 
-    @pytest.fixture
-    def populated_dir(self, tmp_path: Path) -> Path:
-        """Create files with known function definitions."""
+    @pytest.fixture(autouse=True)
+    def populated_dir(self, tmp_path: Path) -> None:
+        """Create files with known function definitions, including node_modules."""
         (tmp_path / "funcs.py").write_text(
             "def foo():\n    pass\n\ndef bar():\n    return 1\n"
         )
         (tmp_path / "notes.txt").write_text("no functions here\n")
-        return tmp_path
+        node_modules = tmp_path / "node_modules" / "pkg"
+        node_modules.mkdir(parents=True)
+        (node_modules / "pkg.js").write_text("def fake() {}\n")
 
-    def test_grep_finds_matches(
-        self, backend: LocalBackend, populated_dir: Path
-    ) -> None:
-        """file_grep('def \\w+') finds 2 function definitions."""
-        result = backend.file_grep(r"def \w+")
+    async def test_grep_files_with_matches_default(self, backend: LocalBackend) -> None:
+        """file_grep(pattern) returns dict with 'matches' list containing funcs.py."""
+        result = await backend.file_grep(pattern=r"def \w+")
         assert result is not None
-        assert len(result) == 2
-        for match in result:
-            assert "file" in match
-            assert "line" in match
-            assert "content" in match
+        assert "matches" in result
+        assert any("funcs.py" in m for m in result["matches"])
 
-    def test_grep_no_matches(self, backend: LocalBackend, populated_dir: Path) -> None:
-        """file_grep() returns empty list when pattern has no matches."""
-        result = backend.file_grep("THIS_PATTERN_WILL_NOT_MATCH_ANYTHING_XYZ")
+    async def test_grep_content_mode(self, backend: LocalBackend) -> None:
+        """file_grep with output_mode='content' returns 2 matches for 'def \\w+'."""
+        result = await backend.file_grep(pattern=r"def \w+", output_mode="content")
         assert result is not None
-        assert result == []
+        assert len(result["matches"]) == 2
+
+    async def test_grep_count_mode(self, backend: LocalBackend) -> None:
+        """file_grep with output_mode='count' returns at least 1 match."""
+        result = await backend.file_grep(pattern=r"def \w+", output_mode="count")
+        assert result is not None
+        assert len(result["matches"]) >= 1
+
+    async def test_grep_excludes_node_modules(self, backend: LocalBackend) -> None:
+        """file_grep excludes node_modules by default — 0 matches for 'def fake'."""
+        result = await backend.file_grep(pattern="def fake", output_mode="content")
+        assert result is not None
+        assert len(result["matches"]) == 0
+
+    async def test_grep_include_ignored(self, backend: LocalBackend) -> None:
+        """file_grep with include_ignored=True finds matches in node_modules."""
+        result = await backend.file_grep(
+            pattern="def fake", output_mode="content", include_ignored=True
+        )
+        assert result is not None
+        assert len(result["matches"]) >= 1
+
+    async def test_grep_glob_filter(self, backend: LocalBackend) -> None:
+        """file_grep with glob_pattern='*.py' only returns .py file matches."""
+        result = await backend.file_grep(
+            pattern="def", output_mode="content", glob_pattern="*.py"
+        )
+        assert result is not None
+        for match in result["matches"]:
+            assert match["file"].endswith(".py")
+
+    async def test_grep_case_insensitive(self, backend: LocalBackend) -> None:
+        """file_grep with case_insensitive=True matches 'DEF' against def lines."""
+        result = await backend.file_grep(
+            pattern="DEF", output_mode="content", case_insensitive=True
+        )
+        assert result is not None
+        assert len(result["matches"]) >= 2
+
+    async def test_grep_head_limit(self, backend: LocalBackend) -> None:
+        """file_grep with head_limit=1 returns at most 1 match."""
+        result = await backend.file_grep(
+            pattern=r"def \w+", output_mode="content", head_limit=1
+        )
+        assert result is not None
+        assert len(result["matches"]) <= 1
+
+    async def test_grep_no_matches(self, backend: LocalBackend) -> None:
+        """file_grep returns {'matches': []} when pattern has no matches."""
+        result = await backend.file_grep(pattern="ZZZZZ_NO_MATCH")
+        assert result == {"matches": []}
+
+    async def test_grep_invalid_path(self, backend: LocalBackend) -> None:
+        """file_grep returns None when path escapes the workspace."""
+        result = await backend.file_grep(pattern="test", path="../../../etc")
+        assert result is None
 
 
 class TestExecBackground:
