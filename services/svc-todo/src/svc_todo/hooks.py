@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Any
+from typing import Any, Literal
 
 import httpx
 
@@ -25,6 +25,8 @@ class TodoReminderHook:
     """Pre-hook on provider:request — injects current todo state as a system reminder."""
 
     name = "todo_reminder"
+    priority: int = 10
+    mode: Literal["sync", "async"] = "sync"
 
     async def _read_state(self, session_id: str) -> list[dict[str, Any]]:
         """Read todo state from Dapr state store for the given session_id."""
@@ -86,6 +88,8 @@ class TodoDisplayHook:
     """Post-hook on tool:post — formats todo progress for display after todo tool calls."""
 
     name = "todo_display"
+    priority: int = 50
+    mode: Literal["sync", "async"] = "sync"
 
     async def handle(self, event: HookEvent) -> HookResult:
         """Format todo progress on tool:post for the todo tool; CONTINUE otherwise."""
@@ -107,14 +111,6 @@ class TodoDisplayHook:
         completed: int = output.get("completed", 0)
         in_progress: int = output.get("in_progress", 0)
         pending: int = output.get("pending", 0)
-
-        # For "created" status, counts may be absent — compute from todos list if available
-        if status == "created":
-            todos: list[dict[str, Any]] = output.get("todos", [])
-            if todos:
-                completed = sum(1 for t in todos if t.get("status") == "completed")
-                in_progress = sum(1 for t in todos if t.get("status") == "in_progress")
-                pending = sum(1 for t in todos if t.get("status") == "pending")
 
         display = f"{completed}/{count} done, {in_progress} active, {pending} pending"
         return HookResult(action="CONTINUE", data={"display": display})
