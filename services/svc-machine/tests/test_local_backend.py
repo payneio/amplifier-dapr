@@ -231,37 +231,80 @@ class TestFileList:
 
 
 class TestFileGlob:
-    """Tests for LocalBackend.file_glob()."""
+    """Tests for LocalBackend.file_glob() — enriched with exclude, type_filter, include_ignored."""
 
     @pytest.fixture
     def backend(self, tmp_path: Path) -> LocalBackend:
         """Create a LocalBackend with a temporary workspace directory."""
         return LocalBackend(workspace_dir=tmp_path)
 
-    @pytest.fixture
-    def populated_dir(self, tmp_path: Path) -> Path:
-        """Create a directory with .py and .txt files including nested."""
+    @pytest.fixture(autouse=True)
+    def populated_dir(self, tmp_path: Path) -> None:
+        """Create a known directory structure for glob tests."""
         (tmp_path / "main.py").write_text("def main(): pass\n")
         (tmp_path / "readme.txt").write_text("readme\n")
-        nested = tmp_path / "pkg"
-        nested.mkdir()
-        (nested / "utils.py").write_text("def helper(): pass\n")
-        return tmp_path
+        pkg = tmp_path / "pkg"
+        pkg.mkdir()
+        (pkg / "utils.py").write_text("def helper(): pass\n")
+        node_modules = tmp_path / "node_modules"
+        node_modules.mkdir()
+        (node_modules / "dep.js").write_text("module.exports = {};\n")
+        (tmp_path / "mydir").mkdir()
 
-    def test_glob_pattern(self, backend: LocalBackend, populated_dir: Path) -> None:
+    def test_glob_pattern(self, backend: LocalBackend) -> None:
         """file_glob('*.py') finds .py files but not .txt files."""
         result = backend.file_glob("*.py")
         assert result is not None
         assert any(p.endswith(".py") for p in result)
         assert not any(p.endswith(".txt") for p in result)
 
-    def test_glob_recursive(self, backend: LocalBackend, populated_dir: Path) -> None:
-        """file_glob('**/*.py') finds nested .py files."""
+    def test_glob_recursive(self, backend: LocalBackend) -> None:
+        """file_glob('**/*.py') finds >=2 files including utils.py."""
         result = backend.file_glob("**/*.py")
         assert result is not None
-        # Should find both main.py and pkg/utils.py
         assert len(result) >= 2
         assert any("utils.py" in p for p in result)
+
+    def test_glob_excludes_node_modules(self, backend: LocalBackend) -> None:
+        """file_glob('**/*.js') returns no matches — node_modules excluded by default."""
+        result = backend.file_glob("**/*.js")
+        assert result is not None
+        assert len(result) == 0
+
+    def test_glob_include_ignored(self, backend: LocalBackend) -> None:
+        """file_glob('**/*.js', include_ignored=True) returns matches in node_modules."""
+        result = backend.file_glob("**/*.js", include_ignored=True)
+        assert result is not None
+        assert len(result) >= 1
+        assert any("dep.js" in p for p in result)
+
+    def test_glob_exclude_pattern(self, backend: LocalBackend) -> None:
+        """file_glob('*', exclude=['*.txt']) returns no .txt files."""
+        result = backend.file_glob("*", exclude=["*.txt"])
+        assert result is not None
+        assert not any(p.endswith(".txt") for p in result)
+
+    def test_glob_type_dir(self, backend: LocalBackend) -> None:
+        """file_glob('*', type_filter='dir') returns pkg and mydir but no .py/.txt files."""
+        result = backend.file_glob("*", type_filter="dir")
+        assert result is not None
+        assert any("pkg" in p for p in result)
+        assert any("mydir" in p for p in result)
+        assert not any(p.endswith(".py") for p in result)
+        assert not any(p.endswith(".txt") for p in result)
+
+    def test_glob_type_file(self, backend: LocalBackend) -> None:
+        """file_glob('*', type_filter='file') returns only files."""
+        result = backend.file_glob("*", type_filter="file")
+        assert result is not None
+        assert len(result) > 0
+        assert not any("mydir" in p for p in result)
+        assert not any("pkg" in p for p in result)
+
+    def test_glob_nonexistent_base(self, backend: LocalBackend) -> None:
+        """file_glob('*.py', path='nonexistent_dir') returns None."""
+        result = backend.file_glob("*.py", path="nonexistent_dir")
+        assert result is None
 
 
 class TestFileGrep:
