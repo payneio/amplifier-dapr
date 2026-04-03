@@ -449,21 +449,23 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "amplifier-service-sdk" },
+    { name = "httpx" },
 ]
 
 [package.dev-dependencies]
 dev = [
-    { name = "httpx" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "amplifier-service-sdk", directory = "../../amplifier-service-sdk" }]
+requires-dist = [
+    { name = "amplifier-service-sdk", directory = "../../amplifier-service-sdk" },
+    { name = "httpx", specifier = ">=0.28" },
+]
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "httpx", specifier = ">=0.27" },
     { name = "pytest", specifier = ">=8.0" },
     { name = "pytest-asyncio", specifier = ">=0.23" },
 ]

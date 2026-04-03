@@ -83,7 +83,10 @@ Recommended pattern:
         key = f"todo-{self._session_id}"
         try:
             async with httpx.AsyncClient() as client:
-                await client.post(url, json=[{"key": key, "value": self._todo_state}])
+                response = await client.post(
+                    url, json=[{"key": key, "value": self._todo_state}]
+                )
+                response.raise_for_status()
         except Exception:
             logger.exception("Failed to save todo state to Dapr state store")
 
@@ -148,13 +151,13 @@ Recommended pattern:
 
         if action == "create":
             result = await self._handle_create(input.get("todos", []))
-            if self._session_id:
+            if self._session_id and result.success:
                 await self._save_state()
             return result
 
         if action == "update":
             result = await self._handle_update(input.get("todos", []))
-            if self._session_id:
+            if self._session_id and result.success:
                 await self._save_state()
             return result
 
