@@ -48,8 +48,8 @@ class StatusContextHook:
         app_id = os.environ.get("MACHINE_APP_ID", _MACHINE_APP_ID_DEFAULT)
         url = f"http://localhost:{port}/v1.0/invoke/{app_id}/method/exec"
 
-        async with httpx.AsyncClient() as client:
-            response = await client.post(url, json={"command": command}, timeout=10.0)
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            response = await client.post(url, json={"command": command})
             response.raise_for_status()
             data = response.json()
             return str(data.get("stdout", "")).strip()

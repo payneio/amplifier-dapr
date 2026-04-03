@@ -58,7 +58,7 @@ class TodoReminderHook:
             f"http://localhost:{port}/v1.0/state/{_DAPR_STATE_STORE}/todo-{session_id}"
         )
 
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=5.0) as client:
             response = await client.get(url)
             if response.status_code == 204 or not response.content:
                 return []

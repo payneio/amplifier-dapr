@@ -63,6 +63,10 @@ def create_skills_app() -> FastAPI:
         result = await visibility_hook.handle(event.event, event.data)
         return result.model_dump()
 
+    @fastapi_app.get("/dapr/subscribe")
+    async def dapr_subscribe() -> list[dict]:
+        return []
+
     return fastapi_app
 
 

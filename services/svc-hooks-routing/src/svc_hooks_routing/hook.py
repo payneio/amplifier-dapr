@@ -101,6 +101,7 @@ class RoutingHook:
         if model_role is not None:
             resolved = self.resolve(model_role)
             if resolved is None:
+                logger.warning(f"No routing match for model_role={model_role}")
                 return HookResult(action="CONTINUE")
             merged = {**data, **resolved}
             return HookResult(action="MODIFY", data=merged)

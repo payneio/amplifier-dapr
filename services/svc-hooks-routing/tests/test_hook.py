@@ -1,7 +1,9 @@
 """Tests for RoutingHook with real resolve(model_role) logic."""
 
+from pathlib import Path
+
 import pytest
-from svc_hooks_routing.hook import RoutingHook
+from svc_hooks_routing.hook import RoutingHook, load_matrix_from_file
 
 SAMPLE_MATRIX = {
     "name": "balanced",
@@ -122,3 +124,65 @@ class TestResolveModelRole:
         # Resolved fields added
         assert result.data["provider"] == "anthropic"
         assert result.data["model"] == "claude-haiku-4-5"
+
+
+class TestLoadMatrixFromFile:
+    """Covers load_matrix_from_file() and resolve() with a real YAML file."""
+
+    def test_loads_yaml_and_resolves_role(self, tmp_path: Path) -> None:
+        """load_matrix_from_file() loads YAML; resolve() returns correct provider+model."""
+        matrix_yaml = """\
+name: test_matrix
+roles:
+  coding:
+    description: Code generation tasks
+    candidates:
+      - provider: anthropic
+        model: claude-opus-4-5
+"""
+        matrix_file = tmp_path / "routing.yaml"
+        matrix_file.write_text(matrix_yaml)
+
+        matrix = load_matrix_from_file(matrix_file)
+        hook = RoutingHook(matrix=matrix)
+
+        resolved = hook.resolve("coding")
+        assert resolved is not None
+        assert resolved["provider"] == "anthropic"
+        assert resolved["model"] == "claude-opus-4-5"
+
+    def test_matrix_name_preserved(self, tmp_path: Path) -> None:
+        """load_matrix_from_file() preserves the matrix name field."""
+        matrix_yaml = """\
+name: my_routing_matrix
+roles: {}
+"""
+        matrix_file = tmp_path / "routing.yaml"
+        matrix_file.write_text(matrix_yaml)
+
+        matrix = load_matrix_from_file(matrix_file)
+        assert matrix["name"] == "my_routing_matrix"
+
+    def test_missing_file_returns_empty_dict(self, tmp_path: Path) -> None:
+        """load_matrix_from_file() returns {} when the file does not exist."""
+        missing = tmp_path / "nonexistent.yaml"
+        result = load_matrix_from_file(missing)
+        assert result == {}
+
+    def test_unresolvable_role_returns_none(self, tmp_path: Path) -> None:
+        """resolve() returns None for a role absent from the loaded matrix."""
+        matrix_yaml = """\
+name: sparse
+roles:
+  fast:
+    candidates:
+      - provider: anthropic
+        model: claude-haiku-4-5
+"""
+        matrix_file = tmp_path / "routing.yaml"
+        matrix_file.write_text(matrix_yaml)
+
+        matrix = load_matrix_from_file(matrix_file)
+        hook = RoutingHook(matrix=matrix)
+
+        assert hook.resolve("nonexistent") is None

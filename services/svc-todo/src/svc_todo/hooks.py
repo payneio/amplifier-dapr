@@ -8,7 +8,7 @@ from typing import Any, Literal
 
 import httpx
 
-from amplifier_service_sdk.models import HookEvent, HookResult
+from amplifier_service_sdk.models import HookResult
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +25,7 @@ class TodoReminderHook:
     """Pre-hook on provider:request — injects current todo state as a system reminder."""
 
     name = "todo_reminder"
+    events: list[str] = ["provider:request"]
     priority: int = 10
     mode: Literal["sync", "async"] = "sync"
 
@@ -35,7 +36,7 @@ class TodoReminderHook:
             f"http://localhost:{port}/v1.0/state/{_DAPR_STATE_STORE}/todo-{session_id}"
         )
         try:
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(timeout=5.0) as client:
                 response = await client.get(url)
                 if response.status_code == 204:
                     return []
@@ -59,12 +60,12 @@ class TodoReminderHook:
                 lines.append(f"{_SYMBOL_PENDING} {todo.get('content', '')}")
         return "\n".join(lines)
 
-    async def handle(self, event: HookEvent) -> HookResult:
+    async def handle(self, event: str, data: dict[str, Any]) -> HookResult:
         """Inject todo reminder on provider:request; CONTINUE otherwise."""
-        if event.event != "provider:request":
+        if event != "provider:request":
             return HookResult(action="CONTINUE")
 
-        session_id = event.data.get("session_id")
+        session_id = data.get("session_id")
         if not session_id:
             return HookResult(action="CONTINUE")
 
@@ -90,19 +91,20 @@ class TodoDisplayHook:
     """Post-hook on tool:post — formats todo progress for display after todo tool calls."""
 
     name = "todo_display"
+    events: list[str] = ["tool:post"]
     priority: int = 50
     mode: Literal["sync", "async"] = "sync"
 
-    async def handle(self, event: HookEvent) -> HookResult:
+    async def handle(self, event: str, data: dict[str, Any]) -> HookResult:
         """Format todo progress on tool:post for the todo tool; CONTINUE otherwise."""
-        if event.event != "tool:post":
+        if event != "tool:post":
             return HookResult(action="CONTINUE")
 
-        tool_name = event.data.get("tool_name")
+        tool_name = data.get("tool_name")
         if tool_name != "todo":
             return HookResult(action="CONTINUE")
 
-        result: dict[str, Any] = event.data.get("result") or {}
+        result: dict[str, Any] = data.get("result") or {}
         output: dict[str, Any] = result.get("output") or {}
         status = output.get("status")
 
