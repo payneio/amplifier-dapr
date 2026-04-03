@@ -213,3 +213,75 @@ class TestEditFileTool:
         assert result.success is False
         assert result.error is not None
         assert "unreachable" in result.error["message"]
+
+
+class TestReadFileToolDirectoryListing:
+    """Tests for ReadFileTool.execute handling directory listing responses."""
+
+    @pytest.fixture
+    def tool(self) -> ReadFileTool:
+        """Create a ReadFileTool pointed at a fake machine URL."""
+        return ReadFileTool(machine_base_url="http://fake-machine:8080")
+
+    async def test_directory_returns_listing(self, tool: ReadFileTool) -> None:
+        """execute() formats directory entries with DIR/FILE labels in content."""
+        mock_result: dict[str, Any] = {
+            "entries": [
+                {"name": "src", "type": "dir"},
+                {"name": "main.py", "type": "file", "size": 100},
+            ]
+        }
+        with patch.object(
+            tool, "_call_machine", new=AsyncMock(return_value=mock_result)
+        ):
+            result = await tool.execute({"file_path": "some_dir/"})
+
+        assert result.success is True
+        assert result.output is not None
+        content = result.output["content"]
+        assert "DIR" in content
+        assert "FILE" in content
+        assert "src" in content
+        assert "main.py" in content
+
+
+class TestReadFileToolLineFormatting:
+    """Tests for ReadFileTool.execute applying cat -n style line formatting."""
+
+    @pytest.fixture
+    def tool(self) -> ReadFileTool:
+        """Create a ReadFileTool pointed at a fake machine URL."""
+        return ReadFileTool(machine_base_url="http://fake-machine:8080")
+
+    async def test_output_has_line_numbers(self, tool: ReadFileTool) -> None:
+        """execute() adds line numbers in cat -n format (N<tab>content)."""
+        mock_result: dict[str, Any] = {
+            "content": "line1\nline2\nline3\n",
+            "total_lines": 3,
+        }
+        with patch.object(
+            tool, "_call_machine", new=AsyncMock(return_value=mock_result)
+        ):
+            result = await tool.execute({"file_path": "some_file.txt"})
+
+        assert result.success is True
+        assert result.output is not None
+        content = result.output["content"]
+        assert "1\t" in content
+        assert "line1" in content
+
+    async def test_long_lines_truncated(self, tool: ReadFileTool) -> None:
+        """execute() truncates lines longer than 2000 chars."""
+        mock_result: dict[str, Any] = {
+            "content": "x" * 3000 + "\n",
+            "total_lines": 1,
+        }
+        with patch.object(
+            tool, "_call_machine", new=AsyncMock(return_value=mock_result)
+        ):
+            result = await tool.execute({"file_path": "some_file.txt"})
+
+        assert result.success is True
+        assert result.output is not None
+        first_line = result.output["content"].splitlines()[0]
+        assert len(first_line) < 2200
