@@ -5,6 +5,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from rich.errors import MarkupError
+from rich.panel import Panel
+from rich.text import Text
 
 if TYPE_CHECKING:
     from rich.console import Console
@@ -194,81 +196,61 @@ class StreamingDisplay:
                 )
 
     def _handle_todo_update(self, data: Any) -> None:
-        """Render a todo box with individual items (<=7) or a summary (>7) plus progress bar."""
+        """Render a Rich Panel with color-coded todo items (<=7) or summary (>7) plus progress bar."""
         if not isinstance(data, dict):
             return
         todos: list[dict[str, Any]] = data.get("todos", [])
         if not todos:
             return
 
-        # Status symbols
-        symbols: dict[str, str] = {
-            "completed": "\u2713",    # ✓ checkmark
-            "in_progress": "\u25b6",  # ▶ play
-            "pending": "\u25cb",      # ○ circle
-        }
-
         total = len(todos)
         completed_count = sum(1 for t in todos if t.get("status") == "completed")
+        in_progress_count = sum(1 for t in todos if t.get("status") == "in_progress")
+        pending_count = sum(1 for t in todos if t.get("status") == "pending")
 
-        # Layout constants
-        box_width = 50   # Inner content width (chars between │ borders)
-        bar_width = 20   # Width of the progress bar in block chars
+        bar_width = 20
         full_mode_threshold = 7
+        panel_width = min(self._console.width, 60)
 
-        top_border = "\u250c" + "\u2500" * box_width + "\u2510"     # ┌──...──┐
-        bottom_border = "\u2514" + "\u2500" * box_width + "\u2518"  # └──...──┘
-
-        self._console.print(top_border, markup=False)
+        content = Text()
 
         if total <= full_mode_threshold:
-            # Full mode: show each todo item in a bordered row
-            for todo in todos:
+            # Full mode: one line per item with color-coded symbol
+            for i, todo in enumerate(todos):
                 status = todo.get("status", "pending")
-                symbol = symbols.get(status, " ")
-                content = str(todo.get("content", ""))
-                # inner_width accounts for "│ " (2) + symbol (1) + " " (1) = 4 chars overhead
-                inner_width = box_width - 4
-                if len(content) > inner_width - 3:
-                    content = content[: inner_width - 3] + "..."
-                line = f"\u2502 {symbol} {content}"
-                padding = box_width - len(f" {symbol} {content}")
-                if padding > 0:
-                    line += " " * padding
-                line += "\u2502"
-                self._console.print(line, markup=False)
+                text_content = str(todo.get("content", ""))
+                if i > 0:
+                    content.append("\n")
+                if status == "completed":
+                    content.append("\u2713", style="green")  # ✓
+                    content.append(" ")
+                    content.append(text_content, style="dim strike")
+                elif status == "in_progress":
+                    content.append("\u2192", style="bold cyan")  # →
+                    content.append(" ")
+                    content.append(text_content, style="bold")
+                else:
+                    content.append("\u25cb", style="dim")  # ○
+                    content.append(" ")
+                    content.append(text_content, style="dim")
         else:
-            # Condensed mode: show symbol counts
-            in_progress_count = sum(
-                1 for t in todos if t.get("status") == "in_progress"
-            )
-            pending_count = sum(1 for t in todos if t.get("status") == "pending")
-            summary = (
-                f"\u2502 {symbols['completed']} {completed_count} completed  "
-                f"{symbols['in_progress']} {in_progress_count} in progress  "
-                f"{symbols['pending']} {pending_count} pending"
-            )
-            # summary starts with "│" (1 char border) then inner content;
-            # subtract 1 to get inner content length, then pad to box_width.
-            padding = box_width - (len(summary) - 1)
-            if padding > 0:
-                summary += " " * padding
-            summary += "\u2502"
-            self._console.print(summary, markup=False)
+            # Condensed mode: summary count for each status
+            content.append("\u2713", style="green")  # ✓
+            content.append(f" {completed_count}  ", style="dim")
+            content.append("\u2192", style="bold cyan")  # →
+            content.append(f" {in_progress_count}  ", style="dim")
+            content.append("\u25cb", style="dim")  # ○
+            content.append(f" {pending_count}", style="dim")
 
-        # Progress bar inside a bordered row
+        # Progress bar
         filled = int(bar_width * completed_count / total) if total > 0 else 0
         empty = bar_width - filled
-        bar = "\u2588" * filled + "\u2591" * empty
-        progress_text = f"{completed_count}/{total}"
-        progress_line = f"\u2502 {bar} {progress_text}"
-        padding = box_width - len(f" {bar} {progress_text}")
-        if padding > 0:
-            progress_line += " " * padding
-        progress_line += "\u2502"
-        self._console.print(progress_line, markup=False)
+        content.append("\n")
+        content.append("\u2588" * filled, style="green")  # █ filled
+        content.append("\u2591" * empty, style="dim")  # ░ empty
+        content.append(f" {completed_count}/{total}", style="dim")
 
-        self._console.print(bottom_border, markup=False)
+        self._console.print(Panel(content, border_style="dim", width=panel_width))
 
     def _handle_child_session_start(self, data: Any) -> None:
         """Print a 🔧 delegation header indented according to session depth."""

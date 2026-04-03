@@ -225,3 +225,84 @@ class TestStreamingDisplay:
         output = buf.getvalue()
         # Nothing should be printed for unknown events
         assert output == ""
+
+    # ------------------------------------------------------------------
+    # New tests for improved _handle_todo_update (Rich Panel + colors)
+    # ------------------------------------------------------------------
+
+    def test_handle_todo_update_full_mode_colored_symbols(self) -> None:
+        """Full mode (<=7 items) shows ✓, → and ○ symbols for each status."""
+        console, buf = make_console()
+        display = StreamingDisplay(console)
+        event = SSEEvent(
+            event="todo_update",
+            data={
+                "todos": [
+                    {"content": "task one", "status": "completed"},
+                    {"content": "task two", "status": "in_progress"},
+                    {"content": "task three", "status": "pending"},
+                ]
+            },
+        )
+        display.handle_sse_event(event)
+        output = buf.getvalue()
+        assert "✓" in output  # completed symbol
+        assert "→" in output  # in_progress arrow symbol (not ▶)
+        assert "○" in output  # pending circle symbol
+        assert "▶" not in output  # old play symbol must be gone
+
+    def test_handle_todo_update_condensed_mode_shows_status_counts(self) -> None:
+        """Condensed mode (>7 items) shows symbol counts for each status."""
+        console, buf = make_console()
+        display = StreamingDisplay(console)
+        todos = [{"content": f"task {i}", "status": "pending"} for i in range(8)]
+        todos[0]["status"] = "completed"
+        todos[1]["status"] = "in_progress"
+        event = SSEEvent(event="todo_update", data={"todos": todos})
+        display.handle_sse_event(event)
+        output = buf.getvalue()
+        # All three status symbols should appear in condensed summary
+        assert "✓" in output
+        assert "→" in output  # new arrow (not ▶)
+        assert "○" in output
+        assert "▶" not in output  # old play symbol must be gone
+
+    def test_handle_todo_update_progress_bar_counts(self) -> None:
+        """Progress bar shows N/total format with correct completed count."""
+        console, buf = make_console()
+        display = StreamingDisplay(console)
+        todos = [{"content": f"done {i}", "status": "completed"} for i in range(3)] + [
+            {"content": f"todo {i}", "status": "pending"} for i in range(5)
+        ]
+        event = SSEEvent(event="todo_update", data={"todos": todos})
+        display.handle_sse_event(event)
+        output = buf.getvalue()
+        assert "3/8" in output
+
+    def test_handle_todo_update_empty_list_no_output(self) -> None:
+        """Empty todos list produces no output at all."""
+        console, buf = make_console()
+        display = StreamingDisplay(console)
+        event = SSEEvent(event="todo_update", data={"todos": []})
+        display.handle_sse_event(event)
+        output = buf.getvalue()
+        assert output == ""
+
+    def test_handle_todo_update_all_completed_no_empty_bar_segments(self) -> None:
+        """When all todos are completed the progress bar has no empty (░) segments."""
+        console, buf = make_console()
+        display = StreamingDisplay(console)
+        event = SSEEvent(
+            event="todo_update",
+            data={
+                "todos": [
+                    {"content": "task one", "status": "completed"},
+                    {"content": "task two", "status": "completed"},
+                    {"content": "task three", "status": "completed"},
+                ]
+            },
+        )
+        display.handle_sse_event(event)
+        output = buf.getvalue()
+        assert "3/3" in output
+        assert "░" not in output  # no empty segments when fully complete
