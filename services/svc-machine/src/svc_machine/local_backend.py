@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import fnmatch
 import os
 import signal
 import subprocess as _subprocess_module
@@ -55,6 +56,21 @@ class LocalBackend:
         ".tox",
         ".eggs",
     ]
+
+    _GLOB_EXCLUDED_DIRS: list[str] = [
+        "node_modules",
+        ".venv",
+        ".git",
+        "__pycache__",
+        "build",
+        "dist",
+        ".mypy_cache",
+        ".pytest_cache",
+        ".tox",
+        ".eggs",
+    ]
+
+    _GLOB_MAX_RESULTS = 500
 
     _GREP_HEAD_LIMITS: dict[str, int] = {
         "files_with_matches": 200,
@@ -275,12 +291,22 @@ class LocalBackend:
                 )
         return entries
 
-    def file_glob(self, pattern: str, path: str = ".") -> list[str] | None:
+    def file_glob(
+        self,
+        pattern: str,
+        path: str = ".",
+        exclude: list[str] | None = None,
+        type_filter: str = "file",
+        include_ignored: bool = False,
+    ) -> list[str] | None:
         """Match files using a glob pattern within the workspace.
 
         Args:
             pattern: Glob pattern (e.g. '*.py', '**/*.py').
             path: Relative path to the base directory (default '.').
+            exclude: List of fnmatch patterns to exclude from results.
+            type_filter: Filter by entry type: 'file', 'dir', or 'any'.
+            include_ignored: Include normally-excluded directories (default False).
 
         Returns:
             List of posix-style relative paths matching the pattern,
@@ -290,10 +316,40 @@ class LocalBackend:
         if resolved is None or not resolved.is_dir():
             return None
 
-        matches = []
+        excluded_dirs: set[str] = (
+            set() if include_ignored else set(self._GLOB_EXCLUDED_DIRS)
+        )
+
+        matches: list[str] = []
+        total = 0
         for match in sorted(resolved.glob(pattern)):
             rel = match.relative_to(resolved)
-            matches.append(rel.as_posix())
+            rel_parts = rel.parts
+
+            # Skip entries within excluded directories (check all path parts)
+            if any(part in excluded_dirs for part in rel_parts):
+                continue
+
+            rel_str = rel.as_posix()
+
+            # Apply custom exclude patterns against both full relative path and filename
+            if exclude and any(
+                fnmatch.fnmatch(rel_str, pat) or fnmatch.fnmatch(rel.name, pat)
+                for pat in exclude
+            ):
+                continue
+
+            # Apply type_filter
+            if type_filter == "file" and not match.is_file():
+                continue
+            if type_filter == "dir" and not match.is_dir():
+                continue
+            # type_filter == "any" → no filter
+
+            total += 1
+            if total <= self._GLOB_MAX_RESULTS:
+                matches.append(rel_str)
+
         return matches
 
     async def file_grep(

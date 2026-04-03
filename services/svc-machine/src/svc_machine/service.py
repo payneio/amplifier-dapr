@@ -69,6 +69,9 @@ class FileGlobRequest(BaseModel):
 
     pattern: str
     path: str = "."
+    exclude: list[str] | None = None
+    type: str = "file"
+    include_ignored: bool = False
 
 
 class FileGrepRequest(BaseModel):
@@ -194,10 +197,16 @@ def create_machine_app(workspace_dir: Path) -> FastAPI:
     @app.post("/files/glob")
     def glob_files(request: FileGlobRequest) -> dict:
         """Match files using a glob pattern within the workspace."""
-        matches = backend.file_glob(request.pattern, request.path)
+        matches = backend.file_glob(
+            request.pattern,
+            request.path,
+            exclude=request.exclude,
+            type_filter=request.type,
+            include_ignored=request.include_ignored,
+        )
         if matches is None:
             raise HTTPException(status_code=404, detail="Base path not found")
-        return {"matches": matches}
+        return {"matches": matches, "total_files": len(matches)}
 
     @app.post("/files/grep")
     async def grep_files(request: FileGrepRequest) -> dict:
