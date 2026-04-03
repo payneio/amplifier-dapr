@@ -373,6 +373,23 @@ class Orchestrator:
                 if max_iterations >= 0 and iteration >= max_iterations:
                     break
 
+                # Emit stream.delegate:agent_spawned for delegate tool calls
+                # BEFORE the standard tool_call_start events so clients know
+                # a child agent is about to be spawned.
+                for tc in chat_response.tool_calls:
+                    if tc.name == "delegate":
+                        args = tc.arguments or {}
+                        yield {
+                            "event": "stream.delegate:agent_spawned",
+                            "data": json.dumps(
+                                {
+                                    "agent": args.get("agent", ""),
+                                    "instruction": args.get("instruction", ""),
+                                    "depth": 1,
+                                }
+                            ),
+                        }
+
                 # Emit tool_call_start / tool_call events BEFORE dispatch so the
                 # client sees them immediately while tools are executing.
                 for tc in chat_response.tool_calls:
@@ -415,6 +432,22 @@ class Orchestrator:
                             }
                         ),
                     }
+                    # When the 'delegate' tool runs, emit a
+                    # stream.delegate:agent_completed event so the client
+                    # knows the child agent finished.
+                    if tc.name == "delegate":
+                        args = tc.arguments or {}
+                        yield {
+                            "event": "stream.delegate:agent_completed",
+                            "data": json.dumps(
+                                {
+                                    "agent": args.get("agent", ""),
+                                    "success": True,
+                                    "result_preview": str(msg.content)[:200],
+                                }
+                            ),
+                        }
+
                     # When the 'todo' tool runs, emit a stream.todo_update
                     # event so the client can refresh its task list display.
                     # Best-effort: non-JSON / missing "todos" key is skipped.
