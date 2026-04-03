@@ -52,7 +52,7 @@ class TestStreamingDisplay:
         """_handle_thinking prints thinking text (when show_thinking=True)."""
         console, buf = make_console()
         display = StreamingDisplay(console, show_thinking=True)
-        event = SSEEvent(event="thinking", data={"text": "I think carefully..."})
+        event = SSEEvent(event="thinking", data={"thinking": "I think carefully..."})
         display.handle_sse_event(event)
         output = buf.getvalue()
         assert "I think carefully..." in output
@@ -61,7 +61,7 @@ class TestStreamingDisplay:
         """_handle_thinking skips output when show_thinking=False."""
         console, buf = make_console()
         display = StreamingDisplay(console, show_thinking=False)
-        event = SSEEvent(event="thinking", data={"text": "hidden thought"})
+        event = SSEEvent(event="thinking", data={"thinking": "hidden thought"})
         display.handle_sse_event(event)
         output = buf.getvalue()
         assert "hidden thought" not in output
@@ -72,7 +72,7 @@ class TestStreamingDisplay:
         display = StreamingDisplay(console)
         event = SSEEvent(
             event="tool_call",
-            data={"name": "bash", "arguments": {"command": "echo hello"}},
+            data={"tool_name": "bash", "arguments": {"command": "echo hello"}},
         )
         display.handle_sse_event(event)
         output = buf.getvalue()
@@ -86,7 +86,7 @@ class TestStreamingDisplay:
         long_value = "x" * 300
         event = SSEEvent(
             event="tool_call",
-            data={"name": "write_file", "arguments": {"content": long_value}},
+            data={"tool_name": "write_file", "arguments": {"content": long_value}},
         )
         display.handle_sse_event(event)
         output = buf.getvalue()
@@ -101,7 +101,7 @@ class TestStreamingDisplay:
         # 12 arguments, only 10 should appear
         args = {f"arg{i}": f"value{i}" for i in range(12)}
         event = SSEEvent(
-            event="tool_call", data={"name": "multi_arg", "arguments": args}
+            event="tool_call", data={"tool_name": "multi_arg", "arguments": args}
         )
         display.handle_sse_event(event)
         output = buf.getvalue()
@@ -118,7 +118,7 @@ class TestStreamingDisplay:
         display = StreamingDisplay(console)
         event = SSEEvent(
             event="tool_result",
-            data={"name": "bash", "success": True, "output": "hello from bash"},
+            data={"tool_name": "bash", "success": True, "output": "hello from bash"},
         )
         display.handle_sse_event(event)
         output = buf.getvalue()
@@ -132,7 +132,7 @@ class TestStreamingDisplay:
         event = SSEEvent(
             event="tool_result",
             data={
-                "name": "bash",
+                "tool_name": "bash",
                 "success": False,
                 "output": "error: command not found",
             },
@@ -150,7 +150,7 @@ class TestStreamingDisplay:
         lines = [f"line{i}: " + "a" * 242 for i in range(12)]
         event = SSEEvent(
             event="tool_result",
-            data={"name": "bash", "success": True, "output": "\n".join(lines)},
+            data={"tool_name": "bash", "success": True, "output": "\n".join(lines)},
         )
         display.handle_sse_event(event)
         output = buf.getvalue()
@@ -171,13 +171,34 @@ class TestStreamingDisplay:
         assert display.response == "the final answer"
 
     def test_handle_error_event(self) -> None:
-        """_handle_error prints a red error message."""
+        """_handle_error prints a red error message (orchestrator 'error' field)."""
         console, buf = make_console()
         display = StreamingDisplay(console)
-        event = SSEEvent(event="error", data={"message": "something went wrong"})
+        event = SSEEvent(event="error", data={"error": "something went wrong"})
         display.handle_sse_event(event)
         output = buf.getvalue()
         assert "something went wrong" in output
+
+    def test_handle_error_event_structured_error_dict(self) -> None:
+        """_handle_error handles structured error dicts with 'type' and 'msg' keys."""
+        console, buf = make_console()
+        display = StreamingDisplay(console)
+        event = SSEEvent(
+            event="error",
+            data={"error": {"type": "ToolExecutionError", "msg": "bash failed"}},
+        )
+        display.handle_sse_event(event)
+        output = buf.getvalue()
+        assert "bash failed" in output
+
+    def test_handle_error_event_session_service_compat(self) -> None:
+        """_handle_error accepts legacy session-service {'message': ...} format."""
+        console, buf = make_console()
+        display = StreamingDisplay(console)
+        event = SSEEvent(event="error", data={"message": "session service error"})
+        display.handle_sse_event(event)
+        output = buf.getvalue()
+        assert "session service error" in output
 
     def test_handle_todo_update(self) -> None:
         """_handle_todo_update renders individual todo items when count <= 7."""

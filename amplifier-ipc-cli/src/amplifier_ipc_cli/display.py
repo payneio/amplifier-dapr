@@ -111,7 +111,7 @@ class StreamingDisplay:
         """Print thinking text inline in 'cyan dim' style (skipped when show_thinking=False)."""
         if not self._show_thinking:
             return
-        text = data.get("text", "") if isinstance(data, dict) else str(data)
+        text = data.get("thinking", "") if isinstance(data, dict) else str(data)
         self._console.print(text, end="", style="cyan dim", markup=False)
 
     def _handle_content_block_start(self, data: Any) -> None:
@@ -135,7 +135,7 @@ class StreamingDisplay:
 
     def _handle_tool_call_start(self, data: Any) -> None:
         """Print tool name dimly to signal the start of a tool call."""
-        name = data.get("name", "") if isinstance(data, dict) else str(data)
+        name = data.get("tool_name", "") if isinstance(data, dict) else str(data)
         self._safe_print(f"\n[dim]\U0001f527 {name}[/dim]")
         self._saw_tool_call_start = True
 
@@ -147,7 +147,7 @@ class StreamingDisplay:
         """
         if not isinstance(data, dict):
             return
-        name = data.get("name", "")
+        name = data.get("tool_name", "")
         arguments = data.get("arguments", {})
 
         if not self._saw_tool_call_start:
@@ -175,7 +175,7 @@ class StreamingDisplay:
             return
         success = data.get("success", True)
         output = data.get("output", "")
-        name = data.get("name", "")
+        name = data.get("tool_name", "")
 
         if success:
             icon = "\u2705"  # ✅
@@ -345,10 +345,26 @@ class StreamingDisplay:
         """No-op: child session end is handled silently."""
 
     def _handle_error(self, data: Any) -> None:
-        """Print a red error message with ✗ icon."""
-        message = (
-            data.get("message", str(data)) if isinstance(data, dict) else str(data)
-        )
+        """Print a red error message with ✗ icon.
+
+        Accepts two formats:
+        - Orchestrator format: {"error": "..."} or {"error": {"type": str, "msg": str}}
+        - Session-service format (legacy): {"message": "..."}
+        """
+        if isinstance(data, dict):
+            error = data.get("error")
+            if error is not None:
+                # Orchestrator format: prefer "error" field
+                if isinstance(error, dict):
+                    # Structured error: {"type": str, "msg": str}
+                    message = error.get("msg", str(error))
+                else:
+                    message = str(error)
+            else:
+                # Legacy session-service format: fall back to "message"
+                message = str(data.get("message", str(data)))
+        else:
+            message = str(data)
         self._console.print(f"  \u2717 {message}", style="red", markup=False)
 
     def _handle_complete(self, data: Any) -> None:
