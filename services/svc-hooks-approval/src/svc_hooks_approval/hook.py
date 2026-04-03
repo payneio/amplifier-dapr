@@ -21,8 +21,9 @@ _DANGEROUS_BASH_PATTERNS: list[re.Pattern[str]] = [
     re.compile(r"\bmkfs\b"),
     # dd writing to a raw device (of=/dev/…)
     re.compile(r"\bdd\b.*\bof=/dev/"),
-    # chmod 777 on root (root-only: matches "chmod 777 /" but not subdirectory variants
-    # like "chmod 777 /etc" — narrowness is intentional per spec)
+    # chmod 777 on any absolute path — matches "chmod 777 /", "chmod 777 /etc",
+    # "chmod 777 /home/user", etc.  The spec targets "/"; the regex is intentionally
+    # broader, flagging world-writable permissions on any system directory.
     re.compile(r"chmod\s+777\s+/"),
     # fork-bomb pattern  :(){:|:&};:
     re.compile(r":\(\)\s*\{.*:\s*\|.*:&"),
