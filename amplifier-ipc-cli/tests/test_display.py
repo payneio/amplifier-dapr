@@ -676,31 +676,99 @@ class TestDelegateEventHandlers:
             f"Expected ❌ in output for failed delegate:agent_completed, got: {output!r}"
         )
 
-    def test_backward_compat_child_session_start_dispatches(self) -> None:
-        """child_session_start still dispatches via backward-compat alias."""
+
+# ---------------------------------------------------------------------------
+# Tests for delegate:* forwarded child events (task-6e)
+# ---------------------------------------------------------------------------
+
+
+class TestDelegationEvents:
+    """Tests for delegate:agent_spawned / agent_completed / agent_resumed / error handlers.
+
+    These tests use the ``agent`` field (the canonical field name for forwarded
+    child events) rather than the legacy ``name`` field.
+    """
+
+    def test_delegate_agent_spawned_shows_agent_name(self) -> None:
+        """delegate:agent_spawned with {agent, instruction, depth} shows agent name and 'delegate'."""
         console, buf = make_console()
         display = StreamingDisplay(console)
         event = SSEEvent(
-            event="child_session_start", data={"name": "old-agent", "depth": 1}
+            event="delegate:agent_spawned",
+            data={
+                "agent": "foundation:explorer",
+                "instruction": "explore the code",
+                "depth": 1,
+            },
         )
         display.handle_sse_event(event)
         output = buf.getvalue()
-        # Should produce output (not silently ignored) with agent name
-        assert "old-agent" in output, (
-            f"Expected child_session_start alias to print agent name, got: {output!r}"
+        assert "foundation:explorer" in output, (
+            f"Expected agent name 'foundation:explorer' in output, got: {output!r}"
+        )
+        assert "delegate" in output, f"Expected 'delegate' in output, got: {output!r}"
+
+    def test_delegate_agent_completed_shows_success(self) -> None:
+        """delegate:agent_completed with success=True shows agent name and ✅."""
+        console, buf = make_console()
+        display = StreamingDisplay(console)
+        event = SSEEvent(
+            event="delegate:agent_completed",
+            data={"agent": "foundation:explorer", "success": True},
+        )
+        display.handle_sse_event(event)
+        output = buf.getvalue()
+        assert "foundation:explorer" in output, (
+            f"Expected agent name in output, got: {output!r}"
+        )
+        assert "\u2705" in output, (
+            f"Expected ✅ in output for success=True, got: {output!r}"
         )
 
-    def test_backward_compat_child_session_end_dispatches_no_error(self) -> None:
-        """child_session_end still dispatches via backward-compat alias without error."""
+    def test_delegate_agent_completed_failure_shows_cross(self) -> None:
+        """delegate:agent_completed with success=False shows ❌."""
         console, buf = make_console()
         display = StreamingDisplay(console)
         event = SSEEvent(
-            event="child_session_end", data={"success": True, "name": "old-agent"}
+            event="delegate:agent_completed",
+            data={"agent": "foundation:explorer", "success": False},
         )
-        # Should not raise
         display.handle_sse_event(event)
-        # Should produce some output (✅ or similar)
         output = buf.getvalue()
-        assert "\u2705" in output, (
-            f"Expected ✅ via child_session_end alias, got: {output!r}"
+        assert "\u274c" in output, (
+            f"Expected ❌ in output for success=False, got: {output!r}"
+        )
+
+    def test_delegate_error_shows_error(self) -> None:
+        """delegate:error with {error, agent} shows the error text."""
+        console, buf = make_console()
+        display = StreamingDisplay(console)
+        event = SSEEvent(
+            event="delegate:error",
+            data={
+                "error": "delegation failed: timeout",
+                "agent": "foundation:explorer",
+            },
+        )
+        display.handle_sse_event(event)
+        output = buf.getvalue()
+        assert "delegation failed: timeout" in output, (
+            f"Expected error text in output, got: {output!r}"
+        )
+
+    def test_delegate_agent_resumed_shows_resumption_header(self) -> None:
+        """delegate:agent_resumed with {agent, session_id} shows 🔄 and agent name."""
+        console, buf = make_console()
+        display = StreamingDisplay(console)
+        event = SSEEvent(
+            event="delegate:agent_resumed",
+            data={"agent": "foundation:explorer", "session_id": "abc-123"},
+        )
+        display.handle_sse_event(event)
+        output = buf.getvalue()
+        assert "\U0001f504" in output, (
+            f"Expected 🔄 icon in output for delegate:agent_resumed, got: {output!r}"
+        )
+        assert "foundation:explorer" in output, (
+            f"Expected agent name in output, got: {output!r}"
         )

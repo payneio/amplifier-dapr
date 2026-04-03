@@ -354,7 +354,8 @@ class StreamingDisplay:
         if not isinstance(data, dict):
             return
         depth = data.get("depth", 0)
-        name = data.get("name", "sub-agent")
+        # Prefer "agent" field (forwarded child events); fall back to legacy "name".
+        name = data.get("agent") or data.get("name", "sub-agent")
         indent = _NESTING_INDENT * (depth - 1) if depth > 0 else ""
         self._safe_print(
             f"{indent}\U0001f527 delegate -> [bold cyan]{name}[/bold cyan]"
@@ -365,7 +366,8 @@ class StreamingDisplay:
         if not isinstance(data, dict):
             return
         success = data.get("success", True)
-        name = data.get("name", "sub-agent")
+        # Prefer "agent" field (forwarded child events); fall back to legacy "name".
+        name = data.get("agent") or data.get("name", "sub-agent")
         if success:
             icon = "\u2705"  # ✅
             style = "green"
@@ -374,9 +376,25 @@ class StreamingDisplay:
             style = "red"
         self._console.print(f"  {icon} {name}", style=style, markup=False)
 
-    # Backward-compat aliases: old child_session_* event names still dispatch correctly.
-    _handle_child_session_start = _handle_delegate_agent_spawned
-    _handle_child_session_end = _handle_delegate_agent_completed
+    def _handle_delegate_agent_resumed(self, data: Any) -> None:
+        """Print a 🔄 resumption header with agent name and session_id."""
+        if not isinstance(data, dict):
+            return
+        agent = data.get("agent") or data.get("name", "sub-agent")
+        session_id = data.get("session_id", "")
+        self._safe_print(
+            f"\U0001f504 resume -> [bold cyan]{agent}[/bold cyan]"
+            + (f" [dim]({session_id})[/dim]" if session_id else "")
+        )
+
+    def _handle_delegate_error(self, data: Any) -> None:
+        """Print ✗ error with agent prefix in red style."""
+        if not isinstance(data, dict):
+            return
+        agent = data.get("agent") or data.get("name", "")
+        error = data.get("error", str(data))
+        prefix = f"[{agent}] " if agent else ""
+        self._console.print(f"  \u2717 {prefix}{error}", style="red", markup=False)
 
     def _handle_error(self, data: Any) -> None:
         """Print a red error message with ✗ icon.
