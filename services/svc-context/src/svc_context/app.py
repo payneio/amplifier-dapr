@@ -83,6 +83,7 @@ def create_context_app() -> FastAPI:
         If a system message already exists at position 0, it is replaced.
         Otherwise, a new system message is prepended to the session.
         """
+        # NOTE: _get_session returns a mutable reference; mutation is intentional.
         session = manager._get_session(session_id)
         system_message = Message(role="system", content=request.content)
         if session and session[0].role == "system":
