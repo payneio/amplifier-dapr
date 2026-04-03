@@ -385,7 +385,7 @@ class Orchestrator:
                                 {
                                     "agent": args.get("agent", ""),
                                     "instruction": args.get("instruction", ""),
-                                    "depth": 1,
+                                    "depth": 1,  # depth tracking for nested delegation is a future concern
                                 }
                             ),
                         }
