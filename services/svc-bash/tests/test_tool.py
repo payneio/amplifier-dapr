@@ -110,6 +110,31 @@ class TestBashTool:
         assert result.error is not None
         assert "unreachable" in result.error["message"]
 
+    @pytest.mark.asyncio
+    async def test_execute_forwards_run_in_background(self, tool: BashTool) -> None:
+        """execute() forwards run_in_background=True and returns pid from machine response."""
+        mock_result: dict[str, Any] = {"pid": 12345, "status": "running"}
+        mock_exec = AsyncMock(return_value=mock_result)
+        with patch.object(tool, "_call_machine_exec", new=mock_exec):
+            result = await tool.execute({"command": "sleep 60", "run_in_background": True})
+
+        assert result.success is True
+        assert result.output is not None
+        assert result.output["pid"] == 12345
+        mock_exec.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_schema_has_run_in_background(self, tool: BashTool) -> None:
+        """input_schema must declare run_in_background as a boolean property."""
+        assert "run_in_background" in tool.input_schema["properties"]
+        assert tool.input_schema["properties"]["run_in_background"]["type"] == "boolean"
+
+    @pytest.mark.asyncio
+    async def test_metadata_includes_approval_info(self, tool: BashTool) -> None:
+        """get_metadata() returns approval and risk metadata."""
+        metadata = tool.get_metadata()
+        assert metadata == {"requires_approval": True, "risk_level": "high"}
+
 
 class TestBashApp:
     """Tests for the bash FastAPI application."""
