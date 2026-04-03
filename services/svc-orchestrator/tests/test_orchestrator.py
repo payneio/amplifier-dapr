@@ -1069,10 +1069,8 @@ class TestOrchestratorProviderRequestHook:
                 return {
                     "action": "INJECT_CONTEXT",
                     "reason": None,
-                    "data": {
-                        "context_injection": "INJECTED_CONTEXT",
-                        "ephemeral": True,
-                    },
+                    "context_injection": "INJECTED_CONTEXT",
+                    "ephemeral": True,
                 }
 
             if app_id == "svc-provider-mock" and "complete" in method:

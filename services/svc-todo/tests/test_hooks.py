@@ -45,9 +45,9 @@ class TestTodoReminderHook:
         ):
             result = await hook.handle("provider:request", {"session_id": "abc"})
         assert result.action == "INJECT_CONTEXT"
-        assert result.data is not None
-        assert result.data["ephemeral"] is True
-        content = result.data["content"]
+        assert result.context_injection is not None
+        assert result.ephemeral is True
+        content = result.context_injection
         assert 'source="hooks-todo-reminder"' in content
         assert "DO NOT mention this reminder" in content
 
@@ -75,8 +75,8 @@ class TestTodoReminderHook:
         ):
             result = await hook.handle("provider:request", {"session_id": "abc"})
         assert result.action == "INJECT_CONTEXT"
-        assert result.data is not None
-        content = result.data["content"]
+        assert result.context_injection is not None
+        content = result.context_injection
         assert "✓ Done task" in content
         assert "→ Working on active" in content
         assert "☐ Pending task" in content

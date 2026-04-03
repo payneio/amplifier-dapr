@@ -59,8 +59,8 @@ class TestTodoReminderHook:
             result = await hook.handle("provider:request", {"session_id": "sess-1"})
 
         assert result.action == "INJECT_CONTEXT"
-        assert result.data is not None
-        content = result.data["content"]
+        assert result.context_injection is not None
+        content = result.context_injection
         assert 'source="hooks-todo-reminder"' in content
         assert "✓" in content
         assert "→" in content
@@ -82,8 +82,8 @@ class TestTodoReminderHook:
         ):
             result = await hook.handle("provider:request", {"session_id": "sess-1"})
 
-        assert result.data is not None
-        content = result.data["content"]
+        assert result.context_injection is not None
+        content = result.context_injection
         assert "Write tests" in content
         assert "Writing tests" not in content
 
@@ -103,8 +103,8 @@ class TestTodoReminderHook:
         ):
             result = await hook.handle("provider:request", {"session_id": "sess-1"})
 
-        assert result.data is not None
-        content = result.data["content"]
+        assert result.context_injection is not None
+        content = result.context_injection
         assert "Implementing hook" in content
 
     async def test_read_state_called_with_session_id(
@@ -153,9 +153,9 @@ class TestTodoReminderHook:
         ):
             result = await hook.handle("provider:request", {"session_id": "sess-1"})
 
-        assert result.data is not None
-        assert result.data["ephemeral"] is True
-        content = result.data["content"]
+        assert result.context_injection is not None
+        assert result.ephemeral is True
+        content = result.context_injection
         assert '<system-reminder source="hooks-todo-reminder">' in content
         assert "</system-reminder>" in content
         assert "DO NOT mention this reminder" in content

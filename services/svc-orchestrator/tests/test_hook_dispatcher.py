@@ -112,12 +112,12 @@ class TestHookDispatcherPreHook:
         dapr.invoke.side_effect = [  # type: ignore[union-attr]
             {
                 "action": "INJECT_CONTEXT",
-                "data": {"context_injection": "first context"},
+                "context_injection": "first context",
                 "reason": None,
             },
             {
                 "action": "INJECT_CONTEXT",
-                "data": {"context_injection": "second context"},
+                "context_injection": "second context",
                 "reason": None,
             },
         ]
@@ -128,9 +128,8 @@ class TestHookDispatcherPreHook:
         result = await dispatcher.dispatch_pre("request:pre", {}, routing)
 
         assert result.action == "INJECT_CONTEXT"
-        assert result.data is not None
-        assert result.data["context_injection"] == "first context\n\nsecond context"
-        assert result.data["ephemeral"] is True
+        assert result.context_injection == "first context\n\nsecond context"
+        assert result.ephemeral is True
 
 
 # ---------------------------------------------------------------------------

@@ -58,6 +58,9 @@ class HookResult(BaseModel):
     action: str = "CONTINUE"
     data: dict[str, Any] | None = None
     reason: str | None = None
+    context_injection: str | None = None
+    context_injection_role: str = "system"
+    ephemeral: bool = False
 
 
 class ProviderRequest(BaseModel):

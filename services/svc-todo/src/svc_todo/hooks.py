@@ -83,7 +83,9 @@ class TodoReminderHook:
             f"</system-reminder>"
         )
         return HookResult(
-            action="INJECT_CONTEXT", data={"content": content, "ephemeral": True}
+            action="INJECT_CONTEXT",
+            context_injection=content,
+            ephemeral=True,
         )
 
 

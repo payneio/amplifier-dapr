@@ -123,7 +123,7 @@ class Orchestrator:
             )
             effective_system = system_prompt
             if pre_result.action == "INJECT_CONTEXT":
-                injection = (pre_result.data or {}).get("context_injection", "")
+                injection = pre_result.context_injection or ""
                 if injection:
                     effective_system = f"{injection}\n\n{system_prompt}"
 
@@ -280,7 +280,7 @@ class Orchestrator:
                 )
                 effective_system = system_prompt
                 if pre_result.action == "INJECT_CONTEXT":
-                    injection = (pre_result.data or {}).get("context_injection", "")
+                    injection = pre_result.context_injection or ""
                     if injection:
                         effective_system = f"{injection}\n\n{system_prompt}"
 

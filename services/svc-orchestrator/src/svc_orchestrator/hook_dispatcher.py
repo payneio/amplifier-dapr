@@ -50,8 +50,8 @@ class HookDispatcher:
             - ``CONTINUE`` — all hooks approved (or no hooks registered).
             - ``DENY``     — a hook blocked the request.
             - ``INJECT_CONTEXT`` — one or more hooks injected additional context;
-              the combined context is in ``result.data["context_injection"]`` and
-              ``result.data["ephemeral"]`` is ``True``.
+              the combined context is in ``result.context_injection`` and
+              ``result.ephemeral`` is ``True``.
         """
         hook_services: list[str] = routing_table.hooks.get(event, [])
 
@@ -86,7 +86,7 @@ class HookDispatcher:
                 return hook_result
 
             if hook_result.action == "INJECT_CONTEXT":
-                injection = (hook_result.data or {}).get("context_injection", "")
+                injection = hook_result.context_injection or ""
                 if injection:
                     context_injections.append(
                         str(injection)
@@ -95,10 +95,8 @@ class HookDispatcher:
         if context_injections:
             return HookResult(
                 action="INJECT_CONTEXT",
-                data={
-                    "context_injection": "\n\n".join(context_injections),
-                    "ephemeral": True,
-                },
+                context_injection="\n\n".join(context_injections),
+                ephemeral=True,
             )
 
         return HookResult(action="CONTINUE")
