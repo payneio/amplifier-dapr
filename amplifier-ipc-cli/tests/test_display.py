@@ -278,6 +278,8 @@ class TestStreamingDisplay:
         display.handle_sse_event(event)
         output = buf.getvalue()
         assert "3/8" in output
+        assert "\u2588" in output  # at least one filled segment
+        assert "\u2591" in output  # at least one empty segment
 
     def test_handle_todo_update_empty_list_no_output(self) -> None:
         """Empty todos list produces no output at all."""

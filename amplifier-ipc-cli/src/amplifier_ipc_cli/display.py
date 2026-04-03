@@ -22,6 +22,10 @@ _DEFAULT_TOOL_ARGS_COUNT = 10
 _DEFAULT_TOOL_RESULT_LINES = 10
 _DEFAULT_TOOL_RESULT_LINE_LEN = 200
 
+_TODO_BAR_WIDTH = 20
+_TODO_FULL_MODE_THRESHOLD = 7
+_TODO_PANEL_MAX_WIDTH = 60
+
 # Indentation applied per child-session nesting level.
 _NESTING_INDENT = "    "  # 4 spaces
 
@@ -208,13 +212,11 @@ class StreamingDisplay:
         in_progress_count = sum(1 for t in todos if t.get("status") == "in_progress")
         pending_count = sum(1 for t in todos if t.get("status") == "pending")
 
-        bar_width = 20
-        full_mode_threshold = 7
-        panel_width = min(self._console.width, 60)
+        panel_width = min(self._console.width, _TODO_PANEL_MAX_WIDTH)
 
         content = Text()
 
-        if total <= full_mode_threshold:
+        if total <= _TODO_FULL_MODE_THRESHOLD:
             # Full mode: one line per item with color-coded symbol
             for i, todo in enumerate(todos):
                 status = todo.get("status", "pending")
@@ -243,8 +245,8 @@ class StreamingDisplay:
             content.append(f" {pending_count}", style="dim")
 
         # Progress bar
-        filled = int(bar_width * completed_count / total) if total > 0 else 0
-        empty = bar_width - filled
+        filled = int(_TODO_BAR_WIDTH * completed_count / total) if total > 0 else 0
+        empty = _TODO_BAR_WIDTH - filled
         content.append("\n")
         content.append("\u2588" * filled, style="green")  # █ filled
         content.append("\u2591" * empty, style="dim")  # ░ empty
