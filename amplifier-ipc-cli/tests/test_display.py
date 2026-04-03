@@ -583,3 +583,124 @@ class TestContentBlockEvents:
         assert "\u255a" in output, (
             f"Expected bottom-border \\u255a in output, got: {output!r}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Tests for delegate:* event handlers (task-6a)
+# ---------------------------------------------------------------------------
+
+
+class TestDelegateEventHandlers:
+    """Tests for the delegate:agent_spawned / delegate:agent_completed handlers."""
+
+    def test_delegate_agent_spawned_prints_wrench_icon(self) -> None:
+        """delegate:agent_spawned event prints 🔧 icon."""
+        console, buf = make_console()
+        display = StreamingDisplay(console)
+        event = SSEEvent(
+            event="delegate:agent_spawned", data={"name": "my-agent", "depth": 1}
+        )
+        display.handle_sse_event(event)
+        output = buf.getvalue()
+        assert "\U0001f527" in output, (
+            f"Expected 🔧 icon in output for delegate:agent_spawned, got: {output!r}"
+        )
+
+    def test_delegate_agent_spawned_prints_agent_name(self) -> None:
+        """delegate:agent_spawned event prints the agent name."""
+        console, buf = make_console()
+        display = StreamingDisplay(console)
+        event = SSEEvent(
+            event="delegate:agent_spawned", data={"name": "explorer-agent", "depth": 1}
+        )
+        display.handle_sse_event(event)
+        output = buf.getvalue()
+        assert "explorer-agent" in output, (
+            f"Expected agent name in output, got: {output!r}"
+        )
+
+    def test_delegate_agent_spawned_indented_by_depth(self) -> None:
+        """delegate:agent_spawned event indents by (depth - 1) levels."""
+        console, buf = make_console()
+        display = StreamingDisplay(console)
+        event = SSEEvent(
+            event="delegate:agent_spawned", data={"name": "deep-agent", "depth": 2}
+        )
+        display.handle_sse_event(event)
+        output = buf.getvalue()
+        # depth=2 means (2-1)=1 level of indent (4 spaces)
+        assert "    " in output, (
+            f"Expected indentation (4 spaces) at depth=2, got: {output!r}"
+        )
+
+    def test_delegate_agent_spawned_no_indent_at_depth_one(self) -> None:
+        """delegate:agent_spawned at depth=1 has no leading indentation."""
+        console, buf = make_console()
+        display = StreamingDisplay(console)
+        event = SSEEvent(
+            event="delegate:agent_spawned", data={"name": "top-level", "depth": 1}
+        )
+        display.handle_sse_event(event)
+        output = buf.getvalue()
+        # At depth=1 the line should start with 🔧, not indented spaces
+        first_line = output.splitlines()[0] if output.splitlines() else ""
+        assert not first_line.startswith("    "), (
+            f"Expected no leading indent at depth=1, got: {first_line!r}"
+        )
+
+    def test_delegate_agent_completed_success_shows_checkmark(self) -> None:
+        """delegate:agent_completed with success=True prints ✅."""
+        console, buf = make_console()
+        display = StreamingDisplay(console)
+        event = SSEEvent(
+            event="delegate:agent_completed",
+            data={"name": "my-agent", "success": True},
+        )
+        display.handle_sse_event(event)
+        output = buf.getvalue()
+        assert "\u2705" in output, (
+            f"Expected ✅ in output for successful delegate:agent_completed, got: {output!r}"
+        )
+
+    def test_delegate_agent_completed_failure_shows_cross(self) -> None:
+        """delegate:agent_completed with success=False prints ❌."""
+        console, buf = make_console()
+        display = StreamingDisplay(console)
+        event = SSEEvent(
+            event="delegate:agent_completed",
+            data={"name": "my-agent", "success": False},
+        )
+        display.handle_sse_event(event)
+        output = buf.getvalue()
+        assert "\u274c" in output, (
+            f"Expected ❌ in output for failed delegate:agent_completed, got: {output!r}"
+        )
+
+    def test_backward_compat_child_session_start_dispatches(self) -> None:
+        """child_session_start still dispatches via backward-compat alias."""
+        console, buf = make_console()
+        display = StreamingDisplay(console)
+        event = SSEEvent(
+            event="child_session_start", data={"name": "old-agent", "depth": 1}
+        )
+        display.handle_sse_event(event)
+        output = buf.getvalue()
+        # Should produce output (not silently ignored) with agent name
+        assert "old-agent" in output, (
+            f"Expected child_session_start alias to print agent name, got: {output!r}"
+        )
+
+    def test_backward_compat_child_session_end_dispatches_no_error(self) -> None:
+        """child_session_end still dispatches via backward-compat alias without error."""
+        console, buf = make_console()
+        display = StreamingDisplay(console)
+        event = SSEEvent(
+            event="child_session_end", data={"success": True, "name": "old-agent"}
+        )
+        # Should not raise
+        display.handle_sse_event(event)
+        # Should produce some output (✅ or similar)
+        output = buf.getvalue()
+        assert "\u2705" in output, (
+            f"Expected ✅ via child_session_end alias, got: {output!r}"
+        )

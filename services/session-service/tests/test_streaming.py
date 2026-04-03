@@ -18,8 +18,10 @@ class TestStreamEventType:
             "tool_call",
             "tool_result",
             "todo_update",
-            "child_session_start",
-            "child_session_end",
+            "delegate:agent_spawned",
+            "delegate:agent_completed",
+            "delegate:agent_resumed",
+            "delegate:error",
             "content_block:start",
             "content_block:end",
             "content_block:delta",
@@ -33,6 +35,27 @@ class TestStreamEventType:
             assert event_type in defined_values, (
                 f"StreamEventType missing required value: {event_type}"
             )
+
+    def test_child_session_events_removed_from_enum(self) -> None:
+        """child_session_start and child_session_end must not be in StreamEventType."""
+        from session_service.streaming import StreamEventType  # noqa: PLC0415
+
+        defined_values = {e.value for e in StreamEventType}
+        assert "child_session_start" not in defined_values, (
+            "StreamEventType should not contain the removed 'child_session_start' value"
+        )
+        assert "child_session_end" not in defined_values, (
+            "StreamEventType should not contain the removed 'child_session_end' value"
+        )
+
+    def test_delegate_event_types_have_correct_values(self) -> None:
+        """Delegate event types have the correct string values."""
+        from session_service.streaming import StreamEventType  # noqa: PLC0415
+
+        assert StreamEventType.delegate_agent_spawned.value == "delegate:agent_spawned"
+        assert StreamEventType.delegate_agent_completed.value == "delegate:agent_completed"
+        assert StreamEventType.delegate_agent_resumed.value == "delegate:agent_resumed"
+        assert StreamEventType.delegate_error.value == "delegate:error"
 
     def test_thinking_removed_from_enum(self) -> None:
         """The legacy 'thinking' value must no longer be in StreamEventType."""

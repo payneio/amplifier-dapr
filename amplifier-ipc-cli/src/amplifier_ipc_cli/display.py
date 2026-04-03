@@ -349,7 +349,7 @@ class StreamingDisplay:
 
         self._console.print(bottom_border, markup=False)
 
-    def _handle_child_session_start(self, data: Any) -> None:
+    def _handle_delegate_agent_spawned(self, data: Any) -> None:
         """Print a 🔧 delegation header indented according to session depth."""
         if not isinstance(data, dict):
             return
@@ -360,24 +360,23 @@ class StreamingDisplay:
             f"{indent}\U0001f527 delegate -> [bold cyan]{name}[/bold cyan]"
         )
 
-    def _handle_child_session_event(self, data: Any) -> None:
-        """Recursively render a nested child session event.
-
-        If the payload contains an inner ``event`` and ``data`` pair the event
-        is dispatched back through :meth:`handle_sse_event` so every inner
-        event type is rendered with the same handlers.
-        """
+    def _handle_delegate_agent_completed(self, data: Any) -> None:
+        """Print ✅ or ❌ based on success status when a delegate agent completes."""
         if not isinstance(data, dict):
             return
-        inner_event = data.get("event")
-        inner_data = data.get("data")
-        if inner_event is None:
-            return
-        nested = SSEEvent(event=inner_event, data=inner_data)
-        self.handle_sse_event(nested)
+        success = data.get("success", True)
+        name = data.get("name", "sub-agent")
+        if success:
+            icon = "\u2705"  # ✅
+            style = "green"
+        else:
+            icon = "\u274c"  # ❌
+            style = "red"
+        self._console.print(f"  {icon} {name}", style=style, markup=False)
 
-    def _handle_child_session_end(self, data: Any) -> None:
-        """No-op: child session end is handled silently."""
+    # Backward-compat aliases: old child_session_* event names still dispatch correctly.
+    _handle_child_session_start = _handle_delegate_agent_spawned
+    _handle_child_session_end = _handle_delegate_agent_completed
 
     def _handle_error(self, data: Any) -> None:
         """Print a red error message with ✗ icon.
