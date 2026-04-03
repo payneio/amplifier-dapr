@@ -144,12 +144,14 @@ class TestContextApp:
 
     def test_set_system_prompt_replaces_existing(self, client: TestClient) -> None:
         """POST system-prompt twice replaces the first system message, not appends."""
-        client.post(
+        r1 = client.post(
             f"/context/{SESSION_ID}/system-prompt", json={"content": "First prompt."}
         )
-        client.post(
+        assert r1.status_code == 200
+        r2 = client.post(
             f"/context/{SESSION_ID}/system-prompt", json={"content": "Second prompt."}
         )
+        assert r2.status_code == 200
 
         data = client.get(f"/context/{SESSION_ID}/messages").json()
         # Should still be exactly one system message
