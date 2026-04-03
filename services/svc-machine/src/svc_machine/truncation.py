@@ -2,7 +2,31 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
+
 _DEFAULT_MAX_BYTES = 100_000
+
+
+def _collect_lines(lines: Iterable[str], budget: int) -> list[str]:
+    """Accumulate lines from *lines* until adding the next would exceed *budget* bytes.
+
+    Args:
+        lines: Source of lines to consume (forward or reversed iterator).
+        budget: Maximum byte ceiling; each line is counted as its UTF-8 length
+                plus one for the ``"\\n"`` separator.
+
+    Returns:
+        The collected lines in the order they were yielded from *lines*.
+    """
+    collected: list[str] = []
+    used = 0
+    for line in lines:
+        line_bytes = len(line.encode("utf-8")) + 1  # +1 for the "\n" separator
+        if used + line_bytes > budget:
+            break
+        collected.append(line)
+        used += line_bytes
+    return collected
 
 
 def truncate_output(text: str, max_bytes: int = _DEFAULT_MAX_BYTES) -> tuple[str, bool]:
@@ -25,25 +49,9 @@ def truncate_output(text: str, max_bytes: int = _DEFAULT_MAX_BYTES) -> tuple[str
 
     lines = text.split("\n")
 
-    # --- head: collect lines until head_budget exceeded ---
-    head_lines: list[str] = []
-    head_bytes = 0
-    for line in lines:
-        line_bytes = len(line.encode("utf-8")) + 1  # +1 for the "\n" separator
-        if head_bytes + line_bytes > head_budget:
-            break
-        head_lines.append(line)
-        head_bytes += line_bytes
+    head_lines = _collect_lines(lines, head_budget)
 
-    # --- tail: collect lines from the end until tail_budget exceeded ---
-    tail_lines: list[str] = []
-    tail_bytes = 0
-    for line in reversed(lines):
-        line_bytes = len(line.encode("utf-8")) + 1  # +1 for the "\n" separator
-        if tail_bytes + line_bytes > tail_budget:
-            break
-        tail_lines.append(line)
-        tail_bytes += line_bytes
+    tail_lines = _collect_lines(reversed(lines), tail_budget)
     tail_lines.reverse()  # restore chronological order
 
     head_content = "\n".join(head_lines)
