@@ -36,8 +36,14 @@ class TestDelegateToolSchema:
             "context_turns",
             "model_role",
             "provider_preferences",
+            "delegation_depth",
         }
         assert expected.issubset(props.keys())
+
+    def test_delegation_depth_schema_type_is_integer(self) -> None:
+        """delegation_depth property must have type 'integer' in input_schema."""
+        prop = DelegateTool.input_schema["properties"]["delegation_depth"]
+        assert prop["type"] == "integer"
 
     def test_context_depth_enum(self) -> None:
         """context_depth property must have enum [none, recent, all]."""
@@ -292,6 +298,38 @@ class TestRecursionGuard:
         await tool.execute({"instruction": "do something"})
         payload = tool._call_orchestrator.call_args[0][0]
         assert payload["delegation_depth"] == 4
+
+    async def test_depth_from_input_triggers_guard_for_singleton_tool(self) -> None:
+        """delegation_depth in input dict must trigger the recursion guard even if the
+        singleton tool instance was created with depth=0 (production scenario)."""
+        # Simulate a singleton tool as created by create_delegation_app()
+        singleton_tool = DelegateTool(
+            orchestrator_base_url="http://orchestrator:8080",
+            delegation_depth=0,  # default — always 0 for singletons
+        )
+        # Orchestrator passes delegation_depth through the tool call input at runtime
+        result = await singleton_tool.execute(
+            {"instruction": "do something", "delegation_depth": MAX_DELEGATION_DEPTH}
+        )
+        assert result.success is False
+        assert result.error is not None
+        assert "maximum delegation depth" in result.error["message"].lower()
+
+    async def test_depth_from_input_incremented_in_payload(self) -> None:
+        """delegation_depth in the payload is incremented from the input dict value,
+        not the singleton's constructor value."""
+        singleton_tool = DelegateTool(
+            orchestrator_base_url="http://orchestrator:8080",
+            delegation_depth=0,  # singleton default
+        )
+        singleton_tool._call_orchestrator = AsyncMock(  # type: ignore[method-assign]
+            return_value=_MOCK_ORCH_RESPONSE
+        )
+        await singleton_tool.execute(
+            {"instruction": "do something", "delegation_depth": 7}
+        )
+        payload = singleton_tool._call_orchestrator.call_args[0][0]
+        assert payload["delegation_depth"] == 8
 
 
 class TestSessionResumption:

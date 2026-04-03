@@ -40,7 +40,7 @@ def create_delegation_app(
     if session_service_base_url is None:
         dapr_port = os.environ.get("DAPR_HTTP_PORT", "3500")
         session_service_base_url = (
-            f"http://localhost:{dapr_port}/v1.0/invoke/svc-session/method"
+            f"http://localhost:{dapr_port}/v1.0/invoke/session-service/method"
         )
 
     tool = DelegateTool(

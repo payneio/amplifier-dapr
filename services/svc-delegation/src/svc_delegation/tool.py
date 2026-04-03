@@ -71,6 +71,13 @@ class DelegateTool:
                 },
                 "description": "Ordered list of provider/model preferences.",
             },
+            "delegation_depth": {
+                "type": "integer",
+                "description": (
+                    "Current nesting depth of the delegation chain. "
+                    "Set by the orchestrator; used to enforce the recursion guard."
+                ),
+            },
         },
         "required": ["instruction"],
     }
@@ -115,7 +122,11 @@ class DelegateTool:
                 error={"message": "Missing required field: instruction"},
             )
 
-        if self._delegation_depth >= MAX_DELEGATION_DEPTH:
+        # Read current depth from the tool-call input if provided (production path where
+        # the orchestrator passes it through the payload) or fall back to the instance
+        # default (test / direct-construction path).
+        current_depth = input.get("delegation_depth", self._delegation_depth)
+        if current_depth >= MAX_DELEGATION_DEPTH:
             return ToolResult(
                 success=False,
                 error={
@@ -145,7 +156,7 @@ class DelegateTool:
 
         payload: dict[str, Any] = {
             "prompt": instruction,
-            "delegation_depth": self._delegation_depth + 1,
+            "delegation_depth": current_depth + 1,
         }
 
         if "agent" in input:

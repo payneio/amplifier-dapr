@@ -7,6 +7,45 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from svc_delegation.app import create_delegation_app
+from svc_delegation.tool import DelegateTool
+
+
+class TestDefaultURLs:
+    """Tests for the default service URLs used when no URLs are injected."""
+
+    def test_default_session_service_url_uses_correct_dapr_app_id(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Default session_service_base_url must use Dapr app-id 'session-service', not 'svc-session'."""
+        captured: dict[str, str] = {}
+
+        original_init = DelegateTool.__init__
+
+        def capturing_init(
+            self: DelegateTool,
+            orchestrator_base_url: str,
+            session_service_base_url: str | None = None,
+            parent_session_id: str = "",
+            delegation_depth: int = 0,
+        ) -> None:
+            captured["session_url"] = session_service_base_url or ""
+            original_init(
+                self,
+                orchestrator_base_url,
+                session_service_base_url,
+                parent_session_id,
+                delegation_depth,
+            )
+
+        monkeypatch.setattr(DelegateTool, "__init__", capturing_init)
+        create_delegation_app()
+
+        assert "session-service" in captured["session_url"], (
+            f"Expected Dapr app-id 'session-service' in URL, got: {captured['session_url']}"
+        )
+        assert "svc-session" not in captured["session_url"], (
+            f"Stale Dapr app-id 'svc-session' found in URL: {captured['session_url']}"
+        )
 
 
 class TestModuleLevelApp:
