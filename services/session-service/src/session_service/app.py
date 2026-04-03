@@ -201,20 +201,26 @@ def create_session_app(dapr_url: str | None = None) -> FastAPI:
         ).model_dump()
 
     @app.post("/sessions/{session_id}/turn/stream")
-    async def turn_stream(session_id: str, request: TurnRequest) -> EventSourceResponse:
-        """Execute a conversation turn and stream results as SSE events.
+    async def turn_stream_child(
+        session_id: str, request: TurnRequest
+    ) -> EventSourceResponse:
+        """Execute a child conversation turn and stream results as SSE events.
 
-        Relays SSE events from the orchestrator's streaming endpoint directly to
-        the CLI as they arrive.  The session-service acts as a transparent SSE
-        relay — it opens a streaming HTTP connection to
-        ``/orchestrator/execute/stream``, parses each event, and forwards it
-        immediately.  No buffering occurs until the final ``complete`` event,
-        at which point the transcript is saved before the event is forwarded.
+        Creates or resumes a child session and relays SSE events from the
+        orchestrator's streaming endpoint directly to the caller.  Unlike the
+        parent ``/sessions/{id}/turn`` endpoint, this endpoint does **not**
+        save the transcript or update session state — child sessions are
+        ephemeral and exist only for the duration of the delegated turn.
+
+        The session-service acts as a transparent SSE relay — it opens a
+        streaming HTTP connection to ``/orchestrator/turn/stream``, parses each
+        ``event:`` / ``data:`` line from the response, and forwards every event
+        verbatim without buffering.
         """
 
         async def event_generator() -> AsyncGenerator[dict[str, Any], None]:
             try:
-                # Create session if it doesn't exist
+                # Create session if it doesn't exist (resume if already present)
                 if session_id not in _sessions:
                     _sessions[session_id] = {"turn_count": 0, "status": "active"}
 
@@ -253,11 +259,11 @@ def create_session_app(dapr_url: str | None = None) -> FastAPI:
                     dapr_url=_dapr_url,
                 )
 
-                # Load existing transcript and append the new user message
-                transcript: list[Message] = await load_transcript(session_id, _dapr_url)
-                transcript.append(Message(role="user", content=request.prompt))
+                # Build the payload with the current message only.
+                # Child sessions do not load or persist transcript — each turn
+                # is ephemeral and self-contained.
+                messages: list[Message] = [Message(role="user", content=request.prompt)]
 
-                # Build the payload for the orchestrator streaming endpoint.
                 # NOTE: We call the orchestrator DIRECTLY (not through Dapr)
                 # because Dapr service invocation buffers the entire response
                 # before returning it, which defeats SSE streaming.
@@ -268,10 +274,10 @@ def create_session_app(dapr_url: str | None = None) -> FastAPI:
                 orch_direct_url = os.environ.get(
                     "ORCHESTRATOR_DIRECT_URL", f"http://{orchestrator_app_id}:8000"
                 )
-                stream_url = f"{orch_direct_url}/orchestrator/execute/stream"
+                stream_url = f"{orch_direct_url}/orchestrator/turn/stream"
                 payload: dict[str, Any] = {
                     "system_prompt": system_prompt,
-                    "messages": [m.model_dump() for m in transcript],
+                    "messages": [m.model_dump() for m in messages],
                     "config": {
                         "provider": provider_name,
                         "tools": routing_table_dict.get("_tool_specs", []),
@@ -282,7 +288,8 @@ def create_session_app(dapr_url: str | None = None) -> FastAPI:
 
                 # ---------------------------------------------------------------
                 # Open a streaming HTTP connection to the orchestrator and relay
-                # SSE events to the CLI as they arrive.
+                # SSE events to the caller as they arrive.  All events are
+                # forwarded verbatim — no state is persisted.
                 # ---------------------------------------------------------------
                 async with httpx.AsyncClient() as http_client:
                     async with http_client.stream(
@@ -300,61 +307,17 @@ def create_session_app(dapr_url: str | None = None) -> FastAPI:
                             elif line.startswith("data:"):
                                 current_data = line[5:].strip()
                             elif line == "":
-                                # Blank line marks the end of an SSE event block
+                                # Blank line marks the end of an SSE event block.
+                                # Forward all events verbatim — no transcript saving,
+                                # no session state updates.
                                 if (
                                     current_event is not None
                                     and current_data is not None
                                 ):
-                                    if current_event == "complete":
-                                        # On complete: persist transcript, enrich
-                                        # the event with session_id, then forward.
-                                        try:
-                                            orch_complete = json.loads(current_data)
-                                        except json.JSONDecodeError:
-                                            orch_complete = {}
-
-                                        result_text: str = orch_complete.get(
-                                            "result", ""
-                                        )
-                                        raw_msgs: list[dict[str, Any]] = (
-                                            orch_complete.get("messages", [])
-                                        )
-                                        final_messages = [
-                                            Message(**m) for m in raw_msgs
-                                        ]
-
-                                        # Save transcript
-                                        await save_transcript(
-                                            session_id, final_messages, _dapr_url
-                                        )
-
-                                        # Update session state
-                                        _sessions[session_id]["routing_table"] = (
-                                            routing_table_dict
-                                        )
-                                        _sessions[session_id]["turn_count"] += 1
-
-                                        yield {
-                                            "event": StreamEventType.complete.value,
-                                            "data": json.dumps(
-                                                {
-                                                    "session_id": session_id,
-                                                    "result": result_text,
-                                                    "messages": [
-                                                        m.model_dump()
-                                                        for m in final_messages
-                                                    ],
-                                                }
-                                            ),
-                                        }
-                                    else:
-                                        # All other events (token, thinking,
-                                        # tool_call_start, tool_call, tool_result,
-                                        # error) are forwarded verbatim.
-                                        yield {
-                                            "event": current_event,
-                                            "data": current_data,
-                                        }
+                                    yield {
+                                        "event": current_event,
+                                        "data": current_data,
+                                    }
 
                                 # Reset for next event block
                                 current_event = None
