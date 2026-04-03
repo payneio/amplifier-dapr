@@ -1,3 +1,8 @@
 name: svc-content-recipes
 version: '0.1.0'
 content_dir: content
+agents:
+  - name: recipe-author
+    description: Conversational recipe expert for creation, editing, validation, and debugging of Amplifier recipes
+  - name: result-validator
+    description: Objective pass/fail validation agent for recipes, workflows, and deployment outcomes
