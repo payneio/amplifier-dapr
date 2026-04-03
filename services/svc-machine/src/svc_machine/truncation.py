@@ -1,7 +1,5 @@
 """Output truncation with head/tail preservation."""
 
-from __future__ import annotations
-
 from collections.abc import Iterable
 
 _DEFAULT_MAX_BYTES = 100_000
@@ -39,6 +37,12 @@ def truncate_output(text: str, max_bytes: int = _DEFAULT_MAX_BYTES) -> tuple[str
     Returns:
         A ``(result, was_truncated)`` tuple. *was_truncated* is ``False`` when
         the original text fit within *max_bytes*; ``True`` otherwise.
+
+    Note:
+        If *max_bytes* is very close to the original text size, it is
+        theoretically possible for head and tail windows to overlap (the same
+        lines appear in both).  The output is still valid but may contain
+        duplicate lines around the truncation marker.
     """
     original_bytes = len(text.encode("utf-8"))
     if original_bytes <= max_bytes:

@@ -47,8 +47,8 @@ class TestTruncateOutput:
         text = "x" * 10_000
         result, was_truncated = truncate_output(text, max_bytes=1000)
         assert was_truncated is True
-        # Marker must show original size as "10,000" or "10000"
-        assert "10,000" in result or "10000" in result
+        # Marker always uses {:,} formatting, so exactly "10,000"
+        assert "10,000" in result
 
     def test_empty_string(self) -> None:
         """Empty string is returned unchanged with was_truncated False."""
