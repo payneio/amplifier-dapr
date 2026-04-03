@@ -1,3 +1,14 @@
 name: svc-content-superpowers
 version: '0.1.0'
 content_dir: content
+agents:
+  - name: brainstormer
+    description: Writes validated designs as formal documents after brainstorm-mode conversations
+  - name: code-quality-reviewer
+    description: Assesses code quality after spec compliance is confirmed
+  - name: implementer
+    description: Executes a single task from an implementation plan
+  - name: plan-writer
+    description: Formats validated plans as formal implementation documents
+  - name: spec-reviewer
+    description: Verifies spec compliance after an implementer completes a task
