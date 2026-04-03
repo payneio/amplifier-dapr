@@ -115,7 +115,10 @@ class TestStrictProfile:
 
 
 class TestStandardProfile:
-    """Safety rules under the standard (default) profile."""
+    """Safety rules under the standard (default) profile.
+
+    # Standard == strict; comprehensive coverage is in TestStrictProfile.
+    """
 
     def test_allows_safe_commands(self, standard_validator: SafetyValidator) -> None:
         """echo hello must be allowed in standard profile."""
@@ -181,3 +184,13 @@ class TestDefaultProfile:
         """Constructing SafetyValidator with an unknown profile must raise ValueError."""
         with pytest.raises(ValueError, match=r"Unknown.*profile"):
             SafetyValidator(profile="nonexistent")
+
+    def test_env_var_overrides_default_profile(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """SAFETY_PROFILE env-var selects the profile when no arg is passed."""
+        monkeypatch.setenv("SAFETY_PROFILE", "permissive")
+        validator = SafetyValidator()
+        # permissive profile allows sudo; standard/strict would block it
+        allowed, _reason = validator.validate("sudo apt install vim")
+        assert allowed is True, "SAFETY_PROFILE=permissive should allow sudo"

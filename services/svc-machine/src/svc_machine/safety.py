@@ -212,7 +212,6 @@ class SafetyValidator:
                     "\n",
                     "(",
                     ")",
-                    "",
                 ):
                     continue
 
