@@ -6,7 +6,7 @@ import pytest
 import httpx
 from unittest.mock import AsyncMock
 
-from svc_delegation.tool import DelegateTool
+from svc_delegation.tool import MAX_DELEGATION_DEPTH, DelegateTool
 
 _MOCK_ORCH_RESPONSE = {"child_session_id": "abc", "result": "done"}
 
@@ -252,3 +252,69 @@ class TestContextInheritance:
         assert "user" in roles
         assert "assistant" in roles
         assert "tool" in roles
+
+
+class TestRecursionGuard:
+    """Tests for the recursion depth guard."""
+
+    async def test_depth_at_max_returns_error(self) -> None:
+        """Tool at MAX_DELEGATION_DEPTH returns error without calling orchestrator."""
+        tool = DelegateTool(
+            orchestrator_base_url="http://orchestrator:8080",
+            delegation_depth=MAX_DELEGATION_DEPTH,
+        )
+        result = await tool.execute({"instruction": "do something"})
+        assert result.success is False
+        assert result.error is not None
+        assert "maximum delegation depth" in result.error["message"].lower()
+
+    async def test_depth_below_max_succeeds(self) -> None:
+        """Tool with delegation_depth=5 (below max) executes successfully."""
+        tool = DelegateTool(
+            orchestrator_base_url="http://orchestrator:8080",
+            delegation_depth=5,
+        )
+        tool._call_orchestrator = AsyncMock(  # type: ignore[method-assign]
+            return_value=_MOCK_ORCH_RESPONSE
+        )
+        result = await tool.execute({"instruction": "do something"})
+        assert result.success is True
+
+    async def test_depth_incremented_in_payload(self) -> None:
+        """Payload delegation_depth is one greater than the tool's current depth."""
+        tool = DelegateTool(
+            orchestrator_base_url="http://orchestrator:8080",
+            delegation_depth=3,
+        )
+        tool._call_orchestrator = AsyncMock(  # type: ignore[method-assign]
+            return_value=_MOCK_ORCH_RESPONSE
+        )
+        await tool.execute({"instruction": "do something"})
+        payload = tool._call_orchestrator.call_args[0][0]
+        assert payload["delegation_depth"] == 4
+
+
+class TestSessionResumption:
+    """Tests for session resumption via session_id forwarding."""
+
+    async def test_session_id_forwarded_as_child_session_id(
+        self, tool: DelegateTool
+    ) -> None:
+        """session_id input is forwarded to orchestrator as child_session_id."""
+        tool._call_orchestrator = AsyncMock(  # type: ignore[method-assign]
+            return_value=_MOCK_ORCH_RESPONSE
+        )
+        await tool.execute(
+            {"instruction": "do something", "session_id": "existing-child"}
+        )
+        payload = tool._call_orchestrator.call_args[0][0]
+        assert payload["child_session_id"] == "existing-child"
+
+    async def test_no_session_id_means_new_session(self, tool: DelegateTool) -> None:
+        """Without session_id, child_session_id is absent from the payload."""
+        tool._call_orchestrator = AsyncMock(  # type: ignore[method-assign]
+            return_value=_MOCK_ORCH_RESPONSE
+        )
+        await tool.execute({"instruction": "do something"})
+        payload = tool._call_orchestrator.call_args[0][0]
+        assert "child_session_id" not in payload
