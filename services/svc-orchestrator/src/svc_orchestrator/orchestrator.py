@@ -374,6 +374,24 @@ class Orchestrator:
                             }
                         ),
                     }
+                    # When the 'todo' tool runs, emit a stream.todo_update
+                    # event so the client can refresh its task list display.
+                    # Best-effort: non-JSON / missing "todos" key is skipped.
+                    if tc.name == "todo" and raw_output:
+                        try:
+                            parsed = json.loads(raw_output)
+                            if isinstance(parsed, dict) and "todos" in parsed:
+                                yield {
+                                    "event": "stream.todo_update",
+                                    "data": json.dumps(
+                                        {
+                                            "todos": parsed["todos"],
+                                            "status": parsed.get("status", "updated"),
+                                        }
+                                    ),
+                                }
+                        except (json.JSONDecodeError, TypeError):
+                            pass
 
                 # Persist tool results into context
                 for tool_msg in tool_result_msgs:
