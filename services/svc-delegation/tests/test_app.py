@@ -25,9 +25,10 @@ class TestDelegationApp:
 
     @pytest.fixture
     def client(self) -> TestClient:
-        """Create a TestClient for the delegation app with a test orchestrator URL."""
+        """Create a TestClient for the delegation app with test URLs."""
         app = create_delegation_app(
-            orchestrator_base_url="http://test-orchestrator:8080"
+            orchestrator_base_url="http://test-orchestrator:8080",
+            session_service_base_url="http://test-session-service:8080",
         )
         return TestClient(app)
 
@@ -46,10 +47,12 @@ class TestDelegationApp:
         tool_names = [t["name"] for t in data["tools"]]
         assert "delegate" in tool_names
 
-    def test_describe_tool_has_prompt_in_required(self, client: TestClient) -> None:
-        """GET /describe returns delegate tool schema with 'prompt' in required."""
+    def test_describe_tool_has_instruction_in_required(
+        self, client: TestClient
+    ) -> None:
+        """GET /describe returns delegate tool schema with 'instruction' in required."""
         response = client.get("/describe")
         assert response.status_code == 200
         data = response.json()
         delegate_tool = next(t for t in data["tools"] if t["name"] == "delegate")
-        assert "prompt" in delegate_tool["input_schema"]["required"]
+        assert "instruction" in delegate_tool["input_schema"]["required"]

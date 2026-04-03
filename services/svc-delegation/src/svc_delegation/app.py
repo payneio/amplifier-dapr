@@ -15,6 +15,7 @@ from svc_delegation.tool import DelegateTool
 
 def create_delegation_app(
     orchestrator_base_url: str | None = None,
+    session_service_base_url: str | None = None,
 ) -> FastAPI:
     """Create the svc-delegation FastAPI application.
 
@@ -24,6 +25,8 @@ def create_delegation_app(
     Args:
         orchestrator_base_url: Base URL for the orchestrator service.
             If None, uses the Dapr service invocation URL for svc-orchestrator.
+        session_service_base_url: Base URL for the session service (for context fetching).
+            If None, uses the Dapr service invocation URL for svc-session.
 
     Returns:
         Configured FastAPI application.
@@ -34,7 +37,16 @@ def create_delegation_app(
             f"http://localhost:{dapr_port}/v1.0/invoke/svc-orchestrator/method"
         )
 
-    tool = DelegateTool(orchestrator_base_url=orchestrator_base_url)
+    if session_service_base_url is None:
+        dapr_port = os.environ.get("DAPR_HTTP_PORT", "3500")
+        session_service_base_url = (
+            f"http://localhost:{dapr_port}/v1.0/invoke/svc-session/method"
+        )
+
+    tool = DelegateTool(
+        orchestrator_base_url=orchestrator_base_url,
+        session_service_base_url=session_service_base_url,
+    )
 
     config = ServiceConfig(
         name="svc-delegation",
