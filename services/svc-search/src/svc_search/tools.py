@@ -126,6 +126,21 @@ class GrepTool(BaseMachineTool):
     _timeout_seconds: float = _GREP_TIMEOUT_SECONDS
     _endpoint_path: str = "/files/grep"
 
+    _FORWARD_KEYS: list[str] = [
+        "output_mode",
+        "glob",
+        "type",
+        "after_context",
+        "before_context",
+        "context",
+        "case_insensitive",
+        "line_numbers",
+        "head_limit",
+        "offset",
+        "include_ignored",
+        "multiline",
+    ]
+
     name: str = "grep"
     description: str = "Search file contents with regex patterns"
     input_schema: dict[str, Any] = {
@@ -139,9 +154,88 @@ class GrepTool(BaseMachineTool):
                 "type": "string",
                 "description": "File or directory to search in (defaults to current directory)",
             },
+            "output_mode": {
+                "type": "string",
+                "enum": ["files_with_matches", "content", "count"],
+                "description": "Output mode: files_with_matches, content, or count",
+            },
+            "glob": {
+                "type": "string",
+                "description": "Glob pattern to filter files (e.g. '*.js', '**/*.tsx')",
+            },
+            "type": {
+                "type": "string",
+                "description": "File type to search (e.g. py, js, ts)",
+            },
+            "after_context": {
+                "type": "integer",
+                "description": "Number of lines to show after each match",
+            },
+            "before_context": {
+                "type": "integer",
+                "description": "Number of lines to show before each match",
+            },
+            "context": {
+                "type": "integer",
+                "description": "Number of lines to show before and after each match",
+            },
+            "case_insensitive": {
+                "type": "boolean",
+                "description": "Case insensitive search",
+            },
+            "line_numbers": {
+                "type": "boolean",
+                "description": "Show line numbers in output",
+            },
+            "head_limit": {
+                "type": "integer",
+                "description": "Limit output to first N entries",
+            },
+            "offset": {
+                "type": "integer",
+                "description": "Skip first N entries before applying head_limit",
+            },
+            "include_ignored": {
+                "type": "boolean",
+                "description": "Search in normally-excluded directories",
+            },
+            "multiline": {
+                "type": "boolean",
+                "description": "Enable multiline mode where patterns can span lines",
+            },
         },
         "required": ["pattern"],
     }
+
+    async def execute(self, params: dict[str, Any]) -> ToolResult:
+        """Forward a grep request to the machine service endpoint.
+
+        Args:
+            params: Tool input dict. Must contain ``pattern``.
+                    Supports optional ``path`` and all grep parameters.
+
+        Returns:
+            ToolResult with success=True and output on success, or
+            success=False with an error message on failure.
+        """
+        pattern = params.get("pattern")
+        if not pattern:
+            return ToolResult(
+                success=False,
+                error={"message": "pattern is required"},
+            )
+
+        payload: dict[str, Any] = {"pattern": pattern}
+        if "path" in params:
+            payload["path"] = params["path"]
+        for key in self._FORWARD_KEYS:
+            if key in params:
+                payload[key] = params[key]
+
+        call = await self._call_machine_safe(self._endpoint_path, payload)
+        if call.error is not None:
+            return call.error
+        return ToolResult(success=True, output=call.data)
 
 
 class GlobTool(BaseMachineTool):
@@ -149,6 +243,12 @@ class GlobTool(BaseMachineTool):
 
     _timeout_seconds: float = _GLOB_TIMEOUT_SECONDS
     _endpoint_path: str = "/files/glob"
+
+    _FORWARD_KEYS: list[str] = [
+        "exclude",
+        "type",
+        "include_ignored",
+    ]
 
     name: str = "glob"
     description: str = "Match files using glob patterns"
@@ -163,6 +263,50 @@ class GlobTool(BaseMachineTool):
                 "type": "string",
                 "description": "Base path to search from (defaults to current directory)",
             },
+            "exclude": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Patterns to exclude from results",
+            },
+            "type": {
+                "type": "string",
+                "enum": ["file", "dir", "any"],
+                "description": "Filter by type: file, dir, or any",
+            },
+            "include_ignored": {
+                "type": "boolean",
+                "description": "Search in normally-excluded directories",
+            },
         },
         "required": ["pattern"],
     }
+
+    async def execute(self, params: dict[str, Any]) -> ToolResult:
+        """Forward a glob request to the machine service endpoint.
+
+        Args:
+            params: Tool input dict. Must contain ``pattern``.
+                    Supports optional ``path`` and all glob parameters.
+
+        Returns:
+            ToolResult with success=True and output on success, or
+            success=False with an error message on failure.
+        """
+        pattern = params.get("pattern")
+        if not pattern:
+            return ToolResult(
+                success=False,
+                error={"message": "pattern is required"},
+            )
+
+        payload: dict[str, Any] = {"pattern": pattern}
+        if "path" in params:
+            payload["path"] = params["path"]
+        for key in self._FORWARD_KEYS:
+            if key in params:
+                payload[key] = params[key]
+
+        call = await self._call_machine_safe(self._endpoint_path, payload)
+        if call.error is not None:
+            return call.error
+        return ToolResult(success=True, output=call.data)

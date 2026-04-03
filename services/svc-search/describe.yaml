@@ -12,6 +12,46 @@ tools:
         path:
           type: string
           description: File or directory to search in (defaults to current directory)
+        output_mode:
+          type: string
+          enum:
+            - files_with_matches
+            - content
+            - count
+          description: 'Output mode: files_with_matches, content, or count'
+        glob:
+          type: string
+          description: Glob pattern to filter files (e.g. '*.js', '**/*.tsx')
+        type:
+          type: string
+          description: File type to search (e.g. py, js, ts)
+        after_context:
+          type: integer
+          description: Number of lines to show after each match
+        before_context:
+          type: integer
+          description: Number of lines to show before each match
+        context:
+          type: integer
+          description: Number of lines to show before and after each match
+        case_insensitive:
+          type: boolean
+          description: Case insensitive search
+        line_numbers:
+          type: boolean
+          description: Show line numbers in output
+        head_limit:
+          type: integer
+          description: Limit output to first N entries
+        offset:
+          type: integer
+          description: Skip first N entries before applying head_limit
+        include_ignored:
+          type: boolean
+          description: Search in normally-excluded directories
+        multiline:
+          type: boolean
+          description: Enable multiline mode where patterns can span lines
       required:
         - pattern
   - name: glob
@@ -25,5 +65,20 @@ tools:
         path:
           type: string
           description: Base path to search from (defaults to current directory)
+        exclude:
+          type: array
+          items:
+            type: string
+          description: Patterns to exclude from results
+        type:
+          type: string
+          enum:
+            - file
+            - dir
+            - any
+          description: 'Filter by type: file, dir, or any'
+        include_ignored:
+          type: boolean
+          description: Search in normally-excluded directories
       required:
         - pattern
