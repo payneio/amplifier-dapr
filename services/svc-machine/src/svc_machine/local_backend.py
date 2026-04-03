@@ -41,10 +41,18 @@ class FileEditResult:
     replacements_made: int
 
 
+@dataclass
+class FileGlobResult:
+    """Result of a file glob operation."""
+
+    matches: list[str]
+    total_files: int
+
+
 class LocalBackend:
     """Execute shell commands in a sandboxed workspace directory."""
 
-    _GREP_EXCLUDED_DIRS: list[str] = [
+    _EXCLUDED_DIRS: list[str] = [
         "node_modules",
         ".venv",
         ".git",
@@ -56,19 +64,9 @@ class LocalBackend:
         ".tox",
         ".eggs",
     ]
-
-    _GLOB_EXCLUDED_DIRS: list[str] = [
-        "node_modules",
-        ".venv",
-        ".git",
-        "__pycache__",
-        "build",
-        "dist",
-        ".mypy_cache",
-        ".pytest_cache",
-        ".tox",
-        ".eggs",
-    ]
+    # Aliases kept so callers referencing either name remain valid
+    _GREP_EXCLUDED_DIRS = _EXCLUDED_DIRS
+    _GLOB_EXCLUDED_DIRS = _EXCLUDED_DIRS
 
     _GLOB_MAX_RESULTS = 500
 
@@ -298,7 +296,7 @@ class LocalBackend:
         exclude: list[str] | None = None,
         type_filter: str = "file",
         include_ignored: bool = False,
-    ) -> list[str] | None:
+    ) -> FileGlobResult | None:
         """Match files using a glob pattern within the workspace.
 
         Args:
@@ -309,7 +307,7 @@ class LocalBackend:
             include_ignored: Include normally-excluded directories (default False).
 
         Returns:
-            List of posix-style relative paths matching the pattern,
+            FileGlobResult with matches (capped list) and total_files (real count),
             or None if the base path is not found or escapes workspace.
         """
         resolved = self._resolve_path(path)
@@ -350,7 +348,7 @@ class LocalBackend:
             if total <= self._GLOB_MAX_RESULTS:
                 matches.append(rel_str)
 
-        return matches
+        return FileGlobResult(matches=matches, total_files=total)
 
     async def file_grep(
         self,

@@ -9,6 +9,7 @@ import pytest
 from svc_machine.local_backend import (
     ExecResult,
     FileEditResult,
+    FileGlobResult,
     FileReadResult,
     LocalBackend,
 )
@@ -255,51 +256,66 @@ class TestFileGlob:
         """file_glob('*.py') finds .py files but not .txt files."""
         result = backend.file_glob("*.py")
         assert result is not None
-        assert any(p.endswith(".py") for p in result)
-        assert not any(p.endswith(".txt") for p in result)
+        assert any(p.endswith(".py") for p in result.matches)
+        assert not any(p.endswith(".txt") for p in result.matches)
 
     def test_glob_recursive(self, backend: LocalBackend) -> None:
         """file_glob('**/*.py') finds >=2 files including utils.py."""
         result = backend.file_glob("**/*.py")
         assert result is not None
-        assert len(result) >= 2
-        assert any("utils.py" in p for p in result)
+        assert len(result.matches) >= 2
+        assert any("utils.py" in p for p in result.matches)
 
     def test_glob_excludes_node_modules(self, backend: LocalBackend) -> None:
         """file_glob('**/*.js') returns no matches — node_modules excluded by default."""
         result = backend.file_glob("**/*.js")
         assert result is not None
-        assert len(result) == 0
+        assert len(result.matches) == 0
 
     def test_glob_include_ignored(self, backend: LocalBackend) -> None:
         """file_glob('**/*.js', include_ignored=True) returns matches in node_modules."""
         result = backend.file_glob("**/*.js", include_ignored=True)
         assert result is not None
-        assert len(result) >= 1
-        assert any("dep.js" in p for p in result)
+        assert len(result.matches) >= 1
+        assert any("dep.js" in p for p in result.matches)
 
     def test_glob_exclude_pattern(self, backend: LocalBackend) -> None:
         """file_glob('*', exclude=['*.txt']) returns no .txt files."""
         result = backend.file_glob("*", exclude=["*.txt"])
         assert result is not None
-        assert not any(p.endswith(".txt") for p in result)
+        assert not any(p.endswith(".txt") for p in result.matches)
 
     def test_glob_type_dir(self, backend: LocalBackend) -> None:
         """file_glob('*', type_filter='dir') returns pkg and mydir but no .py/.txt files."""
         result = backend.file_glob("*", type_filter="dir")
         assert result is not None
-        assert any("pkg" in p for p in result)
-        assert any("mydir" in p for p in result)
-        assert not any(p.endswith(".py") for p in result)
-        assert not any(p.endswith(".txt") for p in result)
+        assert any("pkg" in p for p in result.matches)
+        assert any("mydir" in p for p in result.matches)
+        assert not any(p.endswith(".py") for p in result.matches)
+        assert not any(p.endswith(".txt") for p in result.matches)
 
     def test_glob_type_file(self, backend: LocalBackend) -> None:
         """file_glob('*', type_filter='file') returns only files."""
         result = backend.file_glob("*", type_filter="file")
         assert result is not None
-        assert len(result) > 0
-        assert not any("mydir" in p for p in result)
-        assert not any("pkg" in p for p in result)
+        assert len(result.matches) > 0
+        assert not any("mydir" in p for p in result.matches)
+        assert not any("pkg" in p for p in result.matches)
+
+    def test_glob_total_files_accurate_when_capped(
+        self, backend: LocalBackend, tmp_path: Path
+    ) -> None:
+        """total_files reflects the real count, not the cap, when results are truncated."""
+        # Temporarily lower cap to 3 and create 5 files
+        original_max = backend._GLOB_MAX_RESULTS
+        backend._GLOB_MAX_RESULTS = 3  # type: ignore[assignment]
+        for i in range(5):
+            (tmp_path / f"cap{i}.dat").write_text("x")
+        result = backend.file_glob("*.dat")
+        backend._GLOB_MAX_RESULTS = original_max  # type: ignore[assignment]
+        assert isinstance(result, FileGlobResult)
+        assert len(result.matches) == 3  # capped at 3
+        assert result.total_files == 5  # real count surfaced
 
     def test_glob_nonexistent_base(self, backend: LocalBackend) -> None:
         """file_glob('*.py', path='nonexistent_dir') returns None."""
