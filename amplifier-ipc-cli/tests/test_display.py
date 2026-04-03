@@ -462,3 +462,33 @@ class TestStreamingDisplay:
         for line in output.splitlines():
             if line.startswith("│"):
                 assert len(line) == 40, f"Expected 40 chars, got {len(line)}: {line!r}"
+
+    def test_complete_with_usage_shows_token_counts(self) -> None:
+        """_handle_complete with usage data prints token counts."""
+        console, buf = make_console()
+        display = StreamingDisplay(console)
+        event = SSEEvent(
+            event="complete",
+            data={
+                "result": "The answer",
+                "usage": {"input_tokens": 150, "output_tokens": 42},
+            },
+        )
+        display.handle_sse_event(event)
+        output = buf.getvalue()
+        assert "150" in output, f"Expected '150' in output, got: {output!r}"
+        assert "42" in output, f"Expected '42' in output, got: {output!r}"
+
+    def test_complete_without_usage_no_token_display(self) -> None:
+        """_handle_complete without usage data does not print 'tokens'."""
+        console, buf = make_console()
+        display = StreamingDisplay(console)
+        event = SSEEvent(
+            event="complete",
+            data={"result": "The answer"},
+        )
+        display.handle_sse_event(event)
+        output = buf.getvalue()
+        assert "tokens" not in output.lower(), (
+            f"Expected no 'tokens' in output, got: {output!r}"
+        )

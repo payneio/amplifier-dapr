@@ -261,6 +261,8 @@ class Orchestrator:
             # ------------------------------------------------------------------
             result_text = ""
             iteration = 0
+            total_input_tokens = 0
+            total_output_tokens = 0
 
             while True:
                 if max_iterations >= 0 and iteration >= max_iterations:
@@ -294,6 +296,11 @@ class Orchestrator:
                 )
                 chat_response = ChatResponse(**response_data)
                 result_text = self._extract_text(chat_response.content)
+
+                # Accumulate token usage across iterations
+                if chat_response.usage is not None:
+                    total_input_tokens += chat_response.usage.input_tokens
+                    total_output_tokens += chat_response.usage.output_tokens
 
                 # Emit thinking blocks (if any)
                 if isinstance(chat_response.content, list):
@@ -409,14 +416,18 @@ class Orchestrator:
                 "session:end", {"session_id": session_id, "result": result_text}
             )
 
+            complete_data: dict[str, Any] = {
+                "result": result_text,
+                "messages": [m.model_dump() for m in final_messages],
+            }
+            if total_input_tokens > 0 or total_output_tokens > 0:
+                complete_data["usage"] = {
+                    "input_tokens": total_input_tokens,
+                    "output_tokens": total_output_tokens,
+                }
             yield {
                 "event": "stream.complete",
-                "data": json.dumps(
-                    {
-                        "result": result_text,
-                        "messages": [m.model_dump() for m in final_messages],
-                    }
-                ),
+                "data": json.dumps(complete_data),
             }
 
         # Wrap _inner so any unhandled exception becomes a stream.error event

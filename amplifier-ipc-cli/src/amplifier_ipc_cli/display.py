@@ -376,4 +376,9 @@ class StreamingDisplay:
         # (avoids duplication when tokens already printed the text)
         if self._response and not self._tokens_received:
             self._console.print(self._response, highlight=False, markup=False)
+        if isinstance(data, dict) and "usage" in data:
+            usage = data["usage"]
+            input_t = usage.get("input_tokens", 0)
+            output_t = usage.get("output_tokens", 0)
+            self._console.print(f"tokens: {input_t} in / {output_t} out", style="dim")
         self._console.print()
