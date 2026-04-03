@@ -99,5 +99,5 @@ agent:
     content-superpowers:
       build: ./services/svc-content-superpowers
 
-    content-system-design-intelligence:
-      build: ./services/svc-content-system-design-intelligence
+    content-foundation:
+      build: ./services/svc-content-foundation
