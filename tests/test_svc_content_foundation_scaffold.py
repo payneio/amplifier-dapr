@@ -13,7 +13,8 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).parent.parent
 SVC_DIR = REPO_ROOT / "services" / "svc-content-foundation"
 DOCKERFILE_PATH = SVC_DIR / "Dockerfile"
-GITKEEP_PATH = SVC_DIR / "content" / ".gitkeep"
+CONTENT_DIR = SVC_DIR / "content"
+DESCRIBE_YAML_PATH = SVC_DIR / "describe.yaml"
 
 
 def _dockerfile_content() -> str:
@@ -33,23 +34,23 @@ def test_dockerfile_exists() -> None:
     assert DOCKERFILE_PATH.exists(), f"Expected {DOCKERFILE_PATH} to exist"
 
 
-def test_gitkeep_exists() -> None:
-    """Placeholder file exists at services/svc-content-foundation/content/.gitkeep."""
-    assert GITKEEP_PATH.exists(), f"Expected {GITKEEP_PATH} to exist"
-
-
-def test_exactly_two_files_in_service_dir() -> None:
-    """Directory contains exactly Dockerfile and content/.gitkeep (no extras)."""
+def test_exactly_22_files_in_service_dir() -> None:
+    """Directory contains exactly 22 files: Dockerfile + describe.yaml + 20 content files."""
     result = subprocess.run(
         ["find", str(SVC_DIR), "-type", "f"],
         capture_output=True,
         text=True,
         check=True,
     )
-    found_files = sorted(result.stdout.strip().splitlines())
-    expected_files = sorted([str(DOCKERFILE_PATH), str(GITKEEP_PATH)])
-    assert found_files == expected_files, (
-        f"Expected exactly {expected_files}, got {found_files}"
+    found_files = result.stdout.strip().splitlines()
+    assert len(found_files) == 22, (
+        f"Expected exactly 22 files, got {len(found_files)}: {sorted(found_files)}"
+    )
+    assert DOCKERFILE_PATH.exists(), f"Dockerfile missing at {DOCKERFILE_PATH}"
+    assert DESCRIBE_YAML_PATH.exists(), f"describe.yaml missing at {DESCRIBE_YAML_PATH}"
+    md_files = list(CONTENT_DIR.rglob("*.md"))
+    assert len(md_files) == 20, (
+        f"Expected exactly 20 .md files in content/, got {len(md_files)}"
     )
 
 
@@ -59,9 +60,11 @@ def test_exactly_two_files_in_service_dir() -> None:
 def test_stage1_from_python_312_slim() -> None:
     """Stage 1 must use python:3.12-slim as the base image."""
     content = _dockerfile_content()
-    assert re.search(r"^FROM\s+python:3\.12-slim\s+AS\s+amplifier-service-base", content, re.MULTILINE), (
-        "Stage 1 must be: FROM python:3.12-slim AS amplifier-service-base"
-    )
+    assert re.search(
+        r"^FROM\s+python:3\.12-slim\s+AS\s+amplifier-service-base",
+        content,
+        re.MULTILINE,
+    ), "Stage 1 must be: FROM python:3.12-slim AS amplifier-service-base"
 
 
 def test_stage1_workdir_is_app() -> None:
@@ -119,7 +122,9 @@ def test_stage1_healthcheck_probes_localhost_8000() -> None:
     content = _dockerfile_content()
     assert "urllib" in content, "HEALTHCHECK must use Python's urllib"
     assert "healthz" in content, "HEALTHCHECK must probe the /healthz endpoint"
-    assert "localhost:8000" in content, "HEALTHCHECK must probe http://localhost:8000/healthz"
+    assert "localhost:8000" in content, (
+        "HEALTHCHECK must probe http://localhost:8000/healthz"
+    )
 
 
 def test_stage1_exposes_port_8000() -> None:
@@ -147,7 +152,9 @@ def test_stage2_copies_describe_yaml() -> None:
     assert re.search(
         r"COPY\s+services/svc-content-foundation/describe\.yaml\s+/app/describe\.yaml",
         content,
-    ), "Stage 2 must COPY services/svc-content-foundation/describe.yaml /app/describe.yaml"
+    ), (
+        "Stage 2 must COPY services/svc-content-foundation/describe.yaml /app/describe.yaml"
+    )
 
 
 def test_stage2_copies_content_dir() -> None:
