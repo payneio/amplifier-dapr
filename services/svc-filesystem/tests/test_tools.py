@@ -8,7 +8,13 @@ from unittest.mock import AsyncMock, patch
 import httpx
 import pytest
 
-from svc_filesystem.tools import EditFileTool, ReadFileTool, WriteFileTool
+from amplifier_service_sdk.models import ToolResult
+from svc_filesystem.tools import (
+    EditFileTool,
+    ReadFileTool,
+    WriteFileTool,
+    _MachineCallResult,
+)
 
 
 class TestReadFileTool:
@@ -246,6 +252,82 @@ class TestReadFileToolDirectoryListing:
         assert "src" in content
         assert "main.py" in content
 
+    async def test_http_error_on_directory_path_falls_back_to_listing(
+        self, tool: ReadFileTool
+    ) -> None:
+        """execute() on a trailing-slash path falls back to /files/list on HTTPStatusError."""
+        http_exc = httpx.HTTPStatusError(
+            "Not Found",
+            request=httpx.Request("POST", "http://fake-machine:8080/files/read"),
+            response=httpx.Response(404),
+        )
+        listing_data: dict[str, Any] = {
+            "entries": [
+                {"name": "src", "type": "dir"},
+                {"name": "readme.md", "type": "file"},
+            ]
+        }
+
+        async def call_machine_safe_side_effect(
+            path: str, payload: dict[str, Any]
+        ) -> _MachineCallResult:
+            if path == "/files/read":
+                return _MachineCallResult(
+                    error=ToolResult(
+                        success=False,
+                        error={"message": "machine service error: 404"},
+                    ),
+                    data={},
+                )
+            return _MachineCallResult(error=None, data=listing_data)
+
+        with patch.object(tool, "_call_machine", new=AsyncMock(side_effect=http_exc)):
+            with patch.object(
+                tool,
+                "_call_machine_safe",
+                new=AsyncMock(side_effect=call_machine_safe_side_effect),
+            ):
+                result = await tool.execute({"file_path": "/some/dir/"})
+
+        assert result.success is True
+        assert result.output is not None
+        assert result.output["is_directory"] is True
+        assert "src" in result.output["content"]
+
+    async def test_request_error_on_directory_path_falls_back_to_listing(
+        self, tool: ReadFileTool
+    ) -> None:
+        """execute() on a trailing-slash path falls back to /files/list on RequestError."""
+        exc = httpx.ConnectError("Connection refused")
+        listing_data: dict[str, Any] = {"entries": [{"name": "src", "type": "dir"}]}
+
+        async def call_machine_safe_side_effect(
+            path: str, payload: dict[str, Any]
+        ) -> _MachineCallResult:
+            if path == "/files/read":
+                return _MachineCallResult(
+                    error=ToolResult(
+                        success=False,
+                        error={
+                            "message": "machine service unreachable: Connection refused"
+                        },
+                    ),
+                    data={},
+                )
+            return _MachineCallResult(error=None, data=listing_data)
+
+        with patch.object(tool, "_call_machine", new=AsyncMock(side_effect=exc)):
+            with patch.object(
+                tool,
+                "_call_machine_safe",
+                new=AsyncMock(side_effect=call_machine_safe_side_effect),
+            ):
+                result = await tool.execute({"file_path": "/some/dir/"})
+
+        assert result.success is True
+        assert result.output is not None
+        assert result.output["is_directory"] is True
+
 
 class TestReadFileToolLineFormatting:
     """Tests for ReadFileTool.execute applying cat -n style line formatting."""
@@ -273,7 +355,7 @@ class TestReadFileToolLineFormatting:
         assert "line1" in content
 
     async def test_long_lines_truncated(self, tool: ReadFileTool) -> None:
-        """execute() truncates lines longer than 2000 chars."""
+        """execute() truncates lines longer than 2000 chars with a '...' suffix."""
         mock_result: dict[str, Any] = {
             "content": "x" * 3000 + "\n",
             "total_lines": 1,
@@ -286,8 +368,9 @@ class TestReadFileToolLineFormatting:
         assert result.success is True
         assert result.output is not None
         first_line = result.output["content"].splitlines()[0]
-        # Format is "{n:>6}\t{display_line}" — 6 + 1 + 2000 + 3 = 2010 max chars
-        assert len(first_line) < 2050
+        # Format is "{n:>6}\t{display_line}" — 6 + 1 + 2000 + 3("...") = 2010 chars exactly
+        assert len(first_line) == 2010
+        assert first_line.endswith("...")
 
     @pytest.mark.parametrize(
         "extra_params,expected_keys",

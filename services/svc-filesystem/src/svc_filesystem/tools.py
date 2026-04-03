@@ -142,23 +142,13 @@ class ReadFileTool(BaseMachineTool):
         if "limit" in params:
             payload["limit"] = params["limit"]
 
-        try:
-            data = await self._call_machine("/files/read", payload)
-        except httpx.HTTPStatusError as exc:
+        result = await self._call_machine_safe("/files/read", payload)
+        if result.error is not None:
             if file_path.endswith("/"):
                 return await self._try_directory_listing(file_path)
-            return ToolResult(
-                success=False,
-                error={"message": f"machine service error: {exc.response.status_code}"},
-            )
-        except httpx.RequestError as exc:
-            if file_path.endswith("/"):
-                return await self._try_directory_listing(file_path)
-            return ToolResult(
-                success=False,
-                error={"message": f"machine service unreachable: {exc}"},
-            )
+            return result.error
 
+        data = result.data
         if "entries" in data:
             return self._format_directory_listing(data, file_path)
 
@@ -219,9 +209,11 @@ class ReadFileTool(BaseMachineTool):
         lines = content.splitlines()
         result = []
         for i, line in enumerate(lines, start=start_line):
-            display_line = line
-            if len(display_line) > self._MAX_LINE_LENGTH:
-                display_line = display_line[: self._MAX_LINE_LENGTH] + "..."
+            display_line = (
+                line[: self._MAX_LINE_LENGTH] + "..."
+                if len(line) > self._MAX_LINE_LENGTH
+                else line
+            )
             result.append(f"{i:>6}\t{display_line}")
         return "\n".join(result)
 
