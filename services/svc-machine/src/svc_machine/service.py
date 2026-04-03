@@ -6,11 +6,14 @@ import os
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from amplifier_service_sdk.service import ServiceConfig, create_app
 
 from svc_machine.local_backend import LocalBackend
+from svc_machine.safety import SafetyValidator
+from svc_machine.truncation import truncate_output
 
 
 class ExecRequest(BaseModel):
@@ -19,6 +22,7 @@ class ExecRequest(BaseModel):
     command: str
     timeout: int = 30
     working_dir: str | None = None
+    run_in_background: bool = False
 
 
 class ExecResponse(BaseModel):
@@ -27,6 +31,7 @@ class ExecResponse(BaseModel):
     stdout: str
     stderr: str
     exit_code: int
+    truncated: bool = False
 
 
 class FileReadRequest(BaseModel):
@@ -89,10 +94,31 @@ def create_machine_app(workspace_dir: Path) -> FastAPI:
     app = create_app(config)
 
     backend = LocalBackend(workspace_dir=workspace_dir)
+    safety = SafetyValidator()
 
-    @app.post("/exec")
-    async def exec_command(request: ExecRequest) -> ExecResponse:
+    @app.post("/exec", response_model=None)
+    async def exec_command(request: ExecRequest) -> ExecResponse | JSONResponse:
         """Execute a shell command within the workspace directory."""
+        # Safety check
+        allowed, reason = safety.validate(request.command)
+        if not allowed:
+            raise HTTPException(
+                status_code=403,
+                detail={"denied": True, "reason": reason},
+            )
+
+        # Background execution
+        if request.run_in_background:
+            try:
+                result_bg = await backend.exec_background(
+                    command=request.command,
+                    working_dir=request.working_dir,
+                )
+            except ValueError as exc:
+                raise HTTPException(status_code=422, detail=str(exc)) from exc
+            return JSONResponse(content=result_bg)
+
+        # Normal execution with truncation
         try:
             result = await backend.exec(
                 command=request.command,
@@ -101,10 +127,15 @@ def create_machine_app(workspace_dir: Path) -> FastAPI:
             )
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+        stdout, stdout_truncated = truncate_output(result.stdout)
+        stderr, stderr_truncated = truncate_output(result.stderr)
+
         return ExecResponse(
-            stdout=result.stdout,
-            stderr=result.stderr,
+            stdout=stdout,
+            stderr=stderr,
             exit_code=result.exit_code,
+            truncated=stdout_truncated or stderr_truncated,
         )
 
     @app.post("/files/read")

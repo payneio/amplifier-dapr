@@ -6,8 +6,10 @@ import asyncio
 import os
 import re
 import signal
+import subprocess as _subprocess_module
 from dataclasses import dataclass
 from pathlib import Path
+from subprocess import DEVNULL
 from typing import Any
 
 
@@ -103,6 +105,36 @@ class LocalBackend:
             stderr=stderr_bytes.decode("utf-8", errors="replace"),
             exit_code=process.returncode if process.returncode is not None else -1,
         )
+
+    async def exec_background(
+        self,
+        command: str,
+        working_dir: str | None = None,
+    ) -> dict[str, Any]:
+        """Spawn a fire-and-forget subprocess in a new session.
+
+        Args:
+            command: Shell command to run via /bin/bash.
+            working_dir: Working directory for the command. Must resolve within workspace_dir.
+
+        Returns:
+            Dict with 'pid' (int) and 'status' ('running').
+
+        Raises:
+            ValueError: If working_dir resolves outside workspace_dir.
+        """
+        cwd = self._resolve_working_dir(working_dir)
+
+        process = _subprocess_module.Popen(
+            command,
+            shell=True,
+            executable="/bin/bash",
+            stdout=DEVNULL,
+            stderr=DEVNULL,
+            cwd=str(cwd),
+            start_new_session=True,
+        )
+        return {"pid": process.pid, "status": "running"}
 
     def _resolve_path(self, relative_path: str) -> Path | None:
         """Resolve a path within the workspace, returning None if it escapes."""
