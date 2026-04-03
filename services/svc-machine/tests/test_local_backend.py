@@ -1,5 +1,7 @@
 """Tests for LocalBackend — async subprocess execution."""
 
+import os
+import signal
 from pathlib import Path
 
 import pytest
@@ -296,3 +298,26 @@ class TestFileGrep:
         result = backend.file_grep("THIS_PATTERN_WILL_NOT_MATCH_ANYTHING_XYZ")
         assert result is not None
         assert result == []
+
+
+class TestExecBackground:
+    """Tests for LocalBackend.exec_background()."""
+
+    @pytest.fixture
+    def backend(self, tmp_path: Path) -> LocalBackend:
+        """Create a LocalBackend with a temporary workspace directory."""
+        return LocalBackend(workspace_dir=tmp_path)
+
+    async def test_exec_background_returns_pid(self, backend: LocalBackend) -> None:
+        """exec_background() returns dict with int pid and status 'running'."""
+        result = await backend.exec_background("sleep 60")
+        pid = result["pid"]
+        try:
+            assert isinstance(pid, int)
+            assert result["status"] == "running"
+        finally:
+            # Cleanup: kill process with SIGTERM
+            try:
+                os.kill(pid, signal.SIGTERM)
+            except ProcessLookupError:
+                pass

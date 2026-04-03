@@ -1,5 +1,7 @@
 """Tests for svc-machine FastAPI service endpoints."""
 
+import os
+from collections.abc import Generator
 from pathlib import Path
 
 import pytest
@@ -162,3 +164,65 @@ class TestFileEditEndpoint:
         data = response.json()
         assert data["replacements_made"] == 1
         assert (workspace / "edit_me.txt").read_text() == "hello earth\n"
+
+
+@pytest.fixture
+def safety_client(tmp_path: Path) -> Generator[TestClient, None, None]:
+    """Create a TestClient with SAFETY_PROFILE=strict env var, yields then cleans up."""
+    prev = os.environ.get("SAFETY_PROFILE")
+    os.environ["SAFETY_PROFILE"] = "strict"
+    try:
+        app = create_machine_app(workspace_dir=tmp_path)
+        yield TestClient(app)
+    finally:
+        if prev is None:
+            os.environ.pop("SAFETY_PROFILE", None)
+        else:
+            os.environ["SAFETY_PROFILE"] = prev
+
+
+class TestExecSafety:
+    """Tests for safety validation on POST /exec."""
+
+    def test_blocked_command_returns_403(self, safety_client: TestClient) -> None:
+        """POST /exec with rm -rf / returns 403 with denied=True and reason present."""
+        response = safety_client.post("/exec", json={"command": "rm -rf /"})
+        assert response.status_code == 403
+        detail = response.json()["detail"]
+        assert detail["denied"] is True
+        assert "reason" in detail
+
+    def test_allowed_command_passes(self, safety_client: TestClient) -> None:
+        """POST /exec with echo safe returns 200 with 'safe' in stdout."""
+        response = safety_client.post("/exec", json={"command": "echo safe"})
+        assert response.status_code == 200
+        assert "safe" in response.json()["stdout"]
+
+
+class TestExecTruncation:
+    """Tests for output truncation on POST /exec."""
+
+    def test_large_output_is_truncated(self, client: TestClient) -> None:
+        """POST /exec with 200k-char output returns 200 with truncated=True."""
+        response = client.post(
+            "/exec",
+            json={"command": "python3 -c \"print('x' * 200_000)\"", "timeout": 10},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["truncated"] is True
+
+
+class TestExecBackground:
+    """Tests for background execution on POST /exec."""
+
+    def test_background_returns_pid(self, client: TestClient) -> None:
+        """POST /exec with run_in_background=True returns int pid and status 'running'."""
+        response = client.post(
+            "/exec",
+            json={"command": "sleep 60", "run_in_background": True},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert isinstance(data["pid"], int)
+        assert data["status"] == "running"
