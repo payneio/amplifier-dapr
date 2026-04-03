@@ -82,6 +82,7 @@ class TestTodoReminderHook:
         ):
             result = await hook.handle("provider:request", {"session_id": "sess-1"})
 
+        assert result.data is not None
         content = result.data["content"]
         assert "Write tests" in content
         assert "Writing tests" not in content
@@ -102,6 +103,7 @@ class TestTodoReminderHook:
         ):
             result = await hook.handle("provider:request", {"session_id": "sess-1"})
 
+        assert result.data is not None
         content = result.data["content"]
         assert "Implementing hook" in content
 
@@ -151,6 +153,7 @@ class TestTodoReminderHook:
         ):
             result = await hook.handle("provider:request", {"session_id": "sess-1"})
 
+        assert result.data is not None
         assert result.data["ephemeral"] is True
         content = result.data["content"]
         assert '<system-reminder source="hooks-todo-reminder">' in content
