@@ -62,72 +62,6 @@ class TestGrepTool:
         assert result.error is not None
         assert "unreachable" in result.error["message"]
 
-
-class TestGlobTool:
-    """Tests for GlobTool.execute."""
-
-    @pytest.fixture
-    def tool(self) -> GlobTool:
-        """Create a GlobTool pointed at a fake machine URL."""
-        return GlobTool(machine_base_url="http://fake-machine:8080")
-
-    async def test_execute_success(self, tool: GlobTool) -> None:
-        """execute() calls machine /files/glob and returns success=True with matches."""
-        mock_result: dict[str, Any] = {"matches": ["src/foo.py", "src/bar.py"]}
-        with patch.object(
-            tool, "_call_machine", new=AsyncMock(return_value=mock_result)
-        ):
-            result = await tool.execute({"pattern": "**/*.py"})
-
-        assert result.success is True
-        assert result.output is not None
-        assert result.output["matches"] == ["src/foo.py", "src/bar.py"]
-
-    async def test_execute_missing_pattern(self, tool: GlobTool) -> None:
-        """execute() with no pattern returns success=False with descriptive error."""
-        result = await tool.execute({})
-        assert result.success is False
-        assert result.error is not None
-        assert "pattern" in result.error["message"]
-
-    async def test_execute_machine_error(self, tool: GlobTool) -> None:
-        """execute() returns success=False when machine returns HTTP error."""
-        exc = httpx.HTTPStatusError(
-            "Not Found",
-            request=httpx.Request("POST", "http://fake-machine:8080/files/glob"),
-            response=httpx.Response(404),
-        )
-        with patch.object(tool, "_call_machine", new=AsyncMock(side_effect=exc)):
-            result = await tool.execute({"pattern": "**/*.py"})
-
-        assert result.success is False
-        assert result.error is not None
-        assert "404" in result.error["message"]
-
-    async def test_execute_unreachable_machine(self, tool: GlobTool) -> None:
-        """execute() returns success=False with structured error when machine is unreachable."""
-        exc = httpx.ConnectError("Connection refused")
-        with patch.object(tool, "_call_machine", new=AsyncMock(side_effect=exc)):
-            result = await tool.execute({"pattern": "**/*.py"})
-
-        assert result.success is False
-        assert result.error is not None
-        assert "unreachable" in result.error["message"]
-
-
-# ---------------------------------------------------------------------------
-# Additional parameter-forwarding and schema tests (RED phase — task-14)
-# ---------------------------------------------------------------------------
-
-
-class TestGrepToolParamForwarding:
-    """Tests for GrepTool extended parameter forwarding and schema completeness."""
-
-    @pytest.fixture
-    def tool(self) -> GrepTool:
-        """Create a GrepTool pointed at a fake machine URL."""
-        return GrepTool(machine_base_url="http://fake-machine:8080")
-
     async def test_execute_forwards_output_mode(self, tool: GrepTool) -> None:
         """execute() forwards output_mode parameter to the machine payload."""
         mock_result: dict[str, Any] = {"matches": [], "total_matches": 0}
@@ -179,13 +113,56 @@ class TestGrepToolParamForwarding:
         assert expected_keys == actual_keys
 
 
-class TestGlobToolParamForwarding:
-    """Tests for GlobTool extended parameter forwarding and schema completeness."""
+class TestGlobTool:
+    """Tests for GlobTool.execute."""
 
     @pytest.fixture
     def tool(self) -> GlobTool:
         """Create a GlobTool pointed at a fake machine URL."""
         return GlobTool(machine_base_url="http://fake-machine:8080")
+
+    async def test_execute_success(self, tool: GlobTool) -> None:
+        """execute() calls machine /files/glob and returns success=True with matches."""
+        mock_result: dict[str, Any] = {"matches": ["src/foo.py", "src/bar.py"]}
+        with patch.object(
+            tool, "_call_machine", new=AsyncMock(return_value=mock_result)
+        ):
+            result = await tool.execute({"pattern": "**/*.py"})
+
+        assert result.success is True
+        assert result.output is not None
+        assert result.output["matches"] == ["src/foo.py", "src/bar.py"]
+
+    async def test_execute_missing_pattern(self, tool: GlobTool) -> None:
+        """execute() with no pattern returns success=False with descriptive error."""
+        result = await tool.execute({})
+        assert result.success is False
+        assert result.error is not None
+        assert "pattern" in result.error["message"]
+
+    async def test_execute_machine_error(self, tool: GlobTool) -> None:
+        """execute() returns success=False when machine returns HTTP error."""
+        exc = httpx.HTTPStatusError(
+            "Not Found",
+            request=httpx.Request("POST", "http://fake-machine:8080/files/glob"),
+            response=httpx.Response(404),
+        )
+        with patch.object(tool, "_call_machine", new=AsyncMock(side_effect=exc)):
+            result = await tool.execute({"pattern": "**/*.py"})
+
+        assert result.success is False
+        assert result.error is not None
+        assert "404" in result.error["message"]
+
+    async def test_execute_unreachable_machine(self, tool: GlobTool) -> None:
+        """execute() returns success=False with structured error when machine is unreachable."""
+        exc = httpx.ConnectError("Connection refused")
+        with patch.object(tool, "_call_machine", new=AsyncMock(side_effect=exc)):
+            result = await tool.execute({"pattern": "**/*.py"})
+
+        assert result.success is False
+        assert result.error is not None
+        assert "unreachable" in result.error["message"]
 
     async def test_execute_forwards_exclude(self, tool: GlobTool) -> None:
         """execute() forwards exclude list and type parameter to the machine payload."""
