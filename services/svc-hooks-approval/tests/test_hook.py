@@ -170,8 +170,8 @@ class TestRiskMetadata:
         result = await hook.handle("tool:pre", data)
         assert result.action == "DENY"
         assert result.reason is not None
-        # reason must mention the risk_level value
-        assert "high" in result.reason or "risk_level" in result.reason
+        # reason must mention both the risk_level key and its value
+        assert "high" in result.reason and "risk_level" in result.reason
 
     async def test_requires_approval_false_continues(self):
         """requires_approval=False in metadata allows the tool to continue."""

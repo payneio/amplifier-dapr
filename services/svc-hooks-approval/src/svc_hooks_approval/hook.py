@@ -21,7 +21,8 @@ _DANGEROUS_BASH_PATTERNS: list[re.Pattern[str]] = [
     re.compile(r"\bmkfs\b"),
     # dd writing to a raw device (of=/dev/…)
     re.compile(r"\bdd\b.*\bof=/dev/"),
-    # chmod 777 on root
+    # chmod 777 on root (root-only: matches "chmod 777 /" but not subdirectory variants
+    # like "chmod 777 /etc" — narrowness is intentional per spec)
     re.compile(r"chmod\s+777\s+/"),
     # fork-bomb pattern  :(){:|:&};:
     re.compile(r":\(\)\s*\{.*:\s*\|.*:&"),
@@ -36,6 +37,9 @@ class ApprovalHook:
     name: str = "approval"
     events: list[str] = ["tool:pre"]
     priority: int = 5
+    # "sync" signals the SDK dispatcher to invoke this hook synchronously
+    # (i.e. before the tool executes), not that handle() itself is blocking.
+    # The async def is required by the SDK's awaitable hook protocol.
     mode: Literal["sync", "async"] = "sync"
 
     def __init__(self, config: dict[str, Any]) -> None:
