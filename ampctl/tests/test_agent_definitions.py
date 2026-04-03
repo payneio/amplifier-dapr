@@ -104,7 +104,7 @@ def test_foundation_has_expected_content_behaviors() -> None:
         "content-filesystem",
         "content-recipes",
         "content-superpowers",
-        "content-system-design-intelligence",
+        "content-foundation",
     }
     missing = expected - set(d.behaviors.keys())
     assert not missing, f"Missing content behaviors: {missing}"
@@ -193,7 +193,7 @@ def test_default_has_expected_content_behaviors() -> None:
         "content-filesystem",
         "content-recipes",
         "content-superpowers",
-        "content-system-design-intelligence",
+        "content-foundation",
     }
     missing = expected - set(d.behaviors.keys())
     assert not missing, f"Missing content behaviors: {missing}"
