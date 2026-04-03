@@ -46,7 +46,9 @@ class TestPairedToolCallRemoval:
 
         # Recent user+assistant — will be in the protected tail
         await cm.add_message(_SESSION, Message(role="user", content="Recent user."))
-        await cm.add_message(_SESSION, Message(role="assistant", content="Recent assistant."))
+        await cm.add_message(
+            _SESSION, Message(role="assistant", content="Recent assistant.")
+        )
 
         messages = await cm.get_messages(_SESSION)
 
@@ -90,7 +92,9 @@ class TestPairedToolCallRemoval:
 
         # Final user+assistant — these occupy the protected tail
         await cm.add_message(_SESSION, Message(role="user", content="Final user."))
-        await cm.add_message(_SESSION, Message(role="assistant", content="Final assistant."))
+        await cm.add_message(
+            _SESSION, Message(role="assistant", content="Final assistant.")
+        )
 
         messages = await cm.get_messages(_SESSION)
 
@@ -221,7 +225,9 @@ class TestCompactionLevels:
         final_user_content = "FINAL_U_"  # 8 chars → 2 tokens
         final_asst_content = "FINAL_A_"  # 8 chars → 2 tokens
         await cm.add_message(_SESSION, Message(role="user", content=final_user_content))
-        await cm.add_message(_SESSION, Message(role="assistant", content=final_asst_content))
+        await cm.add_message(
+            _SESSION, Message(role="assistant", content=final_asst_content)
+        )
 
         messages = await cm.get_messages(_SESSION)
 
