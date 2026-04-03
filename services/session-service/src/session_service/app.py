@@ -108,13 +108,14 @@ async def _prepare_turn_payload(
 
     Args:
         request:   Incoming :class:`TurnRequest` from the caller.
-        session_id: Active session identifier (used for logging context only).
+        session_id: Active session identifier; used for debug logging.
         dapr_url:  Base URL of the Dapr HTTP sidecar.
 
     Returns:
         A 4-tuple of
         ``(routing_table_dict, system_prompt, provider_name, orchestrator_app_id)``.
     """
+    _logger.debug("_prepare_turn_payload called for session=%s", session_id)
     agent_config = get_agent_config(request.agent_ref)
     orchestrator_app_id: str = agent_config.get(
         "orchestrator_app_id", "svc-orchestrator"
@@ -332,6 +333,12 @@ def create_session_app(dapr_url: str | None = None) -> FastAPI:
                                 # Reset for next event block
                                 current_event = None
                                 current_data = None
+
+                        # Flush any partial event if the stream ends without a
+                        # trailing blank line (defensive — well-behaved SSE servers
+                        # always terminate blocks, but guard against edge cases).
+                        if current_event is not None and current_data is not None:
+                            yield {"event": current_event, "data": current_data}
 
             except Exception as exc:  # noqa: BLE001 — intentional: all errors must surface as SSE error events
                 _logger.exception("turn_stream_child failed for session %s", session_id)
