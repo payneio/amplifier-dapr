@@ -1,0 +1,36 @@
+name: svc-content-foundation
+version: '0.1.0'
+content_dir: content
+agents:
+  - name: amplifier-smoke-test
+    description: Amplifier-specialized smoke test for shadow environments
+  - name: bug-hunter
+    description: Specialized debugging expert focused on finding and fixing bugs systematically
+  - name: ecosystem-expert
+    description: Amplifier ecosystem development specialist for cross-repository work
+  - name: explorer
+    description: Deep local-context reconnaissance agent for multi-file exploration
+  - name: file-ops
+    description: Focused file operations agent for reading, writing, editing, and searching files
+  - name: foundation-expert
+    description: Authoritative expert on Amplifier Foundation, bundle composition, and agent authoring
+  - name: git-ops
+    description: Git and GitHub operations agent with safety protocols and conventional commits
+  - name: integration-specialist
+    description: Expert at integrating with external services, APIs, and MCP servers
+  - name: modular-builder
+    description: Implementation-only agent that builds modules from complete specifications
+  - name: post-task-cleanup
+    description: Ensures codebase hygiene after task completion by reviewing and cleaning artifacts
+  - name: security-guardian
+    description: Security reviews, vulnerability assessments, and production deployment audits
+  - name: session-analyst
+    description: Analyzes, debugs, searches, and repairs Amplifier sessions and transcripts
+  - name: shell-exec
+    description: Shell command execution agent for running terminal commands safely
+  - name: test-coverage
+    description: Analyzes test coverage, identifies gaps, and suggests comprehensive test cases
+  - name: web-research
+    description: Web research agent for searching and fetching information from the internet
+  - name: zen-architect
+    description: Code planning, architecture design, and review with ruthless simplicity
