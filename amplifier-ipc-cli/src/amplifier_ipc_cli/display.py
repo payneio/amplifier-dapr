@@ -402,6 +402,9 @@ class StreamingDisplay:
         Accepts two formats:
         - Orchestrator format: {"error": "..."} or {"error": {"type": str, "msg": str}}
         - Session-service format (legacy): {"message": "..."}
+
+        For structured errors (dict with "type" and "msg"), only "msg" is displayed.
+        The "type" field is intentionally discarded to keep user-facing output concise.
         """
         if isinstance(data, dict):
             error = data.get("error")

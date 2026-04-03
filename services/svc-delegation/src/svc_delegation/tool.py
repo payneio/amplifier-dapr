@@ -282,7 +282,7 @@ class DelegateTool:
         if not instruction:
             yield {
                 "event": "delegate:error",
-                "data": {"message": "Missing required field: instruction"},
+                "data": {"error": "Missing required field: instruction"},
             }
             return
 
@@ -291,7 +291,7 @@ class DelegateTool:
             yield {
                 "event": "delegate:error",
                 "data": {
-                    "message": (
+                    "error": (
                         f"Maximum delegation depth ({MAX_DELEGATION_DEPTH}) exceeded"
                     )
                 },
@@ -385,7 +385,7 @@ class DelegateTool:
             success = False
             yield {
                 "event": "delegate:error",
-                "data": {"message": str(exc)},
+                "data": {"error": str(exc)},
             }
 
         yield {

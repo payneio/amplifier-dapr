@@ -206,12 +206,19 @@ class Orchestrator:
         ``EventSourceResponse``.
 
         Event types yielded (``event`` key values):
-        - ``stream.thinking`` -- thinking block content, if any
-        - ``stream.token`` -- assistant text after each provider call
+        - ``stream.content_block:start`` -- new assistant content block started
+        - ``stream.content_block:delta`` -- incremental text token from current block
+        - ``stream.content_block:end`` -- current content block finished
+        - ``stream.thinking:delta`` -- incremental thinking token (if thinking enabled)
+        - ``stream.thinking:final`` -- complete thinking block content
+        - ``stream.token`` -- assistant text after each provider call (full accumulated)
         - ``stream.tool_call_start`` -- tool name, emitted before dispatch
         - ``stream.tool_call`` -- tool name + arguments, emitted before dispatch
         - ``stream.tool_result`` -- tool name, success flag, truncated output
-        - ``stream.complete`` -- final result text + full message list
+        - ``stream.todo_update`` -- updated todo list after todo tool call
+        - ``delegate:agent_spawned`` -- delegate tool started a child session
+        - ``delegate:agent_completed`` -- delegate tool child session finished
+        - ``stream.complete`` -- final result text + full message list (+ usage if non-zero)
         - ``stream.error`` -- error message if an exception occurs
 
         Args:

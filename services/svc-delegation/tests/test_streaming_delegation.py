@@ -226,6 +226,19 @@ class TestStreamingDelegationErrorHandling:
         assert "delegate:error" in event_types
         assert "delegate:agent_spawned" not in event_types
 
+    async def test_execute_stream_missing_instruction_error_uses_error_key(
+        self, tool: DelegateTool
+    ) -> None:
+        """delegate:error data must use 'error' key (not 'message') for CLI handler compat."""
+        events = []
+        async for event in tool.execute_stream({}):
+            events.append(event)
+
+        error_event = next(e for e in events if e["event"] == "delegate:error")
+        assert "error" in error_event["data"], "error key missing from delegate:error data"
+        assert "message" not in error_event["data"], "'message' key used instead of 'error'"
+        assert "instruction" in error_event["data"]["error"].lower()
+
     async def test_execute_stream_depth_exceeded_yields_error(self) -> None:
         """execute_stream at MAX_DELEGATION_DEPTH yields delegate:error."""
         tool = DelegateTool(
@@ -240,6 +253,21 @@ class TestStreamingDelegationErrorHandling:
         event_types = [e["event"] for e in events]
         assert "delegate:error" in event_types
         assert "delegate:agent_spawned" not in event_types
+
+    async def test_execute_stream_depth_exceeded_error_uses_error_key(self) -> None:
+        """delegate:error on depth exceeded must use 'error' key for CLI handler compat."""
+        tool = DelegateTool(
+            orchestrator_base_url="http://orchestrator:8080",
+            session_service_base_url="http://session-service:8080",
+            delegation_depth=MAX_DELEGATION_DEPTH,
+        )
+        events = []
+        async for event in tool.execute_stream({"instruction": "do something"}):
+            events.append(event)
+
+        error_event = next(e for e in events if e["event"] == "delegate:error")
+        assert "error" in error_event["data"], "error key missing from delegate:error data"
+        assert "message" not in error_event["data"], "'message' key used instead of 'error'"
 
     async def test_execute_stream_exception_yields_error_and_completed(
         self, tool: DelegateTool
@@ -263,3 +291,24 @@ class TestStreamingDelegationErrorHandling:
 
         completed = next(e for e in events if e["event"] == "delegate:agent_completed")
         assert completed["data"]["success"] is False
+
+    async def test_execute_stream_exception_error_uses_error_key(
+        self, tool: DelegateTool
+    ) -> None:
+        """delegate:error on exception must use 'error' key (not 'message') for CLI handler compat."""
+        mock_client = MagicMock()
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        mock_client.stream.side_effect = Exception("Connection refused")
+
+        with patch("svc_delegation.tool.httpx.AsyncClient", return_value=mock_client):
+            events = []
+            async for event in tool.execute_stream(
+                {"instruction": "do something", "session_id": "fail-session"}
+            ):
+                events.append(event)
+
+        error_event = next(e for e in events if e["event"] == "delegate:error")
+        assert "error" in error_event["data"], "error key missing from delegate:error data"
+        assert "message" not in error_event["data"], "'message' key used instead of 'error'"
+        assert "Connection refused" in error_event["data"]["error"]
