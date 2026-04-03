@@ -13,6 +13,9 @@ from amplifier_service_sdk.models import ToolResult
 
 logger = logging.getLogger(__name__)
 
+_DAPR_PORT_DEFAULT = "3500"
+_DAPR_STATE_STORE = "statestore"
+
 
 class TodoTool:
     """AI-managed todo list for self-accountability through complex turns."""
@@ -78,8 +81,8 @@ Recommended pattern:
 
     async def _save_state(self) -> None:
         """Persist current todo state to Dapr state store (fire-and-forget)."""
-        port = os.environ.get("DAPR_HTTP_PORT", "3500")
-        url = f"http://localhost:{port}/v1.0/state/statestore"
+        port = os.environ.get("DAPR_HTTP_PORT", _DAPR_PORT_DEFAULT)
+        url = f"http://localhost:{port}/v1.0/state/{_DAPR_STATE_STORE}"
         key = f"todo-{self._session_id}"
         try:
             async with httpx.AsyncClient() as client:
