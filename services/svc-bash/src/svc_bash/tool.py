@@ -38,6 +38,7 @@ class BashTool:
     }
 
     def get_metadata(self) -> dict[str, Any]:
+        """Return approval and risk metadata for this tool."""
         return {"requires_approval": True, "risk_level": "high"}
 
     def __init__(self, machine_base_url: str) -> None:
@@ -77,7 +78,7 @@ class BashTool:
                 try:
                     detail = exc.response.json().get("detail", {})
                     reason = detail.get("reason", "safety policy")
-                except Exception:
+                except (ValueError, AttributeError):
                     reason = "safety policy"
                 return ToolResult(
                     success=False,
@@ -131,7 +132,9 @@ class BashTool:
         Returns:
             Parsed JSON response dict from the machine service.
         """
-        http_timeout = timeout + 10
+        http_timeout = (
+            timeout + 10
+        )  # +10 s buffer for network round-trip and machine startup
         payload: dict[str, Any] = {"command": command, "timeout": timeout}
         if run_in_background:
             payload["run_in_background"] = True

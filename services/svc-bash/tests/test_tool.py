@@ -116,12 +116,57 @@ class TestBashTool:
         mock_result: dict[str, Any] = {"pid": 12345, "status": "running"}
         mock_exec = AsyncMock(return_value=mock_result)
         with patch.object(tool, "_call_machine_exec", new=mock_exec):
-            result = await tool.execute({"command": "sleep 60", "run_in_background": True})
+            result = await tool.execute(
+                {"command": "sleep 60", "run_in_background": True}
+            )
 
         assert result.success is True
         assert result.output is not None
         assert result.output["pid"] == 12345
-        mock_exec.assert_awaited_once()
+        mock_exec.assert_awaited_once_with("sleep 60", 30, run_in_background=True)
+
+    @pytest.mark.asyncio
+    async def test_execute_403_returns_denial_message(self, tool: BashTool) -> None:
+        """execute() returns a 'Command denied' message on 403 with reason from body."""
+        import json
+
+        import httpx
+
+        body = json.dumps({"detail": {"reason": "dangerous command"}}).encode()
+        response = httpx.Response(
+            403, content=body, headers={"content-type": "application/json"}
+        )
+        exc = httpx.HTTPStatusError(
+            "Forbidden",
+            request=httpx.Request("POST", "http://fake-machine:8080/exec"),
+            response=response,
+        )
+        with patch.object(tool, "_call_machine_exec", new=AsyncMock(side_effect=exc)):
+            result = await tool.execute({"command": "rm -rf /"})
+
+        assert result.success is False
+        assert result.error is not None
+        assert "dangerous command" in result.error["message"]
+
+    @pytest.mark.asyncio
+    async def test_execute_403_fallback_reason(self, tool: BashTool) -> None:
+        """execute() falls back to 'safety policy' when 403 body is malformed JSON."""
+        import httpx
+
+        response = httpx.Response(
+            403, content=b"not json", headers={"content-type": "text/plain"}
+        )
+        exc = httpx.HTTPStatusError(
+            "Forbidden",
+            request=httpx.Request("POST", "http://fake-machine:8080/exec"),
+            response=response,
+        )
+        with patch.object(tool, "_call_machine_exec", new=AsyncMock(side_effect=exc)):
+            result = await tool.execute({"command": "rm -rf /"})
+
+        assert result.success is False
+        assert result.error is not None
+        assert "safety policy" in result.error["message"]
 
     def test_schema_has_run_in_background(self, tool: BashTool) -> None:
         """input_schema must declare run_in_background as a boolean property."""
