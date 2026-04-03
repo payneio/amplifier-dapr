@@ -8,6 +8,8 @@ from fastapi.testclient import TestClient
 
 from svc_context.app import create_context_app
 
+SESSION_ID = "test-session"
+
 
 class TestModuleLevelApp:
     """Tests for the module-level app object in svc_context.app."""
@@ -44,15 +46,15 @@ class TestContextApp:
         assert data["name"] == "svc-context"
 
     def test_add_and_get(self, client: TestClient) -> None:
-        """POST /context/messages adds a message; GET /context/messages returns it."""
+        """POST /context/{session_id}/messages adds a message; GET returns it."""
         # Add a message
         message = {"role": "user", "content": "Hello!"}
-        post_response = client.post("/context/messages", json=message)
+        post_response = client.post(f"/context/{SESSION_ID}/messages", json=message)
         assert post_response.status_code == 200
         assert post_response.json() == {"success": True}
 
         # Retrieve messages
-        get_response = client.get("/context/messages")
+        get_response = client.get(f"/context/{SESSION_ID}/messages")
         assert get_response.status_code == 200
         data = get_response.json()
         assert "messages" in data
@@ -61,25 +63,29 @@ class TestContextApp:
         assert data["messages"][0]["content"] == "Hello!"
 
     def test_clear(self, client: TestClient) -> None:
-        """POST /context/clear removes all messages."""
+        """POST /context/{session_id}/clear removes all messages."""
         # Add a message first
-        client.post("/context/messages", json={"role": "user", "content": "msg1"})
+        client.post(
+            f"/context/{SESSION_ID}/messages", json={"role": "user", "content": "msg1"}
+        )
 
         # Clear
-        clear_response = client.post("/context/clear")
+        clear_response = client.post(f"/context/{SESSION_ID}/clear")
         assert clear_response.status_code == 200
         assert clear_response.json() == {"success": True}
 
         # Verify empty
-        get_response = client.get("/context/messages")
+        get_response = client.get(f"/context/{SESSION_ID}/messages")
         assert get_response.status_code == 200
         data = get_response.json()
         assert data["messages"] == []
 
     def test_bulk_set(self, client: TestClient) -> None:
-        """PUT /context/messages/bulk replaces all messages."""
+        """PUT /context/{session_id}/messages/bulk replaces all messages."""
         # Add some initial messages
-        client.post("/context/messages", json={"role": "user", "content": "old"})
+        client.post(
+            f"/context/{SESSION_ID}/messages", json={"role": "user", "content": "old"}
+        )
 
         # Bulk replace
         bulk_messages = [
@@ -87,13 +93,13 @@ class TestContextApp:
             {"role": "assistant", "content": "new2"},
         ]
         put_response = client.put(
-            "/context/messages/bulk",
+            f"/context/{SESSION_ID}/messages/bulk",
             json={"messages": bulk_messages},
         )
         assert put_response.status_code == 200
 
         # Verify replacement
-        get_response = client.get("/context/messages")
+        get_response = client.get(f"/context/{SESSION_ID}/messages")
         assert get_response.status_code == 200
         data = get_response.json()
         assert len(data["messages"]) == 2
@@ -101,16 +107,37 @@ class TestContextApp:
         assert data["messages"][1]["content"] == "new2"
 
     def test_get_with_query_params(self, client: TestClient) -> None:
-        """GET /context/messages accepts context_window and max_output_tokens query params."""
+        """GET /context/{session_id}/messages accepts context_window and max_output_tokens query params."""
         # Add a message
-        client.post("/context/messages", json={"role": "user", "content": "Hello!"})
+        client.post(
+            f"/context/{SESSION_ID}/messages",
+            json={"role": "user", "content": "Hello!"},
+        )
 
         # Query with params
         response = client.get(
-            "/context/messages",
+            f"/context/{SESSION_ID}/messages",
             params={"context_window": 200000, "max_output_tokens": 8192},
         )
         assert response.status_code == 200
         data = response.json()
         assert "messages" in data
         assert len(data["messages"]) == 1
+
+    def test_set_system_prompt(self, client: TestClient) -> None:
+        """POST /context/{session_id}/system-prompt sets or replaces the system message."""
+        # Set the system prompt
+        prompt_response = client.post(
+            f"/context/{SESSION_ID}/system-prompt",
+            json={"content": "You are a helpful assistant."},
+        )
+        assert prompt_response.status_code == 200
+        assert prompt_response.json() == {"success": True}
+
+        # Verify the system message appears at position 0
+        get_response = client.get(f"/context/{SESSION_ID}/messages")
+        assert get_response.status_code == 200
+        data = get_response.json()
+        assert len(data["messages"]) >= 1
+        assert data["messages"][0]["role"] == "system"
+        assert data["messages"][0]["content"] == "You are a helpful assistant."
