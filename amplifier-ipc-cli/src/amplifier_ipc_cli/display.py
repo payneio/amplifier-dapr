@@ -361,7 +361,8 @@ class StreamingDisplay:
                 else:
                     message = str(error)
             else:
-                # Legacy session-service format: fall back to "message"
+                # Legacy session-service format: fall back to "message";
+                # unknown dict shape — surface raw representation as last resort
                 message = str(data.get("message", str(data)))
         else:
             message = str(data)
