@@ -1,7 +1,5 @@
 """Tests for truncate_output — output truncation with head/tail preservation."""
 
-import pytest
-
 from svc_machine.truncation import truncate_output
 
 
