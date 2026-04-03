@@ -21,7 +21,13 @@ def load_matrix_from_file(path: Path) -> dict:
         with open(path) as f:
             data = yaml.safe_load(f)
         return data if isinstance(data, dict) else {}
-    except Exception:
+    except (
+        FileNotFoundError,
+        PermissionError,
+        OSError,
+        yaml.YAMLError,
+        UnicodeDecodeError,
+    ):
         logger.warning("Failed to load routing matrix from %s", path)
         return {}
 

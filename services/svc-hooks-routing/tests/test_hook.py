@@ -47,7 +47,7 @@ def hook_empty_candidates():
 
 
 class TestBasicBehavior:
-    """4 tests covering basic hook event routing behavior."""
+    """Covers basic hook event routing behavior."""
 
     async def test_unknown_event_continues(self, hook_no_matrix):
         result = await hook_no_matrix.handle("some:event", {})
@@ -69,10 +69,12 @@ class TestBasicBehavior:
         context_text = result.data["context_injection"]
         assert "general" in context_text
         assert "fast" in context_text
+        assert "Quick utility tasks" in context_text
+        assert "General purpose tasks" in context_text
 
 
 class TestResolveModelRole:
-    """5 tests covering resolve(model_role) behavior via provider:request."""
+    """Covers resolve(model_role) behavior via provider:request."""
 
     async def test_fast_role_returns_modify_with_haiku(self, hook_with_matrix):
         result = await hook_with_matrix.handle(
