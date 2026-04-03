@@ -279,7 +279,7 @@ class TestFileGrep:
             "def foo():\n    pass\n\ndef bar():\n    return 1\n"
         )
         (tmp_path / "notes.txt").write_text("no functions here\n")
-        node_modules = tmp_path / "node_modules" / "pkg"
+        node_modules = tmp_path / "node_modules"
         node_modules.mkdir(parents=True)
         (node_modules / "pkg.js").write_text("def fake() {}\n")
 
