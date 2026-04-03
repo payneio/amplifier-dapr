@@ -20,7 +20,7 @@ class TestReadFileTool:
         return ReadFileTool(machine_base_url="http://fake-machine:8080")
 
     async def test_execute_success(self, tool: ReadFileTool) -> None:
-        """execute() calls machine /files/read and returns success=True with content."""
+        """execute() calls machine /files/read and returns success=True with formatted content."""
         mock_result: dict[str, Any] = {"content": "hello world\n", "total_lines": 1}
         with patch.object(
             tool, "_call_machine", new=AsyncMock(return_value=mock_result)
@@ -29,7 +29,9 @@ class TestReadFileTool:
 
         assert result.success is True
         assert result.output is not None
-        assert result.output["content"] == "hello world\n"
+        content = result.output["content"]
+        assert "hello world" in content
+        assert "1\t" in content  # content formatted with line numbers
 
     async def test_execute_missing_file_path(self, tool: ReadFileTool) -> None:
         """execute() with no file_path returns success=False with descriptive error."""

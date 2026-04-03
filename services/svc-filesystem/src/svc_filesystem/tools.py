@@ -113,15 +113,21 @@ class ReadFileTool(BaseMachineTool):
         "required": ["file_path"],
     }
 
+    _MAX_LINE_LENGTH: int = 2000
+
     async def execute(self, params: dict[str, Any]) -> ToolResult:
         """Read file contents via the machine service.
+
+        Supports directory listing when the path ends with ``/`` or when the
+        machine returns an ``entries`` key.  File content is returned with
+        ``cat -n`` style line numbers and long lines are truncated.
 
         Args:
             params: Tool input dict.  Must contain ``file_path``.
                     Supports optional ``offset`` and ``limit``.
 
         Returns:
-            ToolResult with success=True and output containing file content.
+            ToolResult with success=True and output containing formatted content.
         """
         file_path = params.get("file_path")
         if not file_path:
@@ -136,10 +142,97 @@ class ReadFileTool(BaseMachineTool):
         if "limit" in params:
             payload["limit"] = params["limit"]
 
-        call = await self._call_machine_safe("/files/read", payload)
-        if call.error is not None:
-            return call.error
-        return ToolResult(success=True, output=call.data)
+        try:
+            data = await self._call_machine("/files/read", payload)
+        except httpx.HTTPStatusError as exc:
+            if file_path.endswith("/"):
+                return await self._try_directory_listing(file_path)
+            return ToolResult(
+                success=False,
+                error={"message": f"machine service error: {exc.response.status_code}"},
+            )
+        except httpx.RequestError as exc:
+            if file_path.endswith("/"):
+                return await self._try_directory_listing(file_path)
+            return ToolResult(
+                success=False,
+                error={"message": f"machine service unreachable: {exc}"},
+            )
+
+        if "entries" in data:
+            return self._format_directory_listing(data, file_path)
+
+        formatted = self._format_with_line_numbers(data.get("content", ""))
+        output = {**data, "content": formatted}
+        return ToolResult(success=True, output=output)
+
+    async def _try_directory_listing(self, file_path: str) -> ToolResult:
+        """Attempt a directory listing via the machine ``/files/list`` endpoint.
+
+        Args:
+            file_path: Directory path (trailing ``/`` is stripped before the call).
+
+        Returns:
+            ToolResult with formatted directory listing, or a failure result.
+        """
+        path = file_path.rstrip("/")
+        try:
+            data = await self._call_machine("/files/list", {"path": path})
+            return self._format_directory_listing(data, path)
+        except httpx.HTTPStatusError as exc:
+            return ToolResult(
+                success=False,
+                error={"message": f"machine service error: {exc.response.status_code}"},
+            )
+        except httpx.RequestError as exc:
+            return ToolResult(
+                success=False,
+                error={"message": f"machine service unreachable: {exc}"},
+            )
+
+    @staticmethod
+    def _format_directory_listing(data: dict[str, Any], path: str) -> ToolResult:
+        """Format a directory listing response as human-readable content.
+
+        Args:
+            data: Response dict containing an ``entries`` list.
+            path: Directory path (used for context only; not included in output).
+
+        Returns:
+            ToolResult with ``content`` string and ``is_directory: True``.
+        """
+        entries = data.get("entries", [])
+        lines = []
+        for entry in entries:
+            prefix = "DIR " if entry.get("type") == "dir" else "FILE"
+            lines.append(f"{prefix} {entry['name']}")
+        content = "\n".join(lines)
+        return ToolResult(
+            success=True,
+            output={"content": content, "is_directory": True},
+        )
+
+    def _format_with_line_numbers(self, content: str, start_line: int = 1) -> str:
+        """Format file content with ``cat -n`` style line numbers.
+
+        Lines longer than ``_MAX_LINE_LENGTH`` characters are truncated with a
+        ``...`` suffix.
+
+        Args:
+            content: Raw file content string.
+            start_line: Line number to assign to the first line (default 1).
+
+        Returns:
+            Formatted string with each line prefixed by its line number.
+        """
+        lines = content.splitlines()
+        result = []
+        for i, line in enumerate(lines, start=start_line):
+            stripped = line
+            if len(stripped) > self._MAX_LINE_LENGTH:
+                stripped = stripped[: self._MAX_LINE_LENGTH] + "..."
+            result.append(f"{i:>6}\t{stripped}")
+        return "\n".join(result)
 
 
 class WriteFileTool(BaseMachineTool):
