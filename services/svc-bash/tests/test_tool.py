@@ -123,14 +123,12 @@ class TestBashTool:
         assert result.output["pid"] == 12345
         mock_exec.assert_awaited_once()
 
-    @pytest.mark.asyncio
-    async def test_schema_has_run_in_background(self, tool: BashTool) -> None:
+    def test_schema_has_run_in_background(self, tool: BashTool) -> None:
         """input_schema must declare run_in_background as a boolean property."""
         assert "run_in_background" in tool.input_schema["properties"]
         assert tool.input_schema["properties"]["run_in_background"]["type"] == "boolean"
 
-    @pytest.mark.asyncio
-    async def test_metadata_includes_approval_info(self, tool: BashTool) -> None:
+    def test_metadata_includes_approval_info(self, tool: BashTool) -> None:
         """get_metadata() returns approval and risk metadata."""
         metadata = tool.get_metadata()
         assert metadata == {"requires_approval": True, "risk_level": "high"}
