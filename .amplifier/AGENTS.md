@@ -11,10 +11,12 @@ The Dapr microservices framework is implemented and running:
 - **~29 services** are defined in docker-compose.yaml, each with Dapr sidecars
 - **Session CLI** (`amplifier-svc`) works with streaming SSE, tool calls, and real LLM providers (Anthropic, OpenAI, etc.)
 - **Docker compose** builds and runs successfully end-to-end
-- **All unit tests pass** across all services (74 in ampctl, 95 in session-service)
+- **All unit tests pass** across all services (74 in ampctl, 107 in session-service, 124 in CLI, 56 in orchestrator, 42 in delegation)
 - The orchestrator agent loop, context management, hook pipeline, and content assembly are all functional
 - **Agent definition system** (`ampctl`) is implemented: YAML-based agent definitions, deterministic service name hashing, docker-compose generation, and a management CLI
 - **Session-service** loads agent definitions from YAML files with hardcoded fallback
+- **SSE event parity with legacy Amplifier** — all streaming events use legacy-compatible names and data shapes (content_block:start/end, thinking:delta/final, delegate:agent_spawned/completed)
+- **Streaming delegation** — svc-delegation streams child session events in real time via SSE; CLI displays nested delegation progress
 
 ## Recent Design Decisions
 
@@ -22,12 +24,16 @@ The Dapr microservices framework is implemented and running:
 - **Management CLI (`ampctl`)**: Separate from the session CLI. Handles `add <uri> <name>`, `remove`, `list`, `update`, `compose`, `inspect`. Generates `docker-compose.yaml` from installed agent definitions. Conflict resolution uses deterministic hashing of image/build values for service names.
 - **No UUIDs needed**: Dapr app-ids and image hashes handle identity. Behavior keys are simple names (no org namespace required) since `ampctl` controls docker-compose generation.
 - **Providers (plural)**: Single container with all LLM providers, selected at runtime via routing hooks.
+- **SSE event naming**: Uses legacy Amplifier event names with colon separators (e.g., content_block:start, delegate:agent_spawned) to ease future migration of monolith bundles into services.
+- **Display belongs in CLI**: Todo display, streaming UI, and thinking block rendering are CLI presentation concerns, not server-side hooks. The server emits structured SSE events; the CLI renders them with Rich. This is the correct separation for a client-server architecture.
+- **HookResult contract**: Matches legacy amplifier-core — context_injection, ephemeral, and context_injection_role are top-level fields on HookResult, not nested in data.
 
 ## Key Design Documents
 
 - `docs/design/amplifier-ipc-microservices-design.md` -- the overall microservices architecture and rationale
 - `docs/design/agent-definitions-and-ampctl.md` -- the agent definition format and management CLI design
 - `docs/specs/amplifier-spec.md` -- the spec (needs updating to reflect the new agent definition format and ampctl design)
+- `docs/plans/sse-event-parity-plan.md` -- the plan for SSE event alignment and streaming delegation
 
 ## Next Steps
 
@@ -39,6 +45,7 @@ In priority order:
 4. **Implement remaining session CLI slash commands**: `/mode`, `/save`, `/status`, `/clear`, `/config`, `/rename`, `/fork`, `/skills`, `/skill`
 5. **Replace `docker-compose.yaml`** with a generated version from `ampctl compose` (currently the existing hand-written compose still works but `ampctl compose` can generate a new one)
 6. **Wire session-service to use service-map app-ids** for orchestrator/context routing instead of hardcoded `svc-orchestrator` / `svc-context` names
+7. **True incremental streaming** — provider calls currently return full responses; token-by-token streaming requires provider service interface changes
 
 ## Reference Material
 
@@ -64,11 +71,11 @@ services/                 Dapr-native microservices. Each svc-* directory is an 
   svc-search/             GrepTool, GlobTool -- calls svc-machine /files/grep, /files/glob.
   svc-web/                WebSearchTool, WebFetchTool -- self-contained (aiohttp, duckduckgo-search).
   svc-skills/             SkillsTool with skill discovery.
-  svc-todo/               TodoTool + in-process TodoReminderHook + TodoDisplayHook.
+  svc-todo/               TodoTool + in-process TodoReminderHook. Todo display is a CLI concern.
   svc-modes/              ModeTool + in-process ModeHook (tightly coupled).
   svc-providers/          8 LLM providers: Anthropic, OpenAI, Azure, Gemini, Ollama, vLLM, GitHub Copilot.
   svc-mock-provider/      Deterministic mock provider for testing.
-  svc-delegation/         DelegateTool -- calls session-service /spawn for child sessions.
+  svc-delegation/         DelegateTool -- streaming delegation with real-time child session events via SSE.
   svc-hooks-approval/     Pre-hook: rule-based tool allow/deny.
   svc-hooks-routing/      Pre-hook: provider/model routing matrix.
   svc-hooks-async/        Post-hook: pub/sub JSONL logging.
