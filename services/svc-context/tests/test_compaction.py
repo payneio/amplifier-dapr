@@ -11,6 +11,7 @@ from svc_context.context_manager import (
 )
 
 _SESSION = "test-compaction-session"
+_LONG_CONTENT = "x" * 200  # 50 tokens each — deliberately above compaction threshold
 
 
 def _make_tool_pair(call_id: str, content: str = "result") -> tuple[Message, Message]:
@@ -180,10 +181,9 @@ class TestCompactionLevels:
         await cm.add_message(_SESSION, Message(role="system", content=sys_content))
 
         # 6 alternating messages with 200-char content → 6 * 50 = 300 tokens (>> 50 threshold)
-        long_content = "x" * 200
         for i in range(6):
             role = "user" if i % 2 == 0 else "assistant"
-            await cm.add_message(_SESSION, Message(role=role, content=long_content))
+            await cm.add_message(_SESSION, Message(role=role, content=_LONG_CONTENT))
 
         messages = await cm.get_messages(_SESSION)
 
@@ -215,10 +215,9 @@ class TestCompactionLevels:
         await cm.add_message(_SESSION, Message(role="system", content="S"))
 
         # 10 alternating messages with 200-char content — heavy traffic to compact
-        long_content = "x" * 200  # 50 tokens each
         for i in range(10):
             role = "user" if i % 2 == 0 else "assistant"
-            await cm.add_message(_SESSION, Message(role=role, content=long_content))
+            await cm.add_message(_SESSION, Message(role=role, content=_LONG_CONTENT))
 
         # Final identifiable messages — 8-char content = 2 tokens each
         # These land in the protected tail and must survive
@@ -285,10 +284,9 @@ class TestCompactionNotice:
         await cm.add_message(_SESSION, Message(role="system", content="System."))
 
         # 6 alternating 200-char messages → 300 tokens >> 50 threshold
-        long_content = "x" * 200
         for i in range(6):
             role = "user" if i % 2 == 0 else "assistant"
-            await cm.add_message(_SESSION, Message(role=role, content=long_content))
+            await cm.add_message(_SESSION, Message(role=role, content=_LONG_CONTENT))
 
         messages = await cm.get_messages(_SESSION)
 
@@ -320,18 +318,15 @@ class TestEphemeralCompaction:
         cm.compact_threshold = 0.50
         cm.target_usage = 0.30
 
-        session = "ephemeral-test"
-        long_content = "x" * 200  # 50 tokens each
-
         # 6 alternating messages → 300 tokens >> threshold (50)
         for i in range(6):
             role = "user" if i % 2 == 0 else "assistant"
-            await cm.add_message(session, Message(role=role, content=long_content))
+            await cm.add_message(_SESSION, Message(role=role, content=_LONG_CONTENT))
 
-        original_count = len(cm._sessions[session])  # must be 6
+        original_count = len(cm._sessions[_SESSION])  # must be 6
 
         # This call should trigger compaction
-        compacted = await cm.get_messages(session)
+        compacted = await cm.get_messages(_SESSION)
 
         # Returned list must be compacted (fewer messages than stored)
         assert len(compacted) < original_count, (
@@ -340,7 +335,7 @@ class TestEphemeralCompaction:
         )
 
         # Stored list must be completely unchanged
-        assert len(cm._sessions[session]) == original_count, (
+        assert len(cm._sessions[_SESSION]) == original_count, (
             f"Stored messages must not be modified by get_messages: "
-            f"expected {original_count}, got {len(cm._sessions[session])}"
+            f"expected {original_count}, got {len(cm._sessions[_SESSION])}"
         )
