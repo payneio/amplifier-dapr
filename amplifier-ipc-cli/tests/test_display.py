@@ -227,11 +227,11 @@ class TestStreamingDisplay:
         assert output == ""
 
     # ------------------------------------------------------------------
-    # New tests for improved _handle_todo_update (Rich Panel + colors)
+    # Tests for foundation hooks-todo-display format
     # ------------------------------------------------------------------
 
     def test_handle_todo_update_full_mode_colored_symbols(self) -> None:
-        """Full mode (<=7 items) shows ✓, → and ○ symbols for each status."""
+        """Full mode (<=7 items) shows ✓, ▶ and ○ symbols for each status."""
         console, buf = make_console()
         display = StreamingDisplay(console)
         event = SSEEvent(
@@ -247,25 +247,131 @@ class TestStreamingDisplay:
         display.handle_sse_event(event)
         output = buf.getvalue()
         assert "✓" in output  # completed symbol
-        assert "→" in output  # in_progress arrow symbol (not ▶)
+        assert "▶" in output  # in_progress play symbol (upstream format)
         assert "○" in output  # pending circle symbol
-        assert "▶" not in output  # old play symbol must be gone
+        assert "→" not in output  # old arrow must be gone
 
-    def test_handle_todo_update_condensed_mode_shows_status_counts(self) -> None:
-        """Condensed mode (>7 items) shows symbol counts for each status."""
+    def test_handle_todo_update_condensed_mode_shows_bar_and_current_task(self) -> None:
+        """Condensed mode (>7 items) shows progress bar and current in-progress task."""
         console, buf = make_console()
         display = StreamingDisplay(console)
-        todos = [{"content": f"task {i}", "status": "pending"} for i in range(8)]
+        todos = [
+            {
+                "content": f"task {i}",
+                "activeForm": f"Working on task {i}",
+                "status": "pending",
+            }
+            for i in range(8)
+        ]
         todos[0]["status"] = "completed"
         todos[1]["status"] = "in_progress"
         event = SSEEvent(event="todo_update", data={"todos": todos})
         display.handle_sse_event(event)
         output = buf.getvalue()
-        # All three status symbols should appear in condensed summary
-        assert "✓" in output
-        assert "→" in output  # new arrow (not ▶)
-        assert "○" in output
-        assert "▶" not in output  # old play symbol must be gone
+        # Should show progress count
+        assert "1/8" in output
+        # Should show ▶ symbol and activeForm of in-progress item
+        assert "▶" in output
+        assert "Working on task 1" in output
+        # Individual task names beyond the in-progress one should NOT appear
+        assert "task 7" not in output
+        assert "→" not in output  # old arrow must be gone
+
+    def test_full_mode_title_in_border(self) -> None:
+        """Full mode box has 'Todo' title embedded in the top border line."""
+        console, buf = make_console()
+        display = StreamingDisplay(console)
+        event = SSEEvent(
+            event="todo_update",
+            data={
+                "todos": [
+                    {
+                        "content": "Set up environment",
+                        "activeForm": "Setting up environment",
+                        "status": "completed",
+                    },
+                    {
+                        "content": "Run tests",
+                        "activeForm": "Running tests",
+                        "status": "in_progress",
+                    },
+                    {
+                        "content": "Build project",
+                        "activeForm": "Building project",
+                        "status": "pending",
+                    },
+                ]
+            },
+        )
+        display.handle_sse_event(event)
+        output = buf.getvalue()
+        # "Todo" must appear in the top-border line (title-in-border style)
+        assert "Todo" in output
+        # Box-drawing corners must be present
+        assert "┌" in output
+        assert "└" in output
+
+    def test_full_mode_activeForm_for_in_progress(self) -> None:
+        """Full mode shows activeForm for in_progress items, NOT content."""
+        console, buf = make_console()
+        display = StreamingDisplay(console)
+        event = SSEEvent(
+            event="todo_update",
+            data={
+                "todos": [
+                    {
+                        "content": "do the work",
+                        "activeForm": "doing the work now",
+                        "status": "in_progress",
+                    },
+                    {
+                        "content": "finish up",
+                        "activeForm": "finishing up",
+                        "status": "pending",
+                    },
+                ]
+            },
+        )
+        display.handle_sse_event(event)
+        output = buf.getvalue()
+        # activeForm must appear for in_progress
+        assert "doing the work now" in output
+        # content must NOT appear for in_progress ("do the work" ≠ prefix of "doing the work now")
+        assert "do the work" not in output
+        # pending still shows its content text
+        assert "finish up" in output
+
+    def test_all_completed_shows_complete_text(self) -> None:
+        """All-complete state shows a fully filled bar and '✓ Complete' text."""
+        console, buf = make_console()
+        display = StreamingDisplay(console)
+        event = SSEEvent(
+            event="todo_update",
+            data={
+                "todos": [
+                    {
+                        "content": "task one",
+                        "activeForm": "Doing task one",
+                        "status": "completed",
+                    },
+                    {
+                        "content": "task two",
+                        "activeForm": "Doing task two",
+                        "status": "completed",
+                    },
+                    {
+                        "content": "task three",
+                        "activeForm": "Doing task three",
+                        "status": "completed",
+                    },
+                ]
+            },
+        )
+        display.handle_sse_event(event)
+        output = buf.getvalue()
+        assert "3/3" in output
+        assert "Complete" in output  # "✓ Complete" suffix
+        assert "░" not in output  # no empty bar segments when fully done
 
     def test_handle_todo_update_progress_bar_counts(self) -> None:
         """Progress bar shows N/total format with correct completed count."""

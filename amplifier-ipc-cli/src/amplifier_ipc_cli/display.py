@@ -5,7 +5,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from rich.errors import MarkupError
-from rich.panel import Panel
 from rich.text import Text
 
 if TYPE_CHECKING:
@@ -22,9 +21,15 @@ _DEFAULT_TOOL_ARGS_COUNT = 10
 _DEFAULT_TOOL_RESULT_LINES = 10
 _DEFAULT_TOOL_RESULT_LINE_LEN = 200
 
-_TODO_BAR_WIDTH = 20
+_TODO_BAR_WIDTH = 24
 _TODO_FULL_MODE_THRESHOLD = 7
 _TODO_PANEL_MAX_WIDTH = 60
+
+_TODO_STYLES: dict[str, str] = {
+    "completed": "dim green",
+    "in_progress": "bold cyan",
+    "pending": "dim",
+}
 
 # Indentation applied per child-session nesting level.
 _NESTING_INDENT = "    "  # 4 spaces
@@ -199,8 +204,26 @@ class StreamingDisplay:
                     highlight=False,
                 )
 
+    def _todo_line(self, inner: Text, box_width: int) -> Text:
+        """Return a bordered line ``│ {inner padded to box_width-4} │`` as a Rich Text."""
+        inner_width = box_width - 4
+        padding = max(0, inner_width - len(inner))
+        line = Text()
+        line.append("│ ")
+        line.append_text(inner)
+        line.append(" " * padding + " │")
+        return line
+
     def _handle_todo_update(self, data: Any) -> None:
-        """Render a Rich Panel with color-coded todo items (<=7) or summary (>7) plus progress bar."""
+        """Render todo items matching the foundation hooks-todo-display visual format.
+
+        Uses manual box-drawing so the title appears inside the top border:
+        ``┌─ Todo ─────────────────────┐``
+
+        Full mode (≤7 items): padding + per-item lines + padding + progress bar + padding.
+        Condensed mode (>7 items): single progress-bar line with current in-progress task.
+        All-complete: single fully-filled bar line with "✓ Complete".
+        """
         if not isinstance(data, dict):
             return
         todos: list[dict[str, Any]] = data.get("todos", [])
@@ -209,50 +232,82 @@ class StreamingDisplay:
 
         total = len(todos)
         completed_count = sum(1 for t in todos if t.get("status") == "completed")
-        in_progress_count = sum(1 for t in todos if t.get("status") == "in_progress")
-        pending_count = sum(1 for t in todos if t.get("status") == "pending")
+        in_progress_item = next(
+            (t for t in todos if t.get("status") == "in_progress"), None
+        )
+        all_complete = completed_count == total
 
-        panel_width = min(self._console.width, _TODO_PANEL_MAX_WIDTH)
+        box_width = min(self._console.width, _TODO_PANEL_MAX_WIDTH)
 
-        content = Text()
+        # ┌─ Todo ─...─┐  (title embedded in top border)
+        top_border = "┌─ Todo " + "─" * (box_width - 9) + "┐"
+        bottom_border = "└" + "─" * (box_width - 2) + "┘"
+        empty_line = "│" + " " * (box_width - 2) + "│"
 
-        if total <= _TODO_FULL_MODE_THRESHOLD:
-            # Full mode: one line per item with color-coded symbol
-            for i, todo in enumerate(todos):
+        self._console.print(top_border, markup=False)
+
+        if all_complete:
+            # Single line: fully filled green bar + count + ✓ Complete
+            bar_inner = Text()
+            bar_inner.append("█" * _TODO_BAR_WIDTH, style="green")
+            bar_inner.append(f" {completed_count}/{total} ", style="green")
+            bar_inner.append("✓ Complete", style="green")
+            self._console.print(self._todo_line(bar_inner, box_width))
+
+        elif total <= _TODO_FULL_MODE_THRESHOLD:
+            # Full mode: empty padding, one line per item, padding, progress bar, padding
+            self._console.print(empty_line, markup=False)
+
+            for todo in todos:
                 status = todo.get("status", "pending")
-                text_content = str(todo.get("content", ""))
-                if i > 0:
-                    content.append("\n")
+                content = str(todo.get("content", ""))
+                active_form = str(todo.get("activeForm", "") or content)
+                style = _TODO_STYLES.get(status, "dim")
+
                 if status == "completed":
-                    content.append("\u2713", style="green")  # ✓
-                    content.append(" ")
-                    content.append(text_content, style="dim strike")
+                    symbol, label = "✓", content
                 elif status == "in_progress":
-                    content.append("\u2192", style="bold cyan")  # →
-                    content.append(" ")
-                    content.append(text_content, style="bold")
+                    symbol, label = "▶", active_form
                 else:
-                    content.append("\u25cb", style="dim")  # ○
-                    content.append(" ")
-                    content.append(text_content, style="dim")
+                    symbol, label = "○", content
+
+                item_inner = Text()
+                item_inner.append(f"{symbol} {label}", style=style)
+                self._console.print(self._todo_line(item_inner, box_width))
+
+            self._console.print(empty_line, markup=False)
+
+            # Progress bar line
+            filled = int(_TODO_BAR_WIDTH * completed_count / total) if total > 0 else 0
+            empty = _TODO_BAR_WIDTH - filled
+            bar_inner = Text()
+            bar_inner.append("█" * filled, style="green")
+            bar_inner.append("░" * empty, style="dim")
+            bar_inner.append(f" {completed_count}/{total}", style="dim")
+            self._console.print(self._todo_line(bar_inner, box_width))
+
+            self._console.print(empty_line, markup=False)
+
         else:
-            # Condensed mode: summary count for each status
-            content.append("\u2713", style="green")  # ✓
-            content.append(f" {completed_count}  ", style="dim")
-            content.append("\u2192", style="bold cyan")  # →
-            content.append(f" {in_progress_count}  ", style="dim")
-            content.append("\u25cb", style="dim")  # ○
-            content.append(f" {pending_count}", style="dim")
+            # Condensed mode: single line — bar + count + current in-progress task
+            filled = int(_TODO_BAR_WIDTH * completed_count / total) if total > 0 else 0
+            empty_bar = _TODO_BAR_WIDTH - filled
+            content_inner = Text()
+            content_inner.append("█" * filled, style="green")
+            content_inner.append("░" * empty_bar, style="dim")
+            content_inner.append(f" {completed_count}/{total}", style="dim")
 
-        # Progress bar
-        filled = int(_TODO_BAR_WIDTH * completed_count / total) if total > 0 else 0
-        empty = _TODO_BAR_WIDTH - filled
-        content.append("\n")
-        content.append("\u2588" * filled, style="green")  # █ filled
-        content.append("\u2591" * empty, style="dim")  # ░ empty
-        content.append(f" {completed_count}/{total}", style="dim")
+            if in_progress_item is not None:
+                active_form = str(
+                    in_progress_item.get("activeForm", "")
+                    or in_progress_item.get("content", "")
+                )
+                content_inner.append(" ▶ ", style="bold cyan")
+                content_inner.append(active_form, style="bold cyan")
 
-        self._console.print(Panel(content, border_style="dim", width=panel_width))
+            self._console.print(self._todo_line(content_inner, box_width))
+
+        self._console.print(bottom_border, markup=False)
 
     def _handle_child_session_start(self, data: Any) -> None:
         """Print a 🔧 delegation header indented according to session depth."""
