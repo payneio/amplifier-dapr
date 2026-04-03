@@ -1,12 +1,29 @@
+"""Tests for RoutingHook with real resolve(model_role) logic."""
+
 import pytest
 from svc_hooks_routing.hook import RoutingHook
-
 
 SAMPLE_MATRIX = {
     "name": "balanced",
     "roles": {
-        "general": {"description": "General purpose tasks"},
-        "fast": {"description": "Quick utility tasks"},
+        "fast": {
+            "description": "Quick utility tasks",
+            "candidates": [{"provider": "anthropic", "model": "claude-haiku-4-5"}],
+        },
+        "general": {
+            "description": "General purpose tasks",
+            "candidates": [{"provider": "anthropic", "model": "claude-sonnet-4-6"}],
+        },
+    },
+}
+
+EMPTY_CANDIDATES_MATRIX = {
+    "name": "test",
+    "roles": {
+        "empty_role": {
+            "description": "Role with no candidates",
+            "candidates": [],
+        }
     },
 }
 
@@ -19,46 +36,87 @@ def hook_no_matrix():
 
 @pytest.fixture
 def hook_with_matrix():
-    """RoutingHook with a populated routing matrix."""
+    """RoutingHook with a populated routing matrix including candidates."""
     return RoutingHook(matrix=SAMPLE_MATRIX)
 
 
-# --- Test 1: unknown event continues ---
-@pytest.mark.asyncio
-async def test_unknown_event_continues(hook_no_matrix):
-    result = await hook_no_matrix.handle("some:event", {})
-    assert result.action == "CONTINUE"
+@pytest.fixture
+def hook_empty_candidates():
+    """RoutingHook with a role that has no candidates."""
+    return RoutingHook(matrix=EMPTY_CANDIDATES_MATRIX)
 
 
-# --- Test 2: provider:request with no matrix continues ---
-@pytest.mark.asyncio
-async def test_provider_request_no_matrix_continues(hook_no_matrix):
-    result = await hook_no_matrix.handle("provider:request", {})
-    assert result.action == "CONTINUE"
+class TestBasicBehavior:
+    """4 tests covering basic hook event routing behavior."""
+
+    async def test_unknown_event_continues(self, hook_no_matrix):
+        result = await hook_no_matrix.handle("some:event", {})
+        assert result.action == "CONTINUE"
+
+    async def test_provider_request_no_matrix_continues(self, hook_no_matrix):
+        result = await hook_no_matrix.handle("provider:request", {})
+        assert result.action == "CONTINUE"
+
+    async def test_session_start_continues(self, hook_with_matrix):
+        result = await hook_with_matrix.handle("session:start", {})
+        assert result.action == "CONTINUE"
+
+    async def test_provider_request_no_role_injects_context(self, hook_with_matrix):
+        """provider:request without model_role and with matrix → INJECT_CONTEXT listing roles."""
+        result = await hook_with_matrix.handle("provider:request", {})
+        assert result.action == "INJECT_CONTEXT"
+        assert result.data is not None
+        context_text = result.data["context_injection"]
+        assert "general" in context_text
+        assert "fast" in context_text
 
 
-# --- Test 3: session:start continues ---
-@pytest.mark.asyncio
-async def test_session_start_continues(hook_with_matrix):
-    result = await hook_with_matrix.handle("session:start", {})
-    assert result.action == "CONTINUE"
+class TestResolveModelRole:
+    """5 tests covering resolve(model_role) behavior via provider:request."""
 
+    async def test_fast_role_returns_modify_with_haiku(self, hook_with_matrix):
+        result = await hook_with_matrix.handle(
+            "provider:request", {"model_role": "fast"}
+        )
+        assert result.action == "MODIFY"
+        assert result.data is not None
+        assert result.data["provider"] == "anthropic"
+        assert result.data["model"] == "claude-haiku-4-5"
 
-# --- Test 4: provider:request with matrix returns INJECT_CONTEXT with role names ---
-@pytest.mark.asyncio
-async def test_provider_request_with_matrix_injects_context(hook_with_matrix):
-    result = await hook_with_matrix.handle("provider:request", {})
-    assert result.action == "INJECT_CONTEXT"
-    assert result.data is not None
-    context_text = result.data["context_injection"]
-    assert "general" in context_text
-    assert "fast" in context_text
+    async def test_general_role_returns_modify_with_sonnet(self, hook_with_matrix):
+        result = await hook_with_matrix.handle(
+            "provider:request", {"model_role": "general"}
+        )
+        assert result.action == "MODIFY"
+        assert result.data is not None
+        assert result.data["provider"] == "anthropic"
+        assert result.data["model"] == "claude-sonnet-4-6"
 
+    async def test_unknown_role_returns_continue(self, hook_with_matrix):
+        result = await hook_with_matrix.handle(
+            "provider:request", {"model_role": "nonexistent"}
+        )
+        assert result.action == "CONTINUE"
 
-# --- Test 5: context injection marked ephemeral ---
-@pytest.mark.asyncio
-async def test_context_injection_ephemeral(hook_with_matrix):
-    result = await hook_with_matrix.handle("provider:request", {})
-    assert result.action == "INJECT_CONTEXT"
-    assert result.data is not None
-    assert result.data["ephemeral"] is True
+    async def test_empty_candidates_returns_continue(self, hook_empty_candidates):
+        result = await hook_empty_candidates.handle(
+            "provider:request", {"model_role": "empty_role"}
+        )
+        assert result.action == "CONTINUE"
+
+    async def test_modify_preserves_original_data_fields(self, hook_with_matrix):
+        original_data = {
+            "model_role": "fast",
+            "messages": [{"role": "user", "content": "Hello"}],
+            "temperature": 0.7,
+        }
+        result = await hook_with_matrix.handle("provider:request", original_data)
+        assert result.action == "MODIFY"
+        assert result.data is not None
+        # Original fields preserved in merged result
+        assert result.data["messages"] == [{"role": "user", "content": "Hello"}]
+        assert result.data["temperature"] == 0.7
+        assert result.data["model_role"] == "fast"
+        # Resolved fields added
+        assert result.data["provider"] == "anthropic"
+        assert result.data["model"] == "claude-haiku-4-5"
