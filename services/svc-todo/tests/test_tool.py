@@ -150,3 +150,43 @@ class TestMissingFields:
         result = await tool.execute({"action": "create", "todos": [bad_todo]})
         assert result.success is False
         assert result.error is not None
+
+
+class TestDaprStatePersistence:
+    """Tests for Dapr state store persistence behavior."""
+
+    async def test_create_writes_to_dapr(self) -> None:
+        """create action calls _save_state once when session_id is set."""
+        from unittest.mock import AsyncMock, patch
+
+        tool = TodoTool(session_id="test-session")
+        with patch.object(tool, "_save_state", new_callable=AsyncMock) as mock_save:
+            await tool.execute({"action": "create", "todos": [VALID_TODO]})
+            mock_save.assert_awaited_once()
+
+    async def test_update_writes_to_dapr(self) -> None:
+        """update action calls _save_state once when session_id is set."""
+        from unittest.mock import AsyncMock, patch
+
+        tool = TodoTool(session_id="test-session")
+        with patch.object(tool, "_save_state", new_callable=AsyncMock) as mock_save:
+            await tool.execute({"action": "update", "todos": [VALID_TODO]})
+            mock_save.assert_awaited_once()
+
+    async def test_list_does_not_write_to_dapr(self) -> None:
+        """list action does NOT call _save_state even when session_id is set."""
+        from unittest.mock import AsyncMock, patch
+
+        tool = TodoTool(session_id="test-session")
+        with patch.object(tool, "_save_state", new_callable=AsyncMock) as mock_save:
+            await tool.execute({"action": "list"})
+            mock_save.assert_not_awaited()
+
+    async def test_no_session_id_skips_save(self) -> None:
+        """TodoTool without session_id never calls _save_state."""
+        from unittest.mock import AsyncMock, patch
+
+        tool = TodoTool()
+        with patch.object(tool, "_save_state", new_callable=AsyncMock) as mock_save:
+            await tool.execute({"action": "create", "todos": [VALID_TODO]})
+            mock_save.assert_not_awaited()

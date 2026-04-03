@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import logging
+import os
 from typing import Any
+
+import httpx
 
 from amplifier_service_sdk.models import ToolResult
 
@@ -69,8 +72,20 @@ Recommended pattern:
         "required": ["action"],
     }
 
-    def __init__(self) -> None:
+    def __init__(self, session_id: str | None = None) -> None:
         self._todo_state: list[dict[str, Any]] = []
+        self._session_id = session_id
+
+    async def _save_state(self) -> None:
+        """Persist current todo state to Dapr state store (fire-and-forget)."""
+        port = os.environ.get("DAPR_HTTP_PORT", "3500")
+        url = f"http://localhost:{port}/v1.0/state/statestore"
+        key = f"todo-{self._session_id}"
+        try:
+            async with httpx.AsyncClient() as client:
+                await client.post(url, json=[{"key": key, "value": self._todo_state}])
+        except Exception:
+            logger.exception("Failed to save todo state to Dapr state store")
 
     def _validate_todos(self, todos: list[dict[str, Any]]) -> ToolResult | None:
         """Validate todos list; return error ToolResult on failure, None on success."""
@@ -132,10 +147,16 @@ Recommended pattern:
         action = input.get("action")
 
         if action == "create":
-            return await self._handle_create(input.get("todos", []))
+            result = await self._handle_create(input.get("todos", []))
+            if self._session_id:
+                await self._save_state()
+            return result
 
         if action == "update":
-            return await self._handle_update(input.get("todos", []))
+            result = await self._handle_update(input.get("todos", []))
+            if self._session_id:
+                await self._save_state()
+            return result
 
         if action == "list":
             return ToolResult(
