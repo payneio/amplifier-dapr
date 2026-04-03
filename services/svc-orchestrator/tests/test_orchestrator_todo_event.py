@@ -106,6 +106,8 @@ class TestTodoUpdateEvent:
         async def mock_invoke_get(
             app_id: str, method: str, **kwargs: Any
         ) -> dict[str, Any]:
+            # Returns the same seed message on every call; intentionally
+            # simplified — this test only checks event shape, not context growth.
             return {"messages": [{"role": "user", "content": "Plan my work"}]}
 
         async def mock_publish(*args: Any, **kwargs: Any) -> None:
