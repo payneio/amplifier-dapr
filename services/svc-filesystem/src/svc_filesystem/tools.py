@@ -176,19 +176,10 @@ class ReadFileTool(BaseMachineTool):
             ToolResult with formatted directory listing, or a failure result.
         """
         path = file_path.rstrip("/")
-        try:
-            data = await self._call_machine("/files/list", {"path": path})
-            return self._format_directory_listing(data, path)
-        except httpx.HTTPStatusError as exc:
-            return ToolResult(
-                success=False,
-                error={"message": f"machine service error: {exc.response.status_code}"},
-            )
-        except httpx.RequestError as exc:
-            return ToolResult(
-                success=False,
-                error={"message": f"machine service unreachable: {exc}"},
-            )
+        result = await self._call_machine_safe("/files/list", {"path": path})
+        if result.error is not None:
+            return result.error
+        return self._format_directory_listing(result.data, path)
 
     @staticmethod
     def _format_directory_listing(data: dict[str, Any], path: str) -> ToolResult:
@@ -228,10 +219,10 @@ class ReadFileTool(BaseMachineTool):
         lines = content.splitlines()
         result = []
         for i, line in enumerate(lines, start=start_line):
-            stripped = line
-            if len(stripped) > self._MAX_LINE_LENGTH:
-                stripped = stripped[: self._MAX_LINE_LENGTH] + "..."
-            result.append(f"{i:>6}\t{stripped}")
+            display_line = line
+            if len(display_line) > self._MAX_LINE_LENGTH:
+                display_line = display_line[: self._MAX_LINE_LENGTH] + "..."
+            result.append(f"{i:>6}\t{display_line}")
         return "\n".join(result)
 
 

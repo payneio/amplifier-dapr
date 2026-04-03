@@ -286,4 +286,30 @@ class TestReadFileToolLineFormatting:
         assert result.success is True
         assert result.output is not None
         first_line = result.output["content"].splitlines()[0]
-        assert len(first_line) < 2200
+        # Format is "{n:>6}\t{display_line}" — 6 + 1 + 2000 + 3 = 2010 max chars
+        assert len(first_line) < 2050
+
+    @pytest.mark.parametrize(
+        "extra_params,expected_keys",
+        [
+            ({"offset": 10}, ["offset"]),
+            ({"limit": 50}, ["limit"]),
+            ({"offset": 10, "limit": 50}, ["offset", "limit"]),
+        ],
+    )
+    async def test_offset_and_limit_forwarded_to_machine(
+        self,
+        tool: ReadFileTool,
+        extra_params: dict[str, Any],
+        expected_keys: list[str],
+    ) -> None:
+        """execute() forwards offset and limit to the machine service payload."""
+        mock_result: dict[str, Any] = {"content": "line1\n", "total_lines": 1}
+        mock_call = AsyncMock(return_value=mock_result)
+        with patch.object(tool, "_call_machine", new=mock_call):
+            await tool.execute({"file_path": "/tmp/test.txt", **extra_params})
+
+        payload = mock_call.call_args[0][1]
+        for key in expected_keys:
+            assert key in payload
+            assert payload[key] == extra_params[key]
