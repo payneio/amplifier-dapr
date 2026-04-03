@@ -85,22 +85,29 @@ def _find_tool_call_pair_indices(
 
 
 def format_compaction_notice(stats: dict) -> str:
-    """Generate a system-reminder XML block from compaction stats."""
+    """Generate a human-readable system-reminder block from compaction stats.
+
+    The output includes the phrase 'context-compaction' as the XML tag,
+    each level formatted as 'level N', the removed message count, and a note
+    that tool results may be truncated.
+    """
     levels = stats.get("levels_applied", [])
     original_count = stats.get("original_count", 0)
     final_count = stats.get("final_count", 0)
     original_tokens = stats.get("original_tokens", 0)
     final_tokens = stats.get("final_tokens", 0)
+    removed = original_count - final_count
+
+    level_strs = ", ".join(f"level {lv}" for lv in levels) if levels else "none"
 
     return (
         "<system-reminder>\n"
-        "<compaction-notice>\n"
-        f"  <levels_applied>{levels}</levels_applied>\n"
-        f"  <original_messages>{original_count}</original_messages>\n"
-        f"  <compacted_messages>{final_count}</compacted_messages>\n"
-        f"  <original_tokens>{original_tokens}</original_tokens>\n"
-        f"  <final_tokens>{final_tokens}</final_tokens>\n"
-        "</compaction-notice>\n"
+        "<context-compaction>\n"
+        f"  Applied: {level_strs}\n"
+        f"  Removed {removed} messages ({original_count} → {final_count}), "
+        "tool results may be truncated\n"
+        f"  Tokens: {original_tokens} → {final_tokens}\n"
+        "</context-compaction>\n"
         "</system-reminder>"
     )
 
@@ -393,7 +400,11 @@ class SimpleContextManager:
         if stats.get("levels_applied"):
             # Insert compaction notice after the last system message
             notice_content = format_compaction_notice(stats)
-            notice_msg = Message(role="system", content=notice_content)
+            notice_msg = Message(
+                role="system",
+                content=notice_content,
+                metadata={"source": "context-compaction"},
+            )
 
             last_sys_idx = -1
             for i, m in enumerate(compacted):
