@@ -452,6 +452,15 @@ def create_session_app(dapr_url: str | None = None) -> FastAPI:
         _sessions[session_id] = {"turn_count": 0, "status": "active"}
         return {"status": "cleared"}
 
+    @app.get("/sessions/{session_id}/messages")
+    async def session_messages(session_id: str) -> dict[str, Any]:
+        """Return the transcript messages for a session from the Dapr state store."""
+        transcript: list[Message] = await load_transcript(session_id, _dapr_url)
+        return {
+            "session_id": session_id,
+            "messages": [m.model_dump() for m in transcript],
+        }
+
     return app
 
 
