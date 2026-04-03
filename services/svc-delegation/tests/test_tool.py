@@ -123,3 +123,129 @@ class TestDelegateToolErrors:
         assert result.success is False
         assert result.error is not None
         assert "500" in result.error["message"]
+
+
+class TestContextInheritance:
+    """Tests for context inheritance scope and depth filtering."""
+
+    async def test_context_depth_none_sends_no_context(self) -> None:
+        """depth=none: _fetch_parent_messages not called, context_messages absent."""
+        tool = DelegateTool(
+            orchestrator_base_url="http://orchestrator:8080",
+            parent_session_id="parent-1",
+        )
+        tool._fetch_parent_messages = AsyncMock()  # type: ignore[method-assign]
+        tool._call_orchestrator = AsyncMock(  # type: ignore[method-assign]
+            return_value={"child_session_id": "abc", "result": "done"}
+        )
+
+        await tool.execute({"instruction": "do something", "context_depth": "none"})
+
+        tool._fetch_parent_messages.assert_not_called()
+        payload = tool._call_orchestrator.call_args[0][0]
+        assert "context_messages" not in payload
+
+    async def test_context_scope_conversation_filters_to_user_assistant(
+        self,
+    ) -> None:
+        """scope=conversation removes system and tool roles, keeps user and assistant."""
+        tool = DelegateTool(
+            orchestrator_base_url="http://orchestrator:8080",
+            parent_session_id="parent-1",
+        )
+        parent_messages = [
+            {"role": "system", "content": "system prompt"},
+            {"role": "user", "content": "hello"},
+            {"role": "assistant", "content": "hi there"},
+            {"role": "tool", "content": "tool result"},
+        ]
+        tool._fetch_parent_messages = AsyncMock(  # type: ignore[method-assign]
+            return_value=parent_messages
+        )
+        tool._call_orchestrator = AsyncMock(  # type: ignore[method-assign]
+            return_value={"child_session_id": "abc", "result": "done"}
+        )
+
+        await tool.execute(
+            {
+                "instruction": "do something",
+                "context_depth": "all",
+                "context_scope": "conversation",
+            }
+        )
+
+        payload = tool._call_orchestrator.call_args[0][0]
+        context = payload["context_messages"]
+        roles = {m["role"] for m in context}
+        assert "system" not in roles
+        assert "tool" not in roles
+        assert "user" in roles
+        assert "assistant" in roles
+
+    async def test_context_depth_recent_limits_turns(self) -> None:
+        """depth=recent with context_turns=2 returns exactly 4 messages (2 turns × 2)."""
+        tool = DelegateTool(
+            orchestrator_base_url="http://orchestrator:8080",
+            parent_session_id="parent-1",
+        )
+        # 10 alternating user/assistant messages = 5 turns
+        parent_messages: list[dict[str, str]] = []
+        for i in range(5):
+            parent_messages.append({"role": "user", "content": f"user {i}"})
+            parent_messages.append({"role": "assistant", "content": f"assistant {i}"})
+
+        tool._fetch_parent_messages = AsyncMock(  # type: ignore[method-assign]
+            return_value=parent_messages
+        )
+        tool._call_orchestrator = AsyncMock(  # type: ignore[method-assign]
+            return_value={"child_session_id": "abc", "result": "done"}
+        )
+
+        await tool.execute(
+            {
+                "instruction": "do something",
+                "context_depth": "recent",
+                "context_turns": 2,
+            }
+        )
+
+        payload = tool._call_orchestrator.call_args[0][0]
+        context = payload["context_messages"]
+        assert len(context) == 4  # 2 turns × 2 messages per turn
+
+    async def test_context_scope_full_keeps_everything(self) -> None:
+        """scope=full keeps user, assistant, tool but always removes system."""
+        tool = DelegateTool(
+            orchestrator_base_url="http://orchestrator:8080",
+            parent_session_id="parent-1",
+        )
+        parent_messages = [
+            {"role": "system", "content": "system prompt"},
+            {"role": "user", "content": "hello"},
+            {"role": "assistant", "content": "hi there"},
+            {"role": "tool", "content": "tool result"},
+        ]
+        tool._fetch_parent_messages = AsyncMock(  # type: ignore[method-assign]
+            return_value=parent_messages
+        )
+        tool._call_orchestrator = AsyncMock(  # type: ignore[method-assign]
+            return_value={"child_session_id": "abc", "result": "done"}
+        )
+
+        await tool.execute(
+            {
+                "instruction": "do something",
+                "context_depth": "all",
+                "context_scope": "full",
+            }
+        )
+
+        payload = tool._call_orchestrator.call_args[0][0]
+        context = payload["context_messages"]
+        # system removed; user + assistant + tool remain = 3 messages
+        assert len(context) == 3
+        roles = {m["role"] for m in context}
+        assert "system" not in roles
+        assert "user" in roles
+        assert "assistant" in roles
+        assert "tool" in roles
