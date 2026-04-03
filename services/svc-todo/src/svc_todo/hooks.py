@@ -55,7 +55,7 @@ class TodoReminderHook:
                 lines.append(f"{_SYMBOL_COMPLETED} {todo.get('content', '')}")
             elif status == "in_progress":
                 lines.append(f"{_SYMBOL_IN_PROGRESS} {todo.get('activeForm', '')}")
-            else:  # pending
+            else:  # unknown status treated as pending
                 lines.append(f"{_SYMBOL_PENDING} {todo.get('content', '')}")
         return "\n".join(lines)
 
@@ -68,7 +68,9 @@ class TodoReminderHook:
         if not session_id:
             return HookResult(action="CONTINUE")
 
-        todos = await self._read_state(str(session_id))
+        todos = await self._read_state(
+            str(session_id)
+        )  # data values are Any; coerce to str
         if not todos:
             return HookResult(action="CONTINUE")
 

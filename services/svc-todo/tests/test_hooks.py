@@ -127,5 +127,4 @@ class TestTodoDisplayHook:
         assert result.data is not None
         display = result.data["display"]
         # Spec: "completed/count done, in_progress active, pending pending"
-        assert "1" in display  # pending count appears
-        assert "/" in display or "pending" in display  # fraction or pending label
+        assert display == "1/3 done, 1 active, 1 pending"
