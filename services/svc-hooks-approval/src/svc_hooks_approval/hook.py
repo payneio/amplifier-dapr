@@ -61,7 +61,7 @@ class ApprovalHook:
             return HookResult(action="CONTINUE")
 
         # ------------------------------------------------------------------
-        # 1. Deny-list check (highest priority)
+        # 3. Deny-list check (highest priority)
         # ------------------------------------------------------------------
         for pattern in self.deny_tools:
             if fnmatch.fnmatch(tool_name, pattern):
@@ -71,7 +71,7 @@ class ApprovalHook:
                 )
 
         # ------------------------------------------------------------------
-        # 2. Allow-list check (only applied when allow_tools is non-empty)
+        # 4. Allow-list check (only applied when allow_tools is non-empty)
         # ------------------------------------------------------------------
         if self.allow_tools:
             allowed = any(fnmatch.fnmatch(tool_name, p) for p in self.allow_tools)
@@ -82,7 +82,7 @@ class ApprovalHook:
                 )
 
         # ------------------------------------------------------------------
-        # 3. Risk metadata check
+        # 5. Risk metadata check
         # ------------------------------------------------------------------
         metadata: dict[str, Any] = data.get("metadata") or {}
         if metadata.get("requires_approval") is True:
@@ -95,7 +95,7 @@ class ApprovalHook:
             )
 
         # ------------------------------------------------------------------
-        # 4. Bash argument inspection
+        # 6. Bash argument inspection
         # ------------------------------------------------------------------
         if tool_name == "bash":
             arguments: dict[str, Any] = data.get("arguments") or {}
