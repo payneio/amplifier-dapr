@@ -19,6 +19,9 @@ class ChildSessionRequest(BaseModel):
     services: list[str] = Field(default_factory=list)
     workspace_content: dict[str, str] = Field(default_factory=dict)
     agent_ref: str = "default"
+    delegation_depth: int = 0
+    context_messages: list[dict[str, Any]] = Field(default_factory=list)
+    model_role: str = ""
 
 
 class ChildSessionSpawner:
@@ -57,7 +60,13 @@ class ChildSessionSpawner:
             "services": request.services,
             "workspace_content": request.workspace_content,
             "agent_ref": request.agent_ref,
+            "delegation_depth": request.delegation_depth,
         }
+
+        if request.context_messages:
+            payload["context_messages"] = request.context_messages
+        if request.model_role:
+            payload["model_role"] = request.model_role
 
         result: dict[str, Any] = await self._dapr.invoke(
             self._session_service_app_id,

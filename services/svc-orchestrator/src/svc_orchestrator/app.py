@@ -43,6 +43,9 @@ class DelegateRequest(BaseModel):
     services: list[str] = Field(default_factory=list)
     workspace_content: dict[str, str] = Field(default_factory=dict)
     agent_ref: str = "default"
+    delegation_depth: int = 0
+    context_messages: list[dict[str, Any]] = Field(default_factory=list)
+    model_role: str = ""
 
 
 class DelegateResponse(BaseModel):
@@ -139,6 +142,9 @@ def create_orchestrator_app(dapr_url: str | None = None) -> FastAPI:
             services=request.services,
             workspace_content=request.workspace_content,
             agent_ref=request.agent_ref,
+            delegation_depth=request.delegation_depth,
+            context_messages=request.context_messages,
+            model_role=request.model_role,
         )
         result = await spawner.spawn(child_request)
         session_id = result.get("session_id", child_request.child_session_id)

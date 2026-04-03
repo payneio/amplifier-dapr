@@ -114,3 +114,70 @@ class TestChildSessionSpawner:
 
         assert "session_id" in result
         assert len(result["session_id"]) == 8
+
+
+# ---------------------------------------------------------------------------
+# TestEnrichedDelegation
+# ---------------------------------------------------------------------------
+
+
+class TestEnrichedDelegation:
+    """Tests for enriched delegation parameters (depth, context, model_role)."""
+
+    @pytest.mark.asyncio
+    async def test_spawn_forwards_delegation_depth(self) -> None:
+        """spawn() includes delegation_depth in the payload sent to session-service."""
+        dapr = _make_dapr()
+        dapr.invoke.return_value = {"result": "ok", "messages": []}  # type: ignore[union-attr]
+
+        spawner = ChildSessionSpawner(dapr=dapr)
+        request = ChildSessionRequest(
+            prompt="Deep delegation",
+            child_session_id="test-session",
+            delegation_depth=3,
+        )
+
+        await spawner.spawn(request)
+
+        call_args = dapr.invoke.call_args  # type: ignore[union-attr]
+        payload: dict = call_args[0][2]
+        assert payload["delegation_depth"] == 3
+
+    @pytest.mark.asyncio
+    async def test_spawn_forwards_agent_ref(self) -> None:
+        """spawn() includes agent_ref in the payload sent to session-service."""
+        dapr = _make_dapr()
+        dapr.invoke.return_value = {"result": "ok", "messages": []}  # type: ignore[union-attr]
+
+        spawner = ChildSessionSpawner(dapr=dapr)
+        request = ChildSessionRequest(
+            prompt="Agent ref test",
+            child_session_id="test-session",
+            agent_ref="foundation:explorer",
+        )
+
+        await spawner.spawn(request)
+
+        call_args = dapr.invoke.call_args  # type: ignore[union-attr]
+        payload: dict = call_args[0][2]
+        assert payload["agent_ref"] == "foundation:explorer"
+
+    @pytest.mark.asyncio
+    async def test_spawn_forwards_context_messages(self) -> None:
+        """spawn() includes context_messages in payload when non-empty."""
+        dapr = _make_dapr()
+        dapr.invoke.return_value = {"result": "ok", "messages": []}  # type: ignore[union-attr]
+
+        spawner = ChildSessionSpawner(dapr=dapr)
+        messages = [{"role": "user", "content": "hello"}]
+        request = ChildSessionRequest(
+            prompt="Context messages test",
+            child_session_id="test-session",
+            context_messages=messages,
+        )
+
+        await spawner.spawn(request)
+
+        call_args = dapr.invoke.call_args  # type: ignore[union-attr]
+        payload: dict = call_args[0][2]
+        assert payload["context_messages"] == messages
