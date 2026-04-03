@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import json
+import uuid
+from collections.abc import AsyncGenerator
 from typing import Any
 
 import httpx
@@ -259,6 +262,142 @@ class DelegateTool:
             if isinstance(data, list):
                 return data  # type: ignore[no-any-return]
             return data.get("messages", [])
+
+    async def execute_stream(
+        self, input: dict[str, Any]
+    ) -> AsyncGenerator[dict[str, Any], None]:
+        """Execute a delegation request with streaming output.
+
+        Opens an SSE connection to session-service and streams child events,
+        wrapping them with delegate lifecycle events.
+
+        Yields:
+            - delegate:agent_spawned at start with {agent, session_id, instruction, depth}
+            - Forwarded child events (except 'complete', which extracts result_text)
+            - delegate:error on exception or validation failure
+            - delegate:agent_completed at end with {agent, session_id, success, turn_count,
+              result_preview}
+        """
+        instruction = input.get("instruction")
+        if not instruction:
+            yield {
+                "event": "delegate:error",
+                "data": {"message": "Missing required field: instruction"},
+            }
+            return
+
+        current_depth = input.get("delegation_depth", self._delegation_depth)
+        if current_depth >= MAX_DELEGATION_DEPTH:
+            yield {
+                "event": "delegate:error",
+                "data": {
+                    "message": (
+                        f"Maximum delegation depth ({MAX_DELEGATION_DEPTH}) exceeded"
+                    )
+                },
+            }
+            return
+
+        agent = input.get("agent", "")
+        child_session_id: str = input.get("session_id") or str(uuid.uuid4())
+
+        yield {
+            "event": "delegate:agent_spawned",
+            "data": {
+                "agent": agent,
+                "session_id": child_session_id,
+                "instruction": instruction,
+                "depth": current_depth + 1,
+            },
+        }
+
+        success = True
+        turn_count = 0
+        result_text = ""
+
+        try:
+            if not self._session_service_base_url:
+                raise ValueError("session_service_base_url is required for streaming")
+
+            stream_url = (
+                f"{self._session_service_base_url}"
+                f"/sessions/{child_session_id}/turn/stream"
+            )
+            payload: dict[str, Any] = {"prompt": instruction}
+            if agent:
+                payload["agent_ref"] = agent
+
+            async with httpx.AsyncClient() as client:
+                async with client.stream(
+                    "POST", stream_url, json=payload, timeout=300.0
+                ) as response:
+                    response.raise_for_status()
+
+                    # SSE state machine: accumulate event / data per SSE block
+                    current_event: str | None = None
+                    current_data: str | None = None
+
+                    async for line in response.aiter_lines():
+                        if line.startswith("event:"):
+                            current_event = line[6:].strip()
+                        elif line.startswith("data:"):
+                            current_data = line[5:].strip()
+                        elif line == "":
+                            if current_event is not None and current_data is not None:
+                                if current_event == "complete":
+                                    # Extract result_text; do not forward this event
+                                    try:
+                                        parsed = json.loads(current_data)
+                                        result_text = parsed.get("result", "")
+                                        turn_count += 1
+                                    except (json.JSONDecodeError, AttributeError):
+                                        pass
+                                else:
+                                    # Forward child event
+                                    try:
+                                        data_payload: dict[str, Any] = json.loads(
+                                            current_data
+                                        )
+                                    except json.JSONDecodeError:
+                                        data_payload = {"raw": current_data}
+                                    yield {"event": current_event, "data": data_payload}
+
+                            current_event = None
+                            current_data = None
+
+                    # Flush any partial event at stream end
+                    if current_event is not None and current_data is not None:
+                        if current_event == "complete":
+                            try:
+                                parsed = json.loads(current_data)
+                                result_text = parsed.get("result", "")
+                                turn_count += 1
+                            except (json.JSONDecodeError, AttributeError):
+                                pass
+                        else:
+                            try:
+                                data_payload = json.loads(current_data)
+                            except json.JSONDecodeError:
+                                data_payload = {"raw": current_data}
+                            yield {"event": current_event, "data": data_payload}
+
+        except Exception as exc:  # noqa: BLE001
+            success = False
+            yield {
+                "event": "delegate:error",
+                "data": {"message": str(exc)},
+            }
+
+        yield {
+            "event": "delegate:agent_completed",
+            "data": {
+                "agent": agent,
+                "session_id": child_session_id,
+                "success": success,
+                "turn_count": turn_count,
+                "result_preview": result_text[:100] if result_text else "",
+            },
+        }
 
     async def _call_orchestrator(self, payload: dict[str, Any]) -> dict[str, Any]:
         """POST the delegation payload to the orchestrator.
