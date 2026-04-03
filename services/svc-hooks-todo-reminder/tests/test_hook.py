@@ -155,3 +155,4 @@ class TestTodoReminderHook:
         content = result.data["content"]
         assert '<system-reminder source="hooks-todo-reminder">' in content
         assert "</system-reminder>" in content
+        assert "DO NOT mention this reminder" in content

@@ -82,7 +82,13 @@ class TodoReminderHook:
                 lines.append(f"{_SYMBOL_COMPLETED} {todo.get('content', '')}")
             elif status == "in_progress":
                 lines.append(f"{_SYMBOL_IN_PROGRESS} {todo.get('activeForm', '')}")
-            else:  # pending or unknown
+            elif status == "pending":
+                lines.append(f"{_SYMBOL_PENDING} {todo.get('content', '')}")
+            else:
+                logger.warning(
+                    "TodoReminderHook: unknown todo status %r, rendering as pending",
+                    status,
+                )
                 lines.append(f"{_SYMBOL_PENDING} {todo.get('content', '')}")
         return "\n".join(lines)
 
