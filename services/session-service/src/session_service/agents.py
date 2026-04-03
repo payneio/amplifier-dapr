@@ -38,7 +38,7 @@ AGENTS: dict[str, dict] = {
             "svc-content-filesystem",
             "svc-content-recipes",
             "svc-content-superpowers",
-            "svc-content-system-design-intelligence",
+            "svc-content-foundation",
         ],
         "default_provider": "mock",
     },
@@ -66,7 +66,7 @@ AGENTS: dict[str, dict] = {
             "svc-content-filesystem",
             "svc-content-recipes",
             "svc-content-superpowers",
-            "svc-content-system-design-intelligence",
+            "svc-content-foundation",
         ],
         "default_provider": "anthropic",
         "system_prompt": (

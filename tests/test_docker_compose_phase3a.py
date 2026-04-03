@@ -44,7 +44,7 @@ CONTENT_SERVICES = [
     "svc-content-filesystem",
     "svc-content-recipes",
     "svc-content-superpowers",
-    "svc-content-system-design-intelligence",
+    "svc-content-foundation",
 ]
 
 # All new Phase 3a application services
@@ -56,9 +56,7 @@ PHASE3A_SIDECARS = [f"{svc}-dapr" for svc in PHASE3A_SERVICES]
 
 def _load_compose() -> dict:
     """Load and parse the docker-compose.yaml; fails with a clear message if missing."""
-    assert COMPOSE_PATH.exists(), (
-        f"Required file not found: {COMPOSE_PATH}."
-    )
+    assert COMPOSE_PATH.exists(), f"Required file not found: {COMPOSE_PATH}."
     with COMPOSE_PATH.open() as f:
         return yaml.safe_load(f)
 
@@ -205,7 +203,9 @@ class TestPhase3aDependencies:
         """svc-web, svc-skills, svc-todo, svc-modes do NOT need svc-machine-dapr."""
         compose = _load_compose()
         services = _services(compose)
-        non_machine_services = [s for s in TOOL_SERVICES if s not in MACHINE_DEPENDENT_TOOL_SERVICES]
+        non_machine_services = [
+            s for s in TOOL_SERVICES if s not in MACHINE_DEPENDENT_TOOL_SERVICES
+        ]
         for svc in non_machine_services:
             deps = services[svc].get("depends_on", [])
             deps_list = list(deps) if isinstance(deps, dict) else deps
