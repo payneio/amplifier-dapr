@@ -12,6 +12,11 @@ from amplifier_service_sdk.service import ServiceConfig, create_app
 
 from svc_context.context_manager import SimpleContextManager
 
+# Session ID used by the legacy single-session HTTP endpoints.
+# Phase 3 endpoints (e.g. /context/{session_id}/messages) should pass the
+# real session_id from the request path instead.
+_DEFAULT_SESSION = "default"
+
 
 class BulkMessagesRequest(BaseModel):
     """Request body for PUT /context/messages/bulk."""
@@ -31,17 +36,12 @@ def create_context_app() -> FastAPI:
     config = ServiceConfig(name="svc-context")
     app = create_app(config)
 
-    # NOTE: This manager instance is scoped to the process lifetime, not per-session.
-    # All sessions sharing a single svc-context deployment will share context state.
-    # Phase 3 should add session-keyed context management (e.g. /context/{session_id}/messages)
-    # to correctly isolate concurrent sessions.  For Phase 2, the orchestrator is expected
-    # to call /context/clear between sessions or each session uses a dedicated instance.
     manager = SimpleContextManager()
 
     @app.post("/context/messages")
     async def add_message(message: Message) -> dict[str, Any]:
         """Add a message to the context."""
-        await manager.add_message(message)
+        await manager.add_message(_DEFAULT_SESSION, message)
         return {"success": True}
 
     @app.get("/context/messages")
@@ -51,6 +51,7 @@ def create_context_app() -> FastAPI:
     ) -> dict[str, Any]:
         """Get all messages from the context, with optional compaction parameters."""
         messages = await manager.get_messages(
+            _DEFAULT_SESSION,
             context_window=context_window,
             max_output_tokens=max_output_tokens,
         )
@@ -59,13 +60,13 @@ def create_context_app() -> FastAPI:
     @app.put("/context/messages/bulk")
     async def bulk_set_messages(request: BulkMessagesRequest) -> dict[str, Any]:
         """Replace all messages in the context with the provided list."""
-        await manager.set_messages(request.messages)
+        await manager.set_messages(_DEFAULT_SESSION, request.messages)
         return {"success": True}
 
     @app.post("/context/clear")
     async def clear_messages() -> dict[str, Any]:
         """Clear all messages from the context."""
-        await manager.clear()
+        await manager.clear(_DEFAULT_SESSION)
         return {"success": True}
 
     return app

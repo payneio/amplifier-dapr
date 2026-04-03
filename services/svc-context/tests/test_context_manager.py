@@ -1,10 +1,12 @@
-"""Tests for SimpleContextManager — in-memory storage and ephemeral progressive compaction."""
+"""Tests for SimpleContextManager — session-keyed storage and ephemeral progressive compaction."""
 
 from __future__ import annotations
 
 from amplifier_service_sdk.models import Message
 
 from svc_context.context_manager import SimpleContextManager
+
+_SESSION = "test-session"
 
 
 class TestSimpleContextManager:
@@ -21,10 +23,10 @@ class TestSimpleContextManager:
         user_msg = Message(role="user", content="Hello!")
         assistant_msg = Message(role="assistant", content="Hi there!")
 
-        await cm.add_message(user_msg)
-        await cm.add_message(assistant_msg)
+        await cm.add_message(_SESSION, user_msg)
+        await cm.add_message(_SESSION, assistant_msg)
 
-        messages = await cm.get_messages()
+        messages = await cm.get_messages(_SESSION)
 
         assert len(messages) == 2
         assert messages[0].role == "user"
@@ -40,14 +42,14 @@ class TestSimpleContextManager:
         """clear() must remove all stored messages."""
         cm = SimpleContextManager()
 
-        await cm.add_message(Message(role="user", content="msg1"))
-        await cm.add_message(Message(role="assistant", content="msg2"))
+        await cm.add_message(_SESSION, Message(role="user", content="msg1"))
+        await cm.add_message(_SESSION, Message(role="assistant", content="msg2"))
 
-        assert len(await cm.get_messages()) == 2
+        assert len(await cm.get_messages(_SESSION)) == 2
 
-        await cm.clear()
+        await cm.clear(_SESSION)
 
-        assert len(await cm.get_messages()) == 0
+        assert len(await cm.get_messages(_SESSION)) == 0
 
     # -----------------------------------------------------------------------
     # Test 3: set_messages replaces the entire message list
@@ -58,8 +60,8 @@ class TestSimpleContextManager:
         cm = SimpleContextManager()
 
         # Add some initial messages
-        await cm.add_message(Message(role="user", content="old1"))
-        await cm.add_message(Message(role="assistant", content="old2"))
+        await cm.add_message(_SESSION, Message(role="user", content="old1"))
+        await cm.add_message(_SESSION, Message(role="assistant", content="old2"))
 
         # Replace with new messages
         new_messages = [
@@ -67,9 +69,9 @@ class TestSimpleContextManager:
             Message(role="assistant", content="new2"),
             Message(role="user", content="new3"),
         ]
-        await cm.set_messages(new_messages)
+        await cm.set_messages(_SESSION, new_messages)
 
-        messages = await cm.get_messages()
+        messages = await cm.get_messages(_SESSION)
         assert len(messages) == 3
         assert messages[0].content == "new1"
         assert messages[1].content == "new2"
@@ -84,9 +86,9 @@ class TestSimpleContextManager:
         cm = SimpleContextManager()
 
         msg = Message(role="user", content="time check")
-        await cm.add_message(msg)
+        await cm.add_message(_SESSION, msg)
 
-        messages = await cm.get_messages()
+        messages = await cm.get_messages(_SESSION)
         assert len(messages) == 1
         stored = messages[0]
         assert stored.metadata is not None, (
@@ -107,9 +109,9 @@ class TestSimpleContextManager:
             content="hello",
             metadata={"session_id": "abc123", "priority": 1},
         )
-        await cm.add_message(msg)
+        await cm.add_message(_SESSION, msg)
 
-        messages = await cm.get_messages()
+        messages = await cm.get_messages(_SESSION)
         stored = messages[0]
         assert stored.metadata is not None
         assert stored.metadata.get("session_id") == "abc123"
@@ -125,14 +127,14 @@ class TestSimpleContextManager:
         cm = SimpleContextManager()
 
         # Short messages that comfortably fit in the budget
-        await cm.add_message(Message(role="user", content="Hello"))
-        await cm.add_message(Message(role="assistant", content="Hi there!"))
+        await cm.add_message(_SESSION, Message(role="user", content="Hello"))
+        await cm.add_message(_SESSION, Message(role="assistant", content="Hi there!"))
 
-        messages = await cm.get_messages()
+        messages = await cm.get_messages(_SESSION)
         assert len(messages) == 2
 
-        # original list unchanged
-        assert len(cm.messages) == 2
+        # original stored list unchanged
+        assert len(cm._sessions[_SESSION]) == 2
 
     # -----------------------------------------------------------------------
     # Test 7: compaction reduces message count when over budget
@@ -149,10 +151,10 @@ class TestSimpleContextManager:
         long_content = "x" * 200  # 200 chars / 4 = 50 tokens each
         for i in range(6):
             role = "user" if i % 2 == 0 else "assistant"
-            await cm.add_message(Message(role=role, content=long_content))
+            await cm.add_message(_SESSION, Message(role=role, content=long_content))
 
         # Total = 6 * 50 = 300 tokens, well over 50% of 100
-        messages = await cm.get_messages()
+        messages = await cm.get_messages(_SESSION)
 
         # Compaction should reduce message count below 6
         assert len(messages) < 6, (
@@ -182,9 +184,9 @@ class TestSimpleContextManager:
         # Add 8 tool results — total 800 tokens, above the 50% threshold (400)
         for i in range(8):
             msg = Message(role="tool", content=long_content, tool_call_id=f"call_{i}")
-            await cm.add_message(msg)
+            await cm.add_message(_SESSION, msg)
 
-        messages = await cm.get_messages()
+        messages = await cm.get_messages(_SESSION)
 
         # No returned tool result message should have truncated content:
         # if protected_tool_results is honoured, Levels 1/2 only touch indices
@@ -197,11 +199,11 @@ class TestSimpleContextManager:
                 )
 
     # -----------------------------------------------------------------------
-    # Test 9: get_messages does not modify self.messages (ephemeral compaction)
+    # Test 9: get_messages does not modify stored messages (ephemeral compaction)
     # -----------------------------------------------------------------------
 
     async def test_get_messages_does_not_modify_original(self) -> None:
-        """Compaction in get_messages must NOT modify self.messages (ephemeral)."""
+        """Compaction in get_messages must NOT modify the stored messages (ephemeral)."""
         cm = SimpleContextManager()
         cm.max_tokens = 100
         cm.compact_threshold = 0.50
@@ -210,19 +212,19 @@ class TestSimpleContextManager:
         long_content = "x" * 200  # 50 tokens each
         for i in range(6):
             role = "user" if i % 2 == 0 else "assistant"
-            await cm.add_message(Message(role=role, content=long_content))
+            await cm.add_message(_SESSION, Message(role=role, content=long_content))
 
-        original_count = len(cm.messages)
+        original_count = len(cm._sessions[_SESSION])
 
         # This should trigger compaction
-        compacted = await cm.get_messages()
+        compacted = await cm.get_messages(_SESSION)
 
         # Returned list was compacted
         assert len(compacted) < original_count, "Compacted result must be smaller"
 
-        # But self.messages must be unchanged
-        assert len(cm.messages) == original_count, (
-            "self.messages must not be modified by get_messages compaction"
+        # But stored messages must be unchanged
+        assert len(cm._sessions[_SESSION]) == original_count, (
+            "Stored messages must not be modified by get_messages compaction"
         )
 
     # -----------------------------------------------------------------------
@@ -237,15 +239,20 @@ class TestSimpleContextManager:
         cm.target_usage = 0.10  # extreme target to drive through all levels
 
         sys_msg = Message(role="system", content="You are a helpful assistant.")
-        await cm.add_message(sys_msg)
+        await cm.add_message(_SESSION, sys_msg)
 
         long_content = "x" * 200  # 200 chars / 4 = 50 tokens each
         for i in range(6):
             role = "user" if i % 2 == 0 else "assistant"
-            await cm.add_message(Message(role=role, content=long_content))
+            await cm.add_message(_SESSION, Message(role=role, content=long_content))
 
-        messages = await cm.get_messages()
+        messages = await cm.get_messages(_SESSION)
 
         system_msgs = [m for m in messages if m.role == "system"]
-        assert len(system_msgs) == 1, "System message must survive compaction"
-        assert system_msgs[0].content == "You are a helpful assistant."
+        # The compaction notice is also a system message, so we check content
+        original_sys_msgs = [
+            m for m in system_msgs if m.content == "You are a helpful assistant."
+        ]
+        assert len(original_sys_msgs) == 1, (
+            "Original system message must survive compaction"
+        )
