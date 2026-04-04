@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import TYPE_CHECKING, Any
 
 from rich.errors import MarkupError
@@ -15,11 +16,6 @@ from amplifier_cli.client import SSEEvent
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
-
-_DEFAULT_TOOL_ARG_VALUE_LEN = 200
-_DEFAULT_TOOL_ARGS_COUNT = 10
-_DEFAULT_TOOL_RESULT_LINES = 10
-_DEFAULT_TOOL_RESULT_LINE_LEN = 200
 
 _TODO_BAR_WIDTH = 24
 _TODO_FULL_MODE_THRESHOLD = 7
@@ -175,69 +171,159 @@ class StreamingDisplay:
         self._saw_tool_call_start = True
 
     def _handle_tool_call(self, data: Any) -> None:
-        """Print tool name bold followed by up to 10 truncated argument values.
-
-        If a preceding tool_call_start event already printed the tool name,
-        the header is skipped to avoid duplication.
-        """
+        """Print a tool-specific one-liner for bash/read_file/todo; suppress all others."""
+        self._saw_tool_call_start = False
         if not isinstance(data, dict):
             return
         name = data.get("tool_name", "")
         arguments = data.get("arguments", {})
+        if not isinstance(arguments, dict):
+            return
 
-        if not self._saw_tool_call_start:
-            # No start event preceded this — show the tool name header.
-            self._safe_print(f"\n\U0001f527 [bold]{name}[/bold]")
-        self._saw_tool_call_start = False
-
-        if isinstance(arguments, dict):
-            items = list(arguments.items())
-            display_items = items[:_DEFAULT_TOOL_ARGS_COUNT]
-            remaining = len(items) - len(display_items)
-            for key, value in display_items:
-                truncated = str(value)[:_DEFAULT_TOOL_ARG_VALUE_LEN]
-                self._safe_print(
-                    f"   [dim]{key}:[/dim] {truncated}",
-                    markup=True,
-                    highlight=False,
+        if name == "bash":
+            command = str(arguments.get("command", ""))[:120]
+            self._console.print(f"   $ {command}", markup=False, highlight=False)
+        elif name == "read_file":
+            file_path = str(arguments.get("file_path", ""))
+            self._console.print(f"   {file_path}", markup=False, highlight=False)
+        elif name == "todo":
+            action = str(arguments.get("action", ""))
+            todos = arguments.get("todos", [])
+            first_content = ""
+            if isinstance(todos, list) and todos:
+                first_item = todos[0]
+                if isinstance(first_item, dict):
+                    first_content = str(first_item.get("content", ""))
+            if first_content:
+                truncated = first_content[:80]
+                self._console.print(
+                    f'   {action}: "{truncated}"', markup=False, highlight=False
                 )
-            if remaining > 0:
-                self._safe_print(f"   [dim]... ({remaining} more)[/dim]")
+            else:
+                self._console.print(f"   {action}", markup=False, highlight=False)
+        # All other tools: no-op (suppress args entirely)
 
     def _handle_tool_result(self, data: Any) -> None:
-        """Print success (✅) or failure (❌), then truncated output."""
+        """Print tool-specific compact output on success, or clean error on failure."""
         if not isinstance(data, dict):
             return
         success = data.get("success", True)
-        output = data.get("output", "")
         name = data.get("tool_name", "")
+        raw_output = data.get("output")
 
-        if success:
-            icon = "\u2705"  # ✅
-            style = "green"
+        # Parse output if it arrives as a JSON string.
+        output: Any = raw_output
+        if isinstance(raw_output, str) and raw_output:
+            try:
+                output = json.loads(raw_output)
+            except (json.JSONDecodeError, ValueError):
+                output = raw_output
+
+        if name == "bash":
+            if success:
+                self._console.print("\u2705 bash", markup=False)
+                text = (
+                    output.get("stdout", "")
+                    if isinstance(output, dict)
+                    else str(output or "")
+                )
+                self._print_indented_lines(text, max_lines=3, max_line_len=200)
+            else:
+                self._console.print("\u2717 bash", style="red", markup=False)
+                text = (
+                    output.get("stderr", "")
+                    if isinstance(output, dict)
+                    else str(output or "")
+                )
+                self._print_indented_lines(
+                    text, max_lines=3, max_line_len=200, style="red"
+                )
+
+        elif name == "read_file":
+            if success:
+                self._console.print("\u2705 read_file", markup=False)
+                text = (
+                    output.get("content", "")
+                    if isinstance(output, dict)
+                    else str(output or "")
+                )
+                self._print_indented_lines(text, max_lines=3, max_line_len=200)
+            else:
+                error = self._extract_output_error(output)
+                self._console.print("\u2717 read_file", style="red", markup=False)
+                self._console.print(
+                    f"   {error}", style="red", markup=False, highlight=False
+                )
+
+        elif name == "todo":
+            if success:
+                self._console.print("\u2705 todo", markup=False)
+                summary = self._build_todo_result_summary(output)
+                if summary:
+                    self._console.print(f"   {summary}", markup=False, highlight=False)
+            else:
+                error = self._extract_output_error(output)
+                self._console.print(f"\u2717 todo: {error}", style="red", markup=False)
+
         else:
-            icon = "\u274c"  # ❌
-            style = "red"
-        self._console.print(f"  {icon} {name}", style=style, markup=False)
+            if success:
+                self._console.print(f"\u2705 {name}", markup=False)
+            else:
+                error = self._extract_output_error(output)
+                self._console.print(
+                    f"\u2717 {name}: {error}", style="red", markup=False
+                )
 
-        if output:
-            lines = str(output).splitlines()
-            display_lines = lines[:_DEFAULT_TOOL_RESULT_LINES]
-            remaining = len(lines) - len(display_lines)
-            for line in display_lines:
-                self._console.print(
-                    f"   {line[:_DEFAULT_TOOL_RESULT_LINE_LEN]}",
-                    style="dim",
-                    markup=False,
-                    highlight=False,
-                )
-            if remaining > 0:
-                self._console.print(
-                    f"   ... ({remaining} more lines)",
-                    style="dim",
-                    markup=False,
-                    highlight=False,
-                )
+    def _print_indented_lines(
+        self,
+        text: str,
+        max_lines: int = 3,
+        max_line_len: int = 200,
+        style: str | None = None,
+    ) -> None:
+        """Print up to ``max_lines`` of ``text``, each indented and truncated."""
+        if not text:
+            return
+        for line in str(text).splitlines()[:max_lines]:
+            self._console.print(
+                f"   {line[:max_line_len]}",
+                style=style,
+                markup=False,
+                highlight=False,
+            )
+
+    def _extract_output_error(self, output: Any) -> str:
+        """Return a clean error string from a tool result output value."""
+        if isinstance(output, dict):
+            return str(output.get("error") or output.get("message") or "failed")
+        if isinstance(output, str) and output:
+            return output
+        return "failed"
+
+    def _build_todo_result_summary(self, output: Any) -> str:
+        """Build a human-readable summary line from a todo tool result output."""
+        if not isinstance(output, dict):
+            return ""
+        status = output.get("status", "")
+        count = output.get("count")
+        completed = output.get("completed")
+        in_progress = output.get("in_progress")
+        pending = output.get("pending")
+
+        if status == "created" and count is not None:
+            return f"created {count} items"
+        parts: list[str] = []
+        if completed is not None:
+            parts.append(f"{completed} completed")
+        if in_progress is not None:
+            parts.append(f"{in_progress} in_progress")
+        if pending is not None:
+            parts.append(f"{pending} pending")
+        if parts:
+            return "updated: " + ", ".join(parts)
+        if count is not None:
+            return f"{count} items"
+        return ""
 
     def _build_progress_bar(self, completed: int, total: int) -> Text:
         """Return a Rich Text progress bar: filled █ + empty ░ + count."""
@@ -271,6 +357,12 @@ class StreamingDisplay:
         Condensed mode (>7 items): single progress-bar line with current in-progress task.
         All-complete: single fully-filled bar line with "✓ Complete".
         """
+        # Defensive parse: session-service relay may send data as a JSON string.
+        if isinstance(data, str):
+            try:
+                data = json.loads(data)
+            except (json.JSONDecodeError, ValueError):
+                return
         if not isinstance(data, dict):
             return
         todos: list[dict[str, Any]] = data.get("todos", [])

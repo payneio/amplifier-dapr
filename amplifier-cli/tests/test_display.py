@@ -67,7 +67,7 @@ class TestStreamingDisplay:
         assert "hidden thought" not in output
 
     def test_handle_tool_call_event(self) -> None:
-        """_handle_tool_call prints tool name and argument key/value pairs."""
+        """_handle_tool_call for bash shows '$ command' one-liner."""
         console, buf = make_console()
         display = StreamingDisplay(console)
         event = SSEEvent(
@@ -76,57 +76,56 @@ class TestStreamingDisplay:
         )
         display.handle_sse_event(event)
         output = buf.getvalue()
-        assert "bash" in output
-        assert "echo hello" in output
+        assert "$ echo hello" in output
 
     def test_handle_tool_call_truncates_long_values(self) -> None:
-        """_handle_tool_call truncates argument values longer than 200 chars."""
+        """_handle_tool_call for bash truncates command to ~120 chars."""
         console, buf = make_console()
         display = StreamingDisplay(console)
-        long_value = "x" * 300
+        long_command = "x" * 200
         event = SSEEvent(
             event="tool_call",
-            data={"tool_name": "write_file", "arguments": {"content": long_value}},
+            data={"tool_name": "bash", "arguments": {"command": long_command}},
         )
         display.handle_sse_event(event)
         output = buf.getvalue()
-        # Should contain 200 chars of the value but not all 300
-        assert "x" * 200 in output
-        assert "x" * 300 not in output
+        # Should contain 120 chars of the command but not 121
+        assert "x" * 120 in output
+        assert "x" * 121 not in output
 
     def test_handle_tool_call_limits_arg_count(self) -> None:
-        """_handle_tool_call shows at most 10 arguments."""
+        """_handle_tool_call suppresses all args for unknown tool names."""
         console, buf = make_console()
         display = StreamingDisplay(console)
-        # 12 arguments, only 10 should appear
         args = {f"arg{i}": f"value{i}" for i in range(12)}
         event = SSEEvent(
-            event="tool_call", data={"tool_name": "multi_arg", "arguments": args}
+            event="tool_call", data={"tool_name": "unknown_tool", "arguments": args}
         )
         display.handle_sse_event(event)
         output = buf.getvalue()
-        # First 10 should appear
-        for i in range(10):
-            assert f"value{i}" in output
-        # 11th and 12th should NOT appear
-        assert "value10" not in output
+        # Other tools are suppressed — no arg values should appear
+        assert "value0" not in output
         assert "value11" not in output
 
     def test_handle_tool_result_success(self) -> None:
-        """_handle_tool_result prints green ✅ emoji for successful result."""
+        """_handle_tool_result prints ✅ and stdout for bash success."""
         console, buf = make_console()
         display = StreamingDisplay(console)
         event = SSEEvent(
             event="tool_result",
-            data={"tool_name": "bash", "success": True, "output": "hello from bash"},
+            data={
+                "tool_name": "bash",
+                "success": True,
+                "output": {"stdout": "hello from bash", "stderr": ""},
+            },
         )
         display.handle_sse_event(event)
         output = buf.getvalue()
-        assert "\u2705" in output  # ✅ green checkmark emoji
+        assert "\u2705" in output  # ✅ green checkmark
         assert "hello from bash" in output
 
     def test_handle_tool_result_failure(self) -> None:
-        """_handle_tool_result prints red ❌ emoji for failed result."""
+        """_handle_tool_result prints \u2717 and stderr for bash failure."""
         console, buf = make_console()
         display = StreamingDisplay(console)
         event = SSEEvent(
@@ -134,32 +133,37 @@ class TestStreamingDisplay:
             data={
                 "tool_name": "bash",
                 "success": False,
-                "output": "error: command not found",
+                "output": {"stdout": "", "stderr": "error: command not found"},
             },
         )
         display.handle_sse_event(event)
         output = buf.getvalue()
-        assert "\u274c" in output  # ❌ red cross emoji
+        assert "\u2717" in output  # \u2717 ballot x
         assert "error: command not found" in output
 
     def test_handle_tool_result_truncates_output(self) -> None:
-        """_handle_tool_result shows at most 10 lines, each at most 200 chars."""
+        """_handle_tool_result shows at most 3 lines of stdout for bash."""
         console, buf = make_console()
         display = StreamingDisplay(console)
-        # 12 lines, each with 250 chars
-        lines = [f"line{i}: " + "a" * 242 for i in range(12)]
+        # 5 lines of stdout; only first 3 should appear
+        stdout_lines = [f"line{i}" for i in range(5)]
         event = SSEEvent(
             event="tool_result",
-            data={"tool_name": "bash", "success": True, "output": "\n".join(lines)},
+            data={
+                "tool_name": "bash",
+                "success": True,
+                "output": {"stdout": "\n".join(stdout_lines), "stderr": ""},
+            },
         )
         display.handle_sse_event(event)
         output = buf.getvalue()
-        # First 10 lines should appear
-        assert "line0:" in output
-        assert "line9:" in output
-        # Line 11 and 12 should NOT appear
-        assert "line10:" not in output
-        assert "line11:" not in output
+        # First 3 lines should appear
+        assert "line0" in output
+        assert "line1" in output
+        assert "line2" in output
+        # Lines 4 and 5 should NOT appear
+        assert "line3" not in output
+        assert "line4" not in output
 
     def test_handle_complete_event(self) -> None:
         """_handle_complete stores final response and the response property returns it."""
@@ -772,3 +776,367 @@ class TestDelegationEvents:
         assert "foundation:explorer" in output, (
             f"Expected agent name in output, got: {output!r}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Tests for CLI display quality improvements (task: CLI Display Quality)
+# ---------------------------------------------------------------------------
+
+
+class TestToolDisplayQuality:
+    """Tests for tool-specific display in _handle_tool_call and _handle_tool_result."""
+
+    # -- _handle_tool_call: tool-specific arg display --
+
+    def test_handle_tool_call_bash_shows_dollar_prefix(self) -> None:
+        """_handle_tool_call for bash shows '$ command' format."""
+        console, buf = make_console()
+        display = StreamingDisplay(console)
+        event = SSEEvent(
+            event="tool_call",
+            data={"tool_name": "bash", "arguments": {"command": "ls -la"}},
+        )
+        display.handle_sse_event(event)
+        output = buf.getvalue()
+        assert "$ ls -la" in output
+
+    def test_handle_tool_call_bash_truncates_to_120_chars(self) -> None:
+        """_handle_tool_call for bash truncates command at 120 chars."""
+        console, buf = make_console()
+        display = StreamingDisplay(console)
+        long_cmd = "find . " + "x" * 200
+        event = SSEEvent(
+            event="tool_call",
+            data={"tool_name": "bash", "arguments": {"command": long_cmd}},
+        )
+        display.handle_sse_event(event)
+        output = buf.getvalue()
+        # Truncated at 120 chars total command length
+        assert long_cmd[:120] in output
+        assert long_cmd[:121] not in output
+
+    def test_handle_tool_call_read_file_shows_path(self) -> None:
+        """_handle_tool_call for read_file shows the file path."""
+        console, buf = make_console()
+        display = StreamingDisplay(console)
+        event = SSEEvent(
+            event="tool_call",
+            data={
+                "tool_name": "read_file",
+                "arguments": {"file_path": "./docs/specs/amplifier-spec.md"},
+            },
+        )
+        display.handle_sse_event(event)
+        output = buf.getvalue()
+        assert "./docs/specs/amplifier-spec.md" in output
+
+    def test_handle_tool_call_todo_shows_action_and_content(self) -> None:
+        """_handle_tool_call for todo shows 'action: content' one-liner."""
+        console, buf = make_console()
+        display = StreamingDisplay(console)
+        event = SSEEvent(
+            event="tool_call",
+            data={
+                "tool_name": "todo",
+                "arguments": {
+                    "action": "create",
+                    "todos": [
+                        {
+                            "content": "Identify all spec files",
+                            "status": "pending",
+                            "activeForm": "Identifying spec files",
+                        }
+                    ],
+                },
+            },
+        )
+        display.handle_sse_event(event)
+        output = buf.getvalue()
+        assert "create" in output
+        assert "Identify all spec files" in output
+
+    def test_handle_tool_call_todo_no_todos_shows_action_only(self) -> None:
+        """_handle_tool_call for todo with no todos list shows just action."""
+        console, buf = make_console()
+        display = StreamingDisplay(console)
+        event = SSEEvent(
+            event="tool_call",
+            data={
+                "tool_name": "todo",
+                "arguments": {"action": "list"},
+            },
+        )
+        display.handle_sse_event(event)
+        output = buf.getvalue()
+        assert "list" in output
+
+    def test_handle_tool_call_other_tool_suppressed(self) -> None:
+        """_handle_tool_call for tools other than bash/read_file/todo shows nothing."""
+        console, buf = make_console()
+        display = StreamingDisplay(console)
+        event = SSEEvent(
+            event="tool_call",
+            data={
+                "tool_name": "edit_file",
+                "arguments": {
+                    "file_path": "src/foo.py",
+                    "old_string": "x",
+                    "new_string": "y",
+                },
+            },
+        )
+        display.handle_sse_event(event)
+        output = buf.getvalue()
+        # No arg values should appear for other tools
+        assert "old_string" not in output
+        assert "new_string" not in output
+
+    # -- _handle_tool_result: tool-specific output display --
+
+    def test_handle_tool_result_bash_success_shows_stdout(self) -> None:
+        """_handle_tool_result for bash success shows ✅ bash + stdout lines."""
+        console, buf = make_console()
+        display = StreamingDisplay(console)
+        event = SSEEvent(
+            event="tool_result",
+            data={
+                "tool_name": "bash",
+                "success": True,
+                "output": {"stdout": "line one\nline two", "stderr": ""},
+            },
+        )
+        display.handle_sse_event(event)
+        output = buf.getvalue()
+        assert "\u2705" in output
+        assert "bash" in output
+        assert "line one" in output
+        assert "line two" in output
+
+    def test_handle_tool_result_bash_failure_shows_stderr(self) -> None:
+        """_handle_tool_result for bash failure shows ✗ bash + stderr lines in red."""
+        console, buf = make_console()
+        display = StreamingDisplay(console)
+        event = SSEEvent(
+            event="tool_result",
+            data={
+                "tool_name": "bash",
+                "success": False,
+                "output": {"stdout": "", "stderr": "bash: command not found"},
+            },
+        )
+        display.handle_sse_event(event)
+        output = buf.getvalue()
+        assert "\u2717" in output  # ✗ ballot x
+        assert "bash: command not found" in output
+
+    def test_handle_tool_result_bash_output_as_json_string(self) -> None:
+        """_handle_tool_result parses output when it arrives as a JSON string."""
+        import json as _json
+
+        console, buf = make_console()
+        display = StreamingDisplay(console)
+        raw_output = _json.dumps({"stdout": "parsed stdout line", "stderr": ""})
+        event = SSEEvent(
+            event="tool_result",
+            data={
+                "tool_name": "bash",
+                "success": True,
+                "output": raw_output,
+            },
+        )
+        display.handle_sse_event(event)
+        output = buf.getvalue()
+        assert "parsed stdout line" in output
+
+    def test_handle_tool_result_bash_limits_stdout_to_3_lines(self) -> None:
+        """_handle_tool_result for bash shows at most 3 stdout lines."""
+        console, buf = make_console()
+        display = StreamingDisplay(console)
+        stdout = "\n".join(f"line{i}" for i in range(6))
+        event = SSEEvent(
+            event="tool_result",
+            data={
+                "tool_name": "bash",
+                "success": True,
+                "output": {"stdout": stdout, "stderr": ""},
+            },
+        )
+        display.handle_sse_event(event)
+        output = buf.getvalue()
+        assert "line0" in output
+        assert "line2" in output
+        assert "line3" not in output
+        assert "line5" not in output
+
+    def test_handle_tool_result_read_file_success_shows_content(self) -> None:
+        """_handle_tool_result for read_file success shows ✅ read_file + content."""
+        console, buf = make_console()
+        display = StreamingDisplay(console)
+        event = SSEEvent(
+            event="tool_result",
+            data={
+                "tool_name": "read_file",
+                "success": True,
+                "output": {"content": "# My File\n## Section One\nSome text"},
+            },
+        )
+        display.handle_sse_event(event)
+        output = buf.getvalue()
+        assert "\u2705" in output
+        assert "read_file" in output
+        assert "# My File" in output
+
+    def test_handle_tool_result_read_file_failure_shows_error(self) -> None:
+        """_handle_tool_result for read_file failure shows ✗ read_file + error."""
+        console, buf = make_console()
+        display = StreamingDisplay(console)
+        event = SSEEvent(
+            event="tool_result",
+            data={
+                "tool_name": "read_file",
+                "success": False,
+                "output": {"error": "File not found: ./missing.md"},
+            },
+        )
+        display.handle_sse_event(event)
+        output = buf.getvalue()
+        assert "\u2717" in output
+        assert "read_file" in output
+        assert "File not found" in output
+
+    def test_handle_tool_result_todo_success_shows_created_summary(self) -> None:
+        """_handle_tool_result for todo success shows 'created N items'."""
+        console, buf = make_console()
+        display = StreamingDisplay(console)
+        event = SSEEvent(
+            event="tool_result",
+            data={
+                "tool_name": "todo",
+                "success": True,
+                "output": {"status": "created", "count": 6},
+            },
+        )
+        display.handle_sse_event(event)
+        output = buf.getvalue()
+        assert "\u2705" in output
+        assert "todo" in output
+        assert "created" in output
+        assert "6" in output
+
+    def test_handle_tool_result_todo_success_shows_updated_summary(self) -> None:
+        """_handle_tool_result for todo success shows updated summary with counts."""
+        console, buf = make_console()
+        display = StreamingDisplay(console)
+        event = SSEEvent(
+            event="tool_result",
+            data={
+                "tool_name": "todo",
+                "success": True,
+                "output": {
+                    "status": "updated",
+                    "completed": 2,
+                    "in_progress": 1,
+                    "pending": 3,
+                },
+            },
+        )
+        display.handle_sse_event(event)
+        output = buf.getvalue()
+        assert "\u2705" in output
+        assert "2" in output  # completed count
+        assert "1" in output  # in_progress count
+
+    def test_handle_tool_result_todo_failure_shows_error(self) -> None:
+        """_handle_tool_result for todo failure shows ✗ todo: error message."""
+        console, buf = make_console()
+        display = StreamingDisplay(console)
+        event = SSEEvent(
+            event="tool_result",
+            data={
+                "tool_name": "todo",
+                "success": False,
+                "output": {"error": "invalid action"},
+            },
+        )
+        display.handle_sse_event(event)
+        output = buf.getvalue()
+        assert "\u2717" in output
+        assert "todo" in output
+        assert "invalid action" in output
+
+    def test_handle_tool_result_other_tool_success_shows_name_only(self) -> None:
+        """_handle_tool_result for unknown tools on success shows just ✅ name."""
+        console, buf = make_console()
+        display = StreamingDisplay(console)
+        event = SSEEvent(
+            event="tool_result",
+            data={
+                "tool_name": "edit_file",
+                "success": True,
+                "output": {"result": "replaced 3 occurrences"},
+            },
+        )
+        display.handle_sse_event(event)
+        output = buf.getvalue()
+        assert "\u2705" in output
+        assert "edit_file" in output
+        # Result body should NOT appear for other tools
+        assert "replaced 3 occurrences" not in output
+
+    def test_handle_tool_result_other_tool_failure_shows_error(self) -> None:
+        """_handle_tool_result for unknown tools on failure shows ✗ name: error."""
+        console, buf = make_console()
+        display = StreamingDisplay(console)
+        event = SSEEvent(
+            event="tool_result",
+            data={
+                "tool_name": "glob",
+                "success": False,
+                "output": {"error": "permission denied"},
+            },
+        )
+        display.handle_sse_event(event)
+        output = buf.getvalue()
+        assert "\u2717" in output
+        assert "glob" in output
+        assert "permission denied" in output
+
+    def test_handle_tool_result_other_tool_failure_fallback_message(self) -> None:
+        """_handle_tool_result falls back to 'failed' when no error field exists."""
+        console, buf = make_console()
+        display = StreamingDisplay(console)
+        event = SSEEvent(
+            event="tool_result",
+            data={
+                "tool_name": "some_tool",
+                "success": False,
+                "output": {},
+            },
+        )
+        display.handle_sse_event(event)
+        output = buf.getvalue()
+        assert "\u2717" in output
+        assert "some_tool" in output
+        assert "failed" in output
+
+    # -- _handle_todo_update: defensive JSON parse --
+
+    def test_handle_todo_update_handles_json_string_data(self) -> None:
+        """_handle_todo_update parses data when it arrives as a JSON string."""
+        import json as _json
+
+        console, buf = make_console()
+        display = StreamingDisplay(console)
+        data_as_string = _json.dumps(
+            {
+                "todos": [
+                    {"content": "task alpha", "status": "completed"},
+                    {"content": "task beta", "status": "in_progress"},
+                ]
+            }
+        )
+        event = SSEEvent(event="todo_update", data=data_as_string)
+        display.handle_sse_event(event)
+        output = buf.getvalue()
+        assert "task alpha" in output
+        assert "task beta" in output
