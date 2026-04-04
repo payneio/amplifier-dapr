@@ -7,7 +7,7 @@ import tempfile
 
 from rich.console import Console
 
-from amplifier_ipc_cli.repl import (
+from amplifier_cli.repl import (
     CancellationState,
     build_prompt_html,
     process_mentions,

@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import fields
 from unittest.mock import AsyncMock, MagicMock
 
-from amplifier_ipc_cli.commands import SlashResult, dispatch_slash
+from amplifier_cli.commands import SlashResult, dispatch_slash
 
 
 # ---------------------------------------------------------------------------

@@ -11,7 +11,7 @@ from rich.table import Table
 if TYPE_CHECKING:
     from rich.console import Console
 
-    from amplifier_ipc_cli.client import SessionClient
+    from amplifier_cli.client import SessionClient
 
 _HELP_TEXT = """\
 Available slash commands:

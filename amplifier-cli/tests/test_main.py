@@ -8,8 +8,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from click.testing import CliRunner
 
-from amplifier_ipc_cli.client import SSEEvent
-from amplifier_ipc_cli.main import cli
+from amplifier_cli.client import SSEEvent
+from amplifier_cli.main import cli
 
 
 class TestHelp:
@@ -67,7 +67,7 @@ class TestJsonModeStreamError:
         mock_client_class = MagicMock(return_value=mock_client)
 
         runner = CliRunner()
-        with patch("amplifier_ipc_cli.main.SessionClient", mock_client_class):
+        with patch("amplifier_cli.main.SessionClient", mock_client_class):
             result = runner.invoke(
                 cli, ["run", "--output-format", "json", "test message"]
             )

@@ -13,10 +13,10 @@ from typing import Any
 
 import click
 
-from amplifier_ipc_cli.client import SessionClient
-from amplifier_ipc_cli.workspace import resolve_workspace_content
+from amplifier_cli.client import SessionClient
+from amplifier_cli.workspace import resolve_workspace_content
 
-_VERSION = "amplifier-ipc-cli 0.1.0"
+_VERSION = "amplifier-cli 0.1.0"
 
 
 # ---------------------------------------------------------------------------
@@ -55,7 +55,7 @@ async def _run_impl(
     """
     from rich.console import Console
 
-    from amplifier_ipc_cli.display import StreamingDisplay
+    from amplifier_cli.display import StreamingDisplay
 
     console = Console(stderr=(output_format == "json"))
 
@@ -136,7 +136,7 @@ async def _run_impl(
                     return 1
         else:
             # REPL mode
-            from amplifier_ipc_cli.repl import interactive_repl
+            from amplifier_cli.repl import interactive_repl
 
             # Check health first
             is_healthy = await client.healthcheck()

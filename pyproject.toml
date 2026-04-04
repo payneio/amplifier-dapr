@@ -28,7 +28,7 @@ asyncio_mode = "auto"
 testpaths = ["tests"]
 pythonpath = [
     "amplifier-service-sdk/src",
-    "amplifier-ipc-cli/src",
+    "amplifier-cli/src",
     "ampctl/src",
     "services/svc-machine/src",
     "services/svc-bash/src",
@@ -57,7 +57,7 @@ markers = [
 pythonVersion = "3.11"
 extraPaths = [
     "amplifier-service-sdk/src",
-    "amplifier-ipc-cli/src",
+    "amplifier-cli/src",
     "ampctl/src",
     "services/svc-machine/src",
     "services/svc-bash/src",

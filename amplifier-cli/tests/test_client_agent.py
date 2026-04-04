@@ -6,7 +6,7 @@ import json
 
 import httpx
 
-from amplifier_ipc_cli.client import SessionClient
+from amplifier_cli.client import SessionClient
 
 
 class TestBuildTurnBodyAgentRef:

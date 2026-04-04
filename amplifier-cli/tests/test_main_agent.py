@@ -7,8 +7,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from click.testing import CliRunner
 
-from amplifier_ipc_cli.client import SSEEvent
-from amplifier_ipc_cli.main import cli
+from amplifier_cli.client import SSEEvent
+from amplifier_cli.main import cli
 
 
 def _make_mock_client(events: list[SSEEvent]) -> MagicMock:
@@ -47,7 +47,7 @@ class TestAgentFlag:
         mock_client.__aexit__ = AsyncMock(return_value=None)
 
         runner = CliRunner()
-        with patch("amplifier_ipc_cli.main.SessionClient", return_value=mock_client):
+        with patch("amplifier_cli.main.SessionClient", return_value=mock_client):
             runner.invoke(cli, ["run", "--agent", "foundation", "hello"])
 
         assert received_kwargs.get("agent_ref") == "foundation"
@@ -66,7 +66,7 @@ class TestAgentFlag:
         mock_client.__aexit__ = AsyncMock(return_value=None)
 
         runner = CliRunner()
-        with patch("amplifier_ipc_cli.main.SessionClient", return_value=mock_client):
+        with patch("amplifier_cli.main.SessionClient", return_value=mock_client):
             runner.invoke(cli, ["run", "-a", "foundation", "hello"])
 
         assert received_kwargs.get("agent_ref") == "foundation"
@@ -85,7 +85,7 @@ class TestAgentFlag:
         mock_client.__aexit__ = AsyncMock(return_value=None)
 
         runner = CliRunner()
-        with patch("amplifier_ipc_cli.main.SessionClient", return_value=mock_client):
+        with patch("amplifier_cli.main.SessionClient", return_value=mock_client):
             runner.invoke(cli, ["run", "hello"])
 
         assert received_kwargs.get("agent_ref") is None
@@ -104,7 +104,7 @@ class TestAgentFlag:
         mock_client.__aexit__ = AsyncMock(return_value=None)
 
         runner = CliRunner()
-        with patch("amplifier_ipc_cli.main.SessionClient", return_value=mock_client):
+        with patch("amplifier_cli.main.SessionClient", return_value=mock_client):
             runner.invoke(
                 cli,
                 ["run", "--agent", "foundation", "--provider", "anthropic", "hello"],

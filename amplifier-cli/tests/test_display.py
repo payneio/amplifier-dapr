@@ -6,8 +6,8 @@ from io import StringIO
 
 from rich.console import Console
 
-from amplifier_ipc_cli.client import SSEEvent
-from amplifier_ipc_cli.display import StreamingDisplay
+from amplifier_cli.client import SSEEvent
+from amplifier_cli.display import StreamingDisplay
 
 
 # ---------------------------------------------------------------------------

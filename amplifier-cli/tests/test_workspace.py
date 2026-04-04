@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from amplifier_ipc_cli.workspace import resolve_workspace_content
+from amplifier_cli.workspace import resolve_workspace_content
 
 
 def test_reads_amplifier_dir_files(tmp_path: Path) -> None:

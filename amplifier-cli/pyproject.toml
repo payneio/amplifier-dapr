@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "amplifier-ipc-cli"
+name = "amplifier-cli"
 version = "0.1.0"
 description = "CLI client for the Amplifier IPC service"
 requires-python = ">=3.12"
@@ -16,10 +16,10 @@ dependencies = [
 ]
 
 [project.scripts]
-amplifier-svc = "amplifier_ipc_cli.main:main"
+amplifier-svc = "amplifier_cli.main:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/amplifier_ipc_cli"]
+packages = ["src/amplifier_cli"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

@@ -10,7 +10,7 @@ from rich.text import Text
 if TYPE_CHECKING:
     from rich.console import Console
 
-from amplifier_ipc_cli.client import SSEEvent
+from amplifier_cli.client import SSEEvent
 
 # ---------------------------------------------------------------------------
 # Constants

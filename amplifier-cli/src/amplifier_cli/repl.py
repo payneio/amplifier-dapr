@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from rich.console import Console
 
-    from amplifier_ipc_cli.client import SessionClient
+    from amplifier_cli.client import SessionClient
 
 
 # Maximum file size to inject (512 KB)
@@ -22,7 +22,7 @@ _MAX_FILE_BYTES = 512 * 1024
 _MENTION_RE = re.compile(r"@([\w./~-]+)")
 
 BANNER = """\
-Amplifier IPC REPL
+Amplifier REPL
   Type your message and press Enter to send.
   Press Ctrl-J for a literal newline inside your message.
   Type /help for available slash commands.
@@ -228,7 +228,7 @@ async def interactive_repl(
                 break
 
             if user_input.startswith("/"):
-                from amplifier_ipc_cli import commands  # lazy import
+                from amplifier_cli import commands  # lazy import
 
                 handled = await commands.dispatch_slash(
                     user_input, client, session_id, console
@@ -241,7 +241,7 @@ async def interactive_repl(
 
             # Stream the turn
             try:
-                from amplifier_ipc_cli.display import StreamingDisplay  # type: ignore[import-untyped]  # lazy import
+                from amplifier_cli.display import StreamingDisplay  # type: ignore[import-untyped]  # lazy import
 
                 async with StreamingDisplay(console) as display:
                     async for event in client.stream_turn(

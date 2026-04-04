@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from amplifier_ipc_cli.settings import (
+from amplifier_cli.settings import (
     _DEFAULT_PROVIDER,
     _DEFAULT_URL,
     CLISettings,
