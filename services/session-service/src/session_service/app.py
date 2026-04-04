@@ -254,7 +254,7 @@ def create_session_app(dapr_url: str | None = None) -> FastAPI:
         ephemeral and exist only for the duration of the delegated turn.
 
         The session-service acts as a transparent SSE relay — it opens a
-        streaming HTTP connection to ``/orchestrator/turn/stream``, parses each
+        streaming HTTP connection to ``/orchestrator/execute/stream``, parses each
         ``event:`` / ``data:`` line from the response, and forwards every event
         verbatim without buffering.
         """
@@ -285,7 +285,7 @@ def create_session_app(dapr_url: str | None = None) -> FastAPI:
                 orch_direct_url = os.environ.get(
                     "ORCHESTRATOR_DIRECT_URL", f"http://{orchestrator_app_id}:8000"
                 )
-                stream_url = f"{orch_direct_url}/orchestrator/turn/stream"
+                stream_url = f"{orch_direct_url}/orchestrator/execute/stream"
                 payload: dict[str, Any] = {
                     "system_prompt": system_prompt,
                     "messages": [m.model_dump() for m in messages],

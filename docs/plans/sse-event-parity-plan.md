@@ -1538,7 +1538,7 @@ Expected: FAIL with 404 — endpoint doesn't exist yet.
 
 In `services/session-service/src/session_service/app.py`, add a new endpoint after the existing `/sessions/{session_id}/turn` route. The endpoint:
 1. Creates or resumes a child session
-2. Opens a streaming connection to the orchestrator's `/orchestrator/turn/stream` endpoint
+2. Opens a streaming connection to the orchestrator's `/orchestrator/execute/stream` endpoint
 3. Forwards SSE events to the client
 
 ```python
@@ -1566,7 +1566,7 @@ In `services/session-service/src/session_service/app.py`, add a new endpoint aft
                 # Build orchestrator request (same logic as parent stream)
                 # ... (follow the same pattern as the existing streaming endpoint)
 
-                orch_url = f"{_dapr_url}/v1.0/invoke/svc-orchestrator/method/orchestrator/turn/stream"
+                orch_url = f"{_dapr_url}/v1.0/invoke/svc-orchestrator/method/orchestrator/execute/stream"
 
                 async with httpx.AsyncClient(timeout=None) as client:
                     async with client.stream(
