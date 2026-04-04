@@ -312,6 +312,27 @@ def test_compose_session_service_depends_on_all_daprs() -> None:
             )
 
 
+def test_compose_session_service_mounts_service_map() -> None:
+    """Session-service volumes include read-only service-map mount from ~/.amplifier/."""
+    result = generate_compose({})
+    ss = result["services"]["session-service"]
+    volumes: list[str] = ss["volumes"]
+    service_map_mounts = [v for v in volumes if "service-map.yaml" in v]
+    assert service_map_mounts, (
+        f"Expected a service-map.yaml volume mount in session-service, got: {volumes}"
+    )
+    mount = service_map_mounts[0]
+    assert mount.endswith(":ro"), (
+        f"service-map.yaml volume mount must be read-only (:ro), got: {mount}"
+    )
+    assert mount.startswith("~/.amplifier/service-map.yaml:"), (
+        f"service-map.yaml must be sourced from ~/.amplifier/, got: {mount}"
+    )
+    assert ":/agents/service-map.yaml" in mount, (
+        f"service-map.yaml must be mounted at /agents/service-map.yaml, got: {mount}"
+    )
+
+
 def test_write_compose(tmp_path: Path) -> None:
     """write_compose writes the compose dict to a valid YAML file."""
     compose = {

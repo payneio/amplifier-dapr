@@ -654,6 +654,7 @@ services:
       AMPLIFIER_SERVICE_MAP: /agents/service-map.yaml
     volumes:
     - ./agents:/agents
+    - ~/.amplifier/service-map.yaml:/agents/service-map.yaml:ro
     depends_on:
     - redis
     - svc-bash-8758a015-dapr

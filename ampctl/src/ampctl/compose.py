@@ -204,7 +204,10 @@ def generate_compose(
             "AMPLIFIER_AGENTS_DIR": "/agents",
             "AMPLIFIER_SERVICE_MAP": "/agents/service-map.yaml",
         },
-        "volumes": ["./agents:/agents"],
+        "volumes": [
+            "./agents:/agents",
+            "~/.amplifier/service-map.yaml:/agents/service-map.yaml:ro",
+        ],
         "depends_on": session_deps,
     }
     services["session-service-dapr"] = _make_dapr_sidecar("session-service", dapr_image)
