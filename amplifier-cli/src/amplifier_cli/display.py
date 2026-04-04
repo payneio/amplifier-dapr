@@ -48,7 +48,6 @@ class StreamingDisplay:
         self._show_thinking = show_thinking
         self._response: str | None = None
         self._tokens_received: bool = False
-        self._saw_tool_call_start: bool = False
         self._in_thinking_block: bool = False
 
     @property
@@ -168,11 +167,9 @@ class StreamingDisplay:
         """Print tool name dimly to signal the start of a tool call."""
         name = data.get("tool_name", "") if isinstance(data, dict) else str(data)
         self._safe_print(f"\n[dim]\U0001f527 {name}[/dim]")
-        self._saw_tool_call_start = True
 
     def _handle_tool_call(self, data: Any) -> None:
         """Print a tool-specific one-liner for bash/read_file/todo; suppress all others."""
-        self._saw_tool_call_start = False
         if not isinstance(data, dict):
             return
         name = data.get("tool_name", "")
