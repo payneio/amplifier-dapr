@@ -786,6 +786,21 @@ class TestDelegationEvents:
 class TestToolDisplayQuality:
     """Tests for tool-specific display in _handle_tool_call and _handle_tool_result."""
 
+    # -- _handle_tool_call_start --
+
+    def test_handle_tool_call_start_shows_wrench_and_name(self) -> None:
+        """_handle_tool_call_start prints 🔧 icon and the tool name."""
+        console, buf = make_console()
+        display = StreamingDisplay(console)
+        event = SSEEvent(
+            event="tool_call_start",
+            data={"tool_name": "edit_file"},
+        )
+        display.handle_sse_event(event)
+        output = buf.getvalue()
+        assert "\U0001f527" in output  # 🔧
+        assert "edit_file" in output
+
     # -- _handle_tool_call: tool-specific arg display --
 
     def test_handle_tool_call_bash_shows_dollar_prefix(self) -> None:
