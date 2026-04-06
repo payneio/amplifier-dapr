@@ -1,8 +1,14 @@
-"""SSHDriver — placeholder for SSH-based machine backend driver."""
+"""SSHDriver — SSH-based machine backend driver using asyncssh."""
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
+
+try:
+    import asyncssh  # type: ignore[import-untyped]
+except ImportError:
+    asyncssh = None  # type: ignore[assignment]
 
 from svc_machine.driver import (
     ExecResult,
@@ -14,40 +20,78 @@ from svc_machine.driver import (
 
 
 class SSHDriver(MachineDriver):
-    """SSH-based machine backend driver (stub — not yet fully implemented)."""
+    """SSH-based machine backend driver."""
 
     def __init__(
         self,
-        host: str,
+        host: str = "localhost",
         port: int = 22,
-        username: str = "",
-        working_dir: str = ".",
+        username: str | None = None,
+        working_dir: str = "/workspace",
     ) -> None:
         self.host = host
         self.port = port
         self.username = username
         self.working_dir = working_dir
+        self._conn: Any | None = None
 
     async def connect(self) -> None:  # type: ignore[override]
-        raise NotImplementedError("SSHDriver.connect() is not yet implemented")
+        """Establish an SSH connection using asyncssh."""
+        self._conn = await asyncssh.connect(  # type: ignore[union-attr]
+            host=self.host,
+            port=self.port,
+            known_hosts=None,
+            username=self.username,
+        )
 
     async def disconnect(self) -> None:  # type: ignore[override]
-        raise NotImplementedError("SSHDriver.disconnect() is not yet implemented")
+        """Close the SSH connection."""
+        if self._conn is not None:
+            self._conn.close()
+            self._conn = None
 
-    def exec(  # type: ignore[override]
+    def _wrap_command(self, command: str, working_dir: str | None = None) -> str:
+        """Prepend 'cd {working_dir} && ' to a command."""
+        wd = working_dir if working_dir is not None else self.working_dir
+        return f"cd {wd} && {command}"
+
+    async def exec(  # type: ignore[override]
         self,
         command: str,
         timeout: int = 30,
         working_dir: str | None = None,
     ) -> ExecResult:
-        raise NotImplementedError("SSHDriver.exec() is not yet implemented")
+        """Execute a command over SSH and return the result."""
+        wrapped = self._wrap_command(command, working_dir)
+        try:
+            result = await asyncio.wait_for(
+                self._conn.run(wrapped, check=False),  # type: ignore[union-attr]
+                timeout=timeout,
+            )
+        except asyncio.TimeoutError:
+            return ExecResult(stdout="", stderr="", exit_code=124)
 
-    def exec_background(  # type: ignore[override]
+        return ExecResult(
+            stdout=result.stdout or "",
+            stderr=result.stderr or "",
+            exit_code=result.returncode if result.returncode is not None else -1,
+        )
+
+    async def exec_background(  # type: ignore[override]
         self,
         command: str,
         working_dir: str | None = None,
     ) -> dict[str, Any]:
-        raise NotImplementedError("SSHDriver.exec_background() is not yet implemented")
+        """Spawn a background process via SSH using nohup and return its PID."""
+        bg_command = f"nohup {command} & echo $!"
+        wrapped = self._wrap_command(bg_command, working_dir)
+        result = await self._conn.run(wrapped, check=False)  # type: ignore[union-attr]
+        pid_str = (result.stdout or "").strip()
+        try:
+            pid = int(pid_str)
+        except (ValueError, TypeError):
+            pid = -1
+        return {"pid": pid, "status": "running"}
 
     def file_read(  # type: ignore[override]
         self,
@@ -55,10 +99,10 @@ class SSHDriver(MachineDriver):
         offset: int = 1,
         limit: int | None = None,
     ) -> FileReadResult | None:
-        raise NotImplementedError("SSHDriver.file_read() is not yet implemented")
+        raise NotImplementedError("SSHDriver.file_read() — implement in Task 5")
 
     def file_write(self, path: str, content: str) -> bool:  # type: ignore[override]
-        raise NotImplementedError("SSHDriver.file_write() is not yet implemented")
+        raise NotImplementedError("SSHDriver.file_write() — implement in Task 5")
 
     def file_edit(  # type: ignore[override]
         self,
@@ -67,10 +111,10 @@ class SSHDriver(MachineDriver):
         new_string: str,
         replace_all: bool = False,
     ) -> FileEditResult | None:
-        raise NotImplementedError("SSHDriver.file_edit() is not yet implemented")
+        raise NotImplementedError("SSHDriver.file_edit() — implement in Task 5")
 
     def file_list(self, path: str = ".") -> list[dict[str, Any]] | None:  # type: ignore[override]
-        raise NotImplementedError("SSHDriver.file_list() is not yet implemented")
+        raise NotImplementedError("SSHDriver.file_list() — implement in Task 5")
 
     def file_glob(  # type: ignore[override]
         self,
@@ -80,7 +124,7 @@ class SSHDriver(MachineDriver):
         type_filter: str = "file",
         include_ignored: bool = False,
     ) -> FileGlobResult | None:
-        raise NotImplementedError("SSHDriver.file_glob() is not yet implemented")
+        raise NotImplementedError("SSHDriver.file_glob() — implement in Task 5")
 
     def file_grep(  # type: ignore[override]
         self,
@@ -99,4 +143,4 @@ class SSHDriver(MachineDriver):
         include_ignored: bool = False,
         multiline: bool = False,
     ) -> dict[str, Any] | None:
-        raise NotImplementedError("SSHDriver.file_grep() is not yet implemented")
+        raise NotImplementedError("SSHDriver.file_grep() — implement in Task 5")
