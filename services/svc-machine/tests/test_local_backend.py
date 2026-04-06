@@ -6,13 +6,13 @@ from pathlib import Path
 
 import pytest
 
-from svc_machine.local_backend import (
+from svc_machine.driver import (
     ExecResult,
     FileEditResult,
     FileGlobResult,
     FileReadResult,
-    LocalBackend,
 )
+from svc_machine.local_backend import LocalBackend
 
 
 class TestExec:

@@ -7,49 +7,31 @@ import fnmatch
 import os
 import signal
 import subprocess as _subprocess_module
-from dataclasses import dataclass
 from pathlib import Path
 from subprocess import DEVNULL
 from typing import Any
 
+from svc_machine.driver import (
+    ExecResult,
+    FileEditResult,
+    FileGlobResult,
+    FileReadResult,
+    MachineDriver,
+)
+
+# Re-export for backwards compatibility (callers that imported from local_backend)
+__all__ = [
+    "ExecResult",
+    "FileEditResult",
+    "FileGlobResult",
+    "FileReadResult",
+    "LocalBackend",
+]
 
 _KILL_DRAIN_TIMEOUT = 2  # seconds to wait for process to exit after SIGKILL
 
 
-@dataclass
-class ExecResult:
-    """Result of a subprocess execution."""
-
-    stdout: str
-    stderr: str
-    exit_code: int
-
-
-@dataclass
-class FileReadResult:
-    """Result of a file read operation."""
-
-    content: str
-    total_lines: int
-
-
-@dataclass
-class FileEditResult:
-    """Result of a file edit operation."""
-
-    success: bool
-    replacements_made: int
-
-
-@dataclass
-class FileGlobResult:
-    """Result of a file glob operation."""
-
-    matches: list[str]
-    total_files: int
-
-
-class LocalBackend:
+class LocalBackend(MachineDriver):
     """Execute shell commands in a sandboxed workspace directory."""
 
     _EXCLUDED_DIRS: list[str] = [
@@ -79,7 +61,13 @@ class LocalBackend:
     def __init__(self, workspace_dir: Path) -> None:
         self.workspace_dir = workspace_dir.resolve()
 
-    async def exec(
+    async def connect(self) -> None:  # type: ignore[override]
+        """No-op — local backend requires no connection setup."""
+
+    async def disconnect(self) -> None:  # type: ignore[override]
+        """No-op — local backend requires no connection teardown."""
+
+    async def exec(  # type: ignore[override]
         self,
         command: str,
         timeout: int = 30,
@@ -138,7 +126,7 @@ class LocalBackend:
             exit_code=process.returncode if process.returncode is not None else -1,
         )
 
-    async def exec_background(
+    async def exec_background(  # type: ignore[override]
         self,
         command: str,
         working_dir: str | None = None,
@@ -350,7 +338,7 @@ class LocalBackend:
 
         return FileGlobResult(matches=matches, total_files=total)
 
-    async def file_grep(
+    async def file_grep(  # type: ignore[override]
         self,
         pattern: str,
         path: str = ".",
