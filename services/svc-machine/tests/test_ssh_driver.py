@@ -111,3 +111,34 @@ async def test_exec_wraps_command_with_working_dir() -> None:
         call_args.args[0] if call_args.args else call_args.kwargs.get("command", "")
     )
     assert command_sent.startswith("cd /workspace && ")
+
+
+async def test_exec_raises_if_not_connected() -> None:
+    """exec() raises RuntimeError when called without a prior connect()."""
+    import pytest
+
+    driver = SSHDriver(host="localhost", working_dir="/workspace")
+    # _conn is None — no connect() called
+    with pytest.raises(RuntimeError, match="not connected"):
+        await driver.exec("echo hi")
+
+
+async def test_exec_background_raises_if_not_connected() -> None:
+    """exec_background() raises RuntimeError when called without a prior connect()."""
+    import pytest
+
+    driver = SSHDriver(host="localhost", working_dir="/workspace")
+    with pytest.raises(RuntimeError, match="not connected"):
+        await driver.exec_background("sleep 10")
+
+
+async def test_connect_raises_if_already_connected() -> None:
+    """connect() raises RuntimeError when called while already connected."""
+    import pytest
+    from unittest.mock import MagicMock
+
+    driver = SSHDriver(host="localhost", working_dir="/workspace")
+    driver._conn = MagicMock()  # simulate an existing live connection
+
+    with pytest.raises(RuntimeError, match="already connected"):
+        await driver.connect()

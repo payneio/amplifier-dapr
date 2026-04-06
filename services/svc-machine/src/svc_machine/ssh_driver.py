@@ -37,10 +37,14 @@ class SSHDriver(MachineDriver):
 
     async def connect(self) -> None:  # type: ignore[override]
         """Establish an SSH connection using asyncssh."""
+        if self._conn is not None:
+            raise RuntimeError(
+                "SSHDriver is already connected — call disconnect() first"
+            )
         self._conn = await asyncssh.connect(  # type: ignore[union-attr]
             host=self.host,
             port=self.port,
-            known_hosts=None,
+            known_hosts=None,  # Dev/workspace only — host key verification disabled
             username=self.username,
         )
 
@@ -62,6 +66,8 @@ class SSHDriver(MachineDriver):
         working_dir: str | None = None,
     ) -> ExecResult:
         """Execute a command over SSH and return the result."""
+        if self._conn is None:
+            raise RuntimeError("SSHDriver is not connected — call connect() first")
         wrapped = self._wrap_command(command, working_dir)
         try:
             result = await asyncio.wait_for(
@@ -83,6 +89,8 @@ class SSHDriver(MachineDriver):
         working_dir: str | None = None,
     ) -> dict[str, Any]:
         """Spawn a background process via SSH using nohup and return its PID."""
+        if self._conn is None:
+            raise RuntimeError("SSHDriver is not connected — call connect() first")
         bg_command = f"nohup {command} & echo $!"
         wrapped = self._wrap_command(bg_command, working_dir)
         result = await self._conn.run(wrapped, check=False)  # type: ignore[union-attr]
