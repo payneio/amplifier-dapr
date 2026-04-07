@@ -37,7 +37,9 @@ class TestAgentFlag:
         """--agent value reaches client.stream_turn as agent_ref kwarg."""
         received_kwargs: dict[str, Any] = {}
 
-        async def capturing_stream(*args: Any, **kwargs: Any) -> AsyncIterator[SSEEvent]:
+        async def capturing_stream(
+            *args: Any, **kwargs: Any
+        ) -> AsyncIterator[SSEEvent]:
             received_kwargs.update(kwargs)
             yield SSEEvent(event="complete", data={"result": "done", "messages": []})
 
@@ -56,7 +58,9 @@ class TestAgentFlag:
         """-a shorthand works identically to --agent."""
         received_kwargs: dict[str, Any] = {}
 
-        async def capturing_stream(*args: Any, **kwargs: Any) -> AsyncIterator[SSEEvent]:
+        async def capturing_stream(
+            *args: Any, **kwargs: Any
+        ) -> AsyncIterator[SSEEvent]:
             received_kwargs.update(kwargs)
             yield SSEEvent(event="complete", data={"result": "done", "messages": []})
 
@@ -75,7 +79,9 @@ class TestAgentFlag:
         """When --agent is omitted, agent_ref=None is passed to stream_turn."""
         received_kwargs: dict[str, Any] = {}
 
-        async def capturing_stream(*args: Any, **kwargs: Any) -> AsyncIterator[SSEEvent]:
+        async def capturing_stream(
+            *args: Any, **kwargs: Any
+        ) -> AsyncIterator[SSEEvent]:
             received_kwargs.update(kwargs)
             yield SSEEvent(event="complete", data={"result": "done", "messages": []})
 
@@ -94,7 +100,9 @@ class TestAgentFlag:
         """--agent and --provider can be combined and both reach stream_turn."""
         received_kwargs: dict[str, Any] = {}
 
-        async def capturing_stream(*args: Any, **kwargs: Any) -> AsyncIterator[SSEEvent]:
+        async def capturing_stream(
+            *args: Any, **kwargs: Any
+        ) -> AsyncIterator[SSEEvent]:
             received_kwargs.update(kwargs)
             yield SSEEvent(event="complete", data={"result": "done", "messages": []})
 

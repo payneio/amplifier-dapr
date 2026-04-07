@@ -62,9 +62,7 @@ class TestAssembleSystemPrompt:
     async def test_agent_system_prompt_prepended(self) -> None:
         """Agent system prompt appears before workspace content."""
         routing_table: dict = {}
-        workspace_content = (
-            '<context_file path="readme.md">\ncontent\n</context_file>'
-        )
+        workspace_content = '<context_file path="readme.md">\ncontent\n</context_file>'
         agent_prompt = "You are a specialist agent."
 
         result = await assemble_system_prompt(

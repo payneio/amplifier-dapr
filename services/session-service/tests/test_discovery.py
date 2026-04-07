@@ -244,10 +244,14 @@ class TestDiscoverServices:
         """Agents from multiple services are all collected into _agents."""
         describe_results = {
             "svc-content-core": _make_describe(
-                agents=[{"name": "zen-architect", "description": "Designs module specs"}]
+                agents=[
+                    {"name": "zen-architect", "description": "Designs module specs"}
+                ]
             ),
             "svc-content-amplifier": _make_describe(
-                agents=[{"name": "ecosystem-expert", "description": "Ecosystem expertise"}]
+                agents=[
+                    {"name": "ecosystem-expert", "description": "Ecosystem expertise"}
+                ]
             ),
         }
         routing = build_routing_table(describe_results, context_app_id="svc-context")

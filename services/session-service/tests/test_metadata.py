@@ -74,7 +74,9 @@ def test_get_tools_runs_discovery_when_no_routing_table(client: TestClient) -> N
     mock_discover.assert_awaited_once()
 
 
-def test_get_tools_returns_specs_from_discovered_routing_table(client: TestClient) -> None:
+def test_get_tools_returns_specs_from_discovered_routing_table(
+    client: TestClient,
+) -> None:
     """/tools returns tool specs populated by on-demand discovery."""
     with patch(
         "session_service.app.discover_services",
@@ -111,7 +113,9 @@ def test_get_tools_returns_specs_from_cached_routing_table(client: TestClient) -
     mock_discover.assert_not_awaited()
 
 
-def test_get_tools_caches_routing_table_for_subsequent_calls(client: TestClient) -> None:
+def test_get_tools_caches_routing_table_for_subsequent_calls(
+    client: TestClient,
+) -> None:
     """/tools stores the discovered routing table so repeat calls skip re-discovery."""
     session_id = "new-session"
 
@@ -124,7 +128,9 @@ def test_get_tools_caches_routing_table_for_subsequent_calls(client: TestClient)
         # Second call — should use cached routing table
         client.get(f"/sessions/{session_id}/tools")
 
-    assert mock_discover.await_count == 1, "Discovery should only run once; second call uses cache"
+    assert mock_discover.await_count == 1, (
+        "Discovery should only run once; second call uses cache"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -145,7 +151,9 @@ def test_get_modes_runs_discovery_when_no_routing_table(client: TestClient) -> N
     mock_discover.assert_awaited_once()
 
 
-def test_get_modes_returns_modes_from_discovered_routing_table(client: TestClient) -> None:
+def test_get_modes_returns_modes_from_discovered_routing_table(
+    client: TestClient,
+) -> None:
     """/modes returns mode specs populated by on-demand discovery."""
     with patch(
         "session_service.app.discover_services",
@@ -182,7 +190,9 @@ def test_get_modes_returns_modes_from_cached_routing_table(client: TestClient) -
     mock_discover.assert_not_awaited()
 
 
-def test_get_modes_caches_routing_table_for_subsequent_calls(client: TestClient) -> None:
+def test_get_modes_caches_routing_table_for_subsequent_calls(
+    client: TestClient,
+) -> None:
     """/modes stores the discovered routing table so repeat calls skip re-discovery."""
     session_id = "new-modes-session"
 
@@ -195,7 +205,9 @@ def test_get_modes_caches_routing_table_for_subsequent_calls(client: TestClient)
         # Second call — should use cached routing table
         client.get(f"/sessions/{session_id}/modes")
 
-    assert mock_discover.await_count == 1, "Discovery should only run once; second call uses cache"
+    assert mock_discover.await_count == 1, (
+        "Discovery should only run once; second call uses cache"
+    )
 
 
 def test_get_modes_does_not_call_svc_modes_directly(client: TestClient) -> None:
@@ -263,7 +275,9 @@ def test_get_agents_runs_discovery_when_no_routing_table(client: TestClient) -> 
     mock_discover.assert_awaited_once()
 
 
-def test_get_agents_returns_agents_from_discovered_routing_table(client: TestClient) -> None:
+def test_get_agents_returns_agents_from_discovered_routing_table(
+    client: TestClient,
+) -> None:
     """/agents returns agent specs populated by on-demand discovery."""
     with patch(
         "session_service.app.discover_services",
@@ -278,7 +292,9 @@ def test_get_agents_returns_agents_from_discovered_routing_table(client: TestCli
     assert names == {"zen-architect", "modular-builder"}
 
 
-def test_get_agents_returns_agents_from_cached_routing_table(client: TestClient) -> None:
+def test_get_agents_returns_agents_from_cached_routing_table(
+    client: TestClient,
+) -> None:
     """/agents reads agent specs from the session's stored routing table (no re-discovery)."""
     session_id = "cached-agents-session"
     _sessions[session_id] = {
@@ -300,7 +316,9 @@ def test_get_agents_returns_agents_from_cached_routing_table(client: TestClient)
     mock_discover.assert_not_awaited()
 
 
-def test_get_agents_caches_routing_table_for_subsequent_calls(client: TestClient) -> None:
+def test_get_agents_caches_routing_table_for_subsequent_calls(
+    client: TestClient,
+) -> None:
     """/agents stores the discovered routing table so repeat calls skip re-discovery."""
     session_id = "new-agents-session"
 
@@ -313,4 +331,6 @@ def test_get_agents_caches_routing_table_for_subsequent_calls(client: TestClient
         # Second call — should use cached routing table
         client.get(f"/sessions/{session_id}/agents")
 
-    assert mock_discover.await_count == 1, "Discovery should only run once; second call uses cache"
+    assert mock_discover.await_count == 1, (
+        "Discovery should only run once; second call uses cache"
+    )

@@ -53,7 +53,9 @@ class TestStreamEventType:
         from session_service.streaming import StreamEventType  # noqa: PLC0415
 
         assert StreamEventType.delegate_agent_spawned.value == "delegate:agent_spawned"
-        assert StreamEventType.delegate_agent_completed.value == "delegate:agent_completed"
+        assert (
+            StreamEventType.delegate_agent_completed.value == "delegate:agent_completed"
+        )
         assert StreamEventType.delegate_agent_resumed.value == "delegate:agent_resumed"
         assert StreamEventType.delegate_error.value == "delegate:error"
 
