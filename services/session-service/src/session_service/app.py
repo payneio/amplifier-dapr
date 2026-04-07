@@ -54,6 +54,20 @@ class SessionInfo(BaseModel):
     turn_count: int
 
 
+class CreateSessionRequest(BaseModel):
+    """Request model for POST /sessions (create a new session)."""
+
+    agent_ref: str = "default"
+    machine_config: dict[str, Any] | None = None
+
+
+class CreateSessionResponse(BaseModel):
+    """Response model for POST /sessions (create a new session)."""
+
+    session_id: str
+    machine_instance_id: str | None = None
+
+
 # ---------------------------------------------------------------------------
 # Default services list
 # ---------------------------------------------------------------------------
