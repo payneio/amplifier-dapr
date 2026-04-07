@@ -301,6 +301,9 @@ def create_session_app(dapr_url: str | None = None) -> FastAPI:
                     "ORCHESTRATOR_DIRECT_URL", f"http://{orchestrator_app_id}:8000"
                 )
                 stream_url = f"{orch_direct_url}/orchestrator/execute/stream"
+                machine_instance_id = _sessions.get(session_id, {}).get(
+                    "machine_instance_id"
+                )
                 payload: dict[str, Any] = {
                     "system_prompt": system_prompt,
                     "messages": [m.model_dump() for m in messages],
@@ -310,6 +313,7 @@ def create_session_app(dapr_url: str | None = None) -> FastAPI:
                     },
                     "routing_table": routing_table_dict,
                     "session_id": session_id,
+                    "machine_instance_id": machine_instance_id,
                 }
 
                 # ---------------------------------------------------------------

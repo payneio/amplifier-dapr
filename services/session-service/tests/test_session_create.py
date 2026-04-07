@@ -294,6 +294,57 @@ class TestTurnPayloadIncludesMachineInstanceId:
         finally:
             _sessions.pop(session_id, None)
 
+    def test_stream_turn_payload_includes_machine_instance_id(
+        self, mock_discover
+    ) -> None:
+        """Streaming turn forwards machine_instance_id from session to orchestrator payload."""
+        from session_service.app import _sessions
+
+        session_id = "test-stream-with-machine"
+        _sessions[session_id] = {
+            "turn_count": 0,
+            "status": "active",
+            "machine_instance_id": "stream-inst-xyz",
+        }
+        try:
+            captured: dict[str, Any] = {}
+
+            async def _aiter_lines():
+                return
+                yield  # pragma: no cover — empty async generator
+
+            mock_response = MagicMock()
+            mock_response.raise_for_status = MagicMock()
+            mock_response.aiter_lines = lambda: _aiter_lines()
+
+            mock_stream_ctx = MagicMock()
+            mock_stream_ctx.__aenter__ = AsyncMock(return_value=mock_response)
+            mock_stream_ctx.__aexit__ = AsyncMock(return_value=False)
+
+            mock_client = MagicMock()
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock(return_value=False)
+
+            def capturing_stream(*args: Any, **kwargs: Any) -> MagicMock:
+                captured["payload"] = kwargs.get("json")
+                return mock_stream_ctx
+
+            mock_client.stream = capturing_stream
+
+            with patch(
+                "session_service.app.httpx.AsyncClient", return_value=mock_client
+            ):
+                client = _make_client("http://localhost:3500")
+                client.post(
+                    f"/sessions/{session_id}/turn/stream",
+                    json={"prompt": "hello", "agent_ref": "default"},
+                )
+
+            assert "payload" in captured, "stream() was never called"
+            assert captured["payload"]["machine_instance_id"] == "stream-inst-xyz"
+        finally:
+            _sessions.pop(session_id, None)
+
 
 # ---------------------------------------------------------------------------
 # Tests: session clear destroys machine instance
