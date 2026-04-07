@@ -3,3 +3,4 @@ __pycache__
 related-projects
 .amplifier/
 !.amplifier/settings.yaml
+ampctl/docker-compose.yaml

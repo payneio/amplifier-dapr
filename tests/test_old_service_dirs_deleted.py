@@ -7,8 +7,6 @@ These directories were replaced by:
 - svc-filesystem -> svc-machine (filesystem access now lives there)
 - svc-search    -> svc-machine (search now lives there)
 
-Note: tests/test_microservices_integration.py still imports from svc_bash.app
-and svc_bash.tool - those will be fixed in Task 7.
 """
 
 import subprocess
