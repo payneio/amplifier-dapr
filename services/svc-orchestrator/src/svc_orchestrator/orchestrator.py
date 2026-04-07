@@ -31,6 +31,7 @@ class Orchestrator:
         """
         self._dapr = dapr
         self._hooks = HookDispatcher(dapr=dapr)
+        self._machine_instance_id: str | None = None  # set per-request in execute()
 
     async def execute(
         self,
@@ -56,6 +57,8 @@ class Orchestrator:
                   to the provider inside ``ChatRequest``.
             routing_table: Routing configuration mapping tools/providers/hooks.
             session_id: Optional session identifier used for stream events.
+            machine_instance_id: Optional machine instance identifier forwarded
+                verbatim in every tool dispatch request body.
 
         Returns:
             A tuple of ``(result_text, final_messages)`` where ``result_text``
@@ -232,6 +235,8 @@ class Orchestrator:
             config: Arbitrary configuration dict (same keys as :meth:`execute`).
             routing_table: Routing configuration mapping tools/providers/hooks.
             session_id: Optional session identifier.
+            machine_instance_id: Optional machine instance identifier forwarded
+                verbatim in every tool dispatch request body.
 
         Yields:
             Dicts with ``event`` (str) and ``data`` (JSON string) keys.
