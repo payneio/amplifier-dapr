@@ -172,12 +172,15 @@ The `GET /describe` response provides the capability and content manifest:
 
 ```json
 {
-  "name": "svc-filesystem",
+  "name": "svc-machine",
   "capabilities": {
     "tools": [
+      {"name": "bash", "description": "...", "input_schema": {}},
       {"name": "read_file", "description": "...", "input_schema": {}},
       {"name": "write_file", "description": "...", "input_schema": {}},
-      {"name": "edit_file", "description": "...", "input_schema": {}}
+      {"name": "edit_file", "description": "...", "input_schema": {}},
+      {"name": "grep", "description": "...", "input_schema": {}},
+      {"name": "glob", "description": "...", "input_schema": {}}
     ],
     "providers": [],
     "hooks": []
@@ -292,10 +295,9 @@ Three communication patterns cover all interactions in the system.
 The caller invokes a specific service endpoint and waits for the result. Dapr service invocation provides mTLS, retries, and circuit breakers automatically.
 
 ```
-Orchestrator --[Dapr SI]--> svc-bash /tools/bash/execute
+Orchestrator --[Dapr SI]--> svc-machine /tools/bash/execute
 Orchestrator --[Dapr SI]--> svc-providers /providers/anthropic/complete
 Orchestrator --[Dapr SI]--> svc-modes /hooks/mode/invoke
-svc-bash     --[Dapr SI]--> svc-machine /exec
 Session Svc  --[Dapr SI]--> any-service /describe
 ```
 
@@ -382,9 +384,6 @@ All services share a base image. The `amplifier-foundation` monolith is split by
 | `svc-delegate` | agents | DelegateTool |
 | `svc-task` | tasks | TaskTool |
 | `svc-todo` | todo-reminder | TodoTool + TodoReminderHook + TodoDisplayHook |
-| `svc-bash` | (tool) | BashTool |
-| `svc-filesystem` | (tool) | ReadTool, WriteTool, EditTool |
-| `svc-search` | (tool) | GrepTool, GlobTool |
 | `svc-web` | (tool) | WebSearchTool, WebFetchTool |
 | `svc-logging` | logging | LoggingHook |
 | `svc-redaction` | redaction | RedactionHook |
@@ -419,11 +418,11 @@ All services share a base image. The `amplifier-foundation` monolith is split by
 
 | Container | Role |
 |---|---|
-| `svc-machine` | Filesystem and command execution (workspace volume-mounted in local mode) |
+| `svc-machine` | Consolidated machine service: bash, read_file, write_file, edit_file, grep, glob. Per-session instances via SSH/SFTP driver. |
 | `session-service` | Session lifecycle gateway |
 | `redis` | Dapr state store + pub/sub broker |
 
-**Total: ~29 application containers + Redis + Dapr sidecars**
+**Total: ~26 application containers + Redis + Dapr sidecars**
 
 The CLI is NOT a container. It runs on the user's machine.
 
@@ -518,29 +517,13 @@ LLM provider adapters.
 |---|---|
 | Providers | `anthropic`, `openai`, `azure_openai`, `gemini`, `ollama`, `vllm`, `github_copilot`, `mock` |
 
-#### svc-bash
+#### svc-machine
 
-Shell command execution (calls Machine Service).
-
-| Component Type | Names |
-|---|---|
-| Tool | `bash` |
-
-#### svc-filesystem
-
-File read/write/edit (calls Machine Service).
+Consolidated machine service — shell execution, file operations, and search. Provides per-session instances via an abstract driver interface (SSH/SFTP for local and remote, future S3 for cloud storage).
 
 | Component Type | Names |
 |---|---|
-| Tools | `read_file`, `write_file`, `edit_file` |
-
-#### svc-search
-
-File search and discovery (calls Machine Service).
-
-| Component Type | Names |
-|---|---|
-| Tools | `grep`, `glob` |
+| Tools | bash, read_file, write_file, edit_file, grep, glob |
 
 #### svc-web
 
