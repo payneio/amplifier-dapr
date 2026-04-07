@@ -182,3 +182,114 @@ class TestCreateSessionEndpoint:
         data = get_response.json()
         assert data["status"] == "active"
         assert data["turn_count"] == 0
+
+
+# ---------------------------------------------------------------------------
+# Tests: machine_instance_id in turn payload
+# ---------------------------------------------------------------------------
+
+
+class TestTurnPayloadIncludesMachineInstanceId:
+    """Verify that machine_instance_id from the session is forwarded in the turn payload."""
+
+    @pytest.fixture(autouse=True)
+    def isolate_from_yaml(self):
+        """Force get_agent_config to use hardcoded AGENTS dict (no YAML loading)."""
+        with patch(
+            "session_service.agents._load_from_yaml",
+            return_value=None,
+        ):
+            yield
+
+    @pytest.fixture()
+    def mock_discover(self):
+        """Patch discover_services to return an empty routing table without Dapr I/O."""
+        with patch(
+            "session_service.app.discover_services",
+            new_callable=AsyncMock,
+            return_value=_EMPTY_ROUTING_TABLE,
+        ) as m:
+            yield m
+
+    @pytest.fixture()
+    def mock_transcript(self):
+        """Patch load/save transcript so no Dapr I/O occurs."""
+        with (
+            patch(
+                "session_service.app.load_transcript",
+                new_callable=AsyncMock,
+                return_value=[],
+            ) as load,
+            patch(
+                "session_service.app.save_transcript", new_callable=AsyncMock
+            ) as save,
+        ):
+            yield load, save
+
+    @pytest.fixture()
+    def mock_orchestrator(self):
+        """Patch httpx.AsyncClient to capture turn POST calls without real I/O."""
+        from unittest.mock import MagicMock
+
+        mock_response = MagicMock()
+        mock_response.raise_for_status = MagicMock()
+        mock_response.json = MagicMock(return_value={"result": "ok", "messages": []})
+
+        with patch("session_service.app.httpx.AsyncClient") as mock_cls:
+            mock_http = AsyncMock()
+            mock_http.__aenter__ = AsyncMock(return_value=mock_http)
+            mock_http.__aexit__ = AsyncMock(return_value=None)
+            mock_http.post = AsyncMock(return_value=mock_response)
+            mock_cls.return_value = mock_http
+            yield mock_http
+
+    def test_turn_payload_includes_machine_instance_id(
+        self, mock_discover, mock_transcript, mock_orchestrator
+    ) -> None:
+        """When session has machine_instance_id, it is included in the orchestrator payload."""
+        from session_service.app import _sessions
+
+        session_id = "test-session-with-machine"
+        _sessions[session_id] = {
+            "turn_count": 0,
+            "status": "active",
+            "machine_instance_id": "inst-abc123",
+        }
+        try:
+            client = _make_client("http://localhost:3500")
+            response = client.post(
+                f"/sessions/{session_id}/turn",
+                json={"prompt": "hello", "agent_ref": "default"},
+            )
+            assert response.status_code == 200
+
+            # Verify the payload sent to orchestrator contained machine_instance_id
+            call_args = mock_orchestrator.post.call_args
+            payload = call_args.kwargs.get("json") or call_args.args[1]
+            assert payload["machine_instance_id"] == "inst-abc123"
+        finally:
+            _sessions.pop(session_id, None)
+
+    def test_turn_payload_machine_instance_id_none_when_absent(
+        self, mock_discover, mock_transcript, mock_orchestrator
+    ) -> None:
+        """When session has no machine_instance_id, the field is None in the orchestrator payload."""
+        from session_service.app import _sessions
+
+        session_id = "test-session-no-machine"
+        # Ensure the session exists but has no machine_instance_id
+        _sessions.pop(session_id, None)
+        try:
+            client = _make_client("http://localhost:3500")
+            response = client.post(
+                f"/sessions/{session_id}/turn",
+                json={"prompt": "hello", "agent_ref": "default"},
+            )
+            assert response.status_code == 200
+
+            # Verify the payload sent to orchestrator has machine_instance_id=None
+            call_args = mock_orchestrator.post.call_args
+            payload = call_args.kwargs.get("json") or call_args.args[1]
+            assert payload.get("machine_instance_id") is None
+        finally:
+            _sessions.pop(session_id, None)

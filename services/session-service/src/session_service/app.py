@@ -222,6 +222,7 @@ def create_session_app(dapr_url: str | None = None) -> FastAPI:
         invoke_url = (
             f"{_dapr_url}/v1.0/invoke/{orchestrator_app_id}/method/orchestrator/execute"
         )
+        machine_instance_id = _sessions[session_id].get("machine_instance_id")
         payload = {
             "system_prompt": system_prompt,
             "messages": [m.model_dump() for m in transcript],
@@ -231,6 +232,7 @@ def create_session_app(dapr_url: str | None = None) -> FastAPI:
             },
             "routing_table": routing_table_dict,
             "session_id": session_id,
+            "machine_instance_id": machine_instance_id,
         }
         async with httpx.AsyncClient() as client:
             response = await client.post(invoke_url, json=payload, timeout=120.0)
