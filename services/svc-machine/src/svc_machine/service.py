@@ -11,6 +11,7 @@ from pydantic import BaseModel
 
 from amplifier_service_sdk.service import ServiceConfig, create_app
 
+from svc_machine.instance_manager import InstanceManager, InstanceNotFoundError
 from svc_machine.local_backend import LocalBackend
 from svc_machine.safety import SafetyValidator
 from svc_machine.truncation import truncate_output
@@ -93,6 +94,19 @@ class FileGrepRequest(BaseModel):
     multiline: bool = False
 
 
+class CreateInstanceRequest(BaseModel):
+    """Request body for POST /instances."""
+
+    driver_type: str = "local"
+    config: dict = {}
+
+
+class CreateInstanceResponse(BaseModel):
+    """Response body for POST /instances."""
+
+    instance_id: str
+
+
 def create_machine_app(workspace_dir: Path) -> FastAPI:
     """Create the svc-machine FastAPI application.
 
@@ -110,6 +124,168 @@ def create_machine_app(workspace_dir: Path) -> FastAPI:
 
     backend = LocalBackend(workspace_dir=workspace_dir)
     safety = SafetyValidator()
+    instance_manager = InstanceManager()
+
+    def _get_driver(instance_id: str) -> LocalBackend:
+        """Return driver for an instance or raise HTTP 404."""
+        try:
+            return instance_manager.get_driver(instance_id)  # type: ignore[return-value]
+        except InstanceNotFoundError:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Instance {instance_id!r} not found",
+            )
+
+    @app.post("/instances", response_model=CreateInstanceResponse)
+    async def create_instance(request: CreateInstanceRequest) -> CreateInstanceResponse:
+        """Create a new machine instance."""
+        instance_id = await instance_manager.create_instance(
+            driver_type=request.driver_type,
+            config=request.config,
+        )
+        return CreateInstanceResponse(instance_id=instance_id)
+
+    @app.delete("/instances/{instance_id}")
+    async def destroy_instance(instance_id: str) -> dict:
+        """Destroy an existing machine instance."""
+        try:
+            await instance_manager.destroy_instance(instance_id)
+        except InstanceNotFoundError:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Instance {instance_id!r} not found",
+            )
+        return {"success": True}
+
+    @app.post("/instances/{instance_id}/exec", response_model=None)
+    async def instance_exec_command(
+        instance_id: str, request: ExecRequest
+    ) -> ExecResponse | JSONResponse:
+        """Execute a shell command on a specific instance."""
+        driver = _get_driver(instance_id)
+
+        # Safety check
+        allowed, reason = safety.validate(request.command)
+        if not allowed:
+            raise HTTPException(
+                status_code=403,
+                detail={"denied": True, "reason": reason},
+            )
+
+        # Background execution
+        if request.run_in_background:
+            try:
+                result_bg = await driver.exec_background(
+                    command=request.command,
+                    working_dir=request.working_dir,
+                )
+            except ValueError as exc:
+                raise HTTPException(status_code=422, detail=str(exc)) from exc
+            return JSONResponse(content=result_bg)
+
+        # Normal execution with truncation
+        try:
+            result = await driver.exec(
+                command=request.command,
+                timeout=request.timeout,
+                working_dir=request.working_dir,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+        stdout, stdout_truncated = truncate_output(result.stdout)
+        stderr, stderr_truncated = truncate_output(result.stderr)
+
+        return ExecResponse(
+            stdout=stdout,
+            stderr=stderr,
+            exit_code=result.exit_code,
+            truncated=stdout_truncated or stderr_truncated,
+        )
+
+    @app.post("/instances/{instance_id}/files/read")
+    def instance_read_file(instance_id: str, request: FileReadRequest) -> dict:
+        """Read a file on a specific instance."""
+        driver = _get_driver(instance_id)
+        result = driver.file_read(
+            request.path, offset=request.offset, limit=request.limit
+        )
+        if result is None:
+            raise HTTPException(status_code=404, detail="File not found")
+        return {"content": result.content, "total_lines": result.total_lines}
+
+    @app.post("/instances/{instance_id}/files/write")
+    def instance_write_file(instance_id: str, request: FileWriteRequest) -> dict:
+        """Write content to a file on a specific instance."""
+        driver = _get_driver(instance_id)
+        success = driver.file_write(request.path, request.content)
+        if not success:
+            raise HTTPException(status_code=403, detail="Path escapes workspace")
+        return {"success": True}
+
+    @app.post("/instances/{instance_id}/files/edit")
+    def instance_edit_file(instance_id: str, request: FileEditRequest) -> dict:
+        """Replace string(s) in a file on a specific instance."""
+        driver = _get_driver(instance_id)
+        result = driver.file_edit(
+            request.path, request.old_string, request.new_string, request.replace_all
+        )
+        if result is None:
+            raise HTTPException(status_code=404, detail="File not found")
+        return {
+            "success": result.success,
+            "replacements_made": result.replacements_made,
+        }
+
+    @app.post("/instances/{instance_id}/files/list")
+    def instance_list_files(instance_id: str, request: FileListRequest) -> dict:
+        """List directory entries on a specific instance."""
+        driver = _get_driver(instance_id)
+        entries = driver.file_list(request.path)
+        if entries is None:
+            raise HTTPException(
+                status_code=404, detail="Path not found or not a directory"
+            )
+        return {"entries": entries}
+
+    @app.post("/instances/{instance_id}/files/glob")
+    def instance_glob_files(instance_id: str, request: FileGlobRequest) -> dict:
+        """Match files using a glob pattern on a specific instance."""
+        driver = _get_driver(instance_id)
+        result = driver.file_glob(
+            request.pattern,
+            request.path,
+            exclude=request.exclude,
+            type_filter=request.type,
+            include_ignored=request.include_ignored,
+        )
+        if result is None:
+            raise HTTPException(status_code=404, detail="Base path not found")
+        return {"matches": result.matches, "total_files": result.total_files}
+
+    @app.post("/instances/{instance_id}/files/grep")
+    async def instance_grep_files(instance_id: str, request: FileGrepRequest) -> dict:
+        """Search file contents with a regex pattern on a specific instance."""
+        driver = _get_driver(instance_id)
+        result = await driver.file_grep(
+            pattern=request.pattern,
+            path=request.path,
+            output_mode=request.output_mode,
+            glob_pattern=request.glob,
+            file_type=request.type,
+            after_context=request.after_context,
+            before_context=request.before_context,
+            context=request.context,
+            case_insensitive=request.case_insensitive,
+            line_numbers=request.line_numbers,
+            head_limit=request.head_limit,
+            offset=request.offset,
+            include_ignored=request.include_ignored,
+            multiline=request.multiline,
+        )
+        if result is None:
+            raise HTTPException(status_code=404, detail="Path not found")
+        return result
 
     @app.post("/exec", response_model=None)
     async def exec_command(request: ExecRequest) -> ExecResponse | JSONResponse:

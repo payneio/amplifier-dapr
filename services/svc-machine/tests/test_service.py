@@ -226,3 +226,161 @@ class TestExecBackground:
         data = response.json()
         assert isinstance(data["pid"], int)
         assert data["status"] == "running"
+
+
+class TestInstanceLifecycle:
+    """Tests for instance lifecycle endpoints: POST/DELETE /instances."""
+
+    @pytest.fixture
+    def workspace(self, tmp_path: Path) -> Path:
+        """Provide the workspace directory."""
+        return tmp_path
+
+    @pytest.fixture
+    def client(self, workspace: Path) -> TestClient:
+        """Create a TestClient with a known workspace directory."""
+        app = create_machine_app(workspace_dir=workspace)
+        return TestClient(app)
+
+    def test_create_instance_returns_instance_id(
+        self, client: TestClient, workspace: Path
+    ) -> None:
+        """POST /instances returns 200 with instance_id string."""
+        response = client.post(
+            "/instances",
+            json={"driver_type": "local", "config": {"workspace_dir": str(workspace)}},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert "instance_id" in data
+        assert isinstance(data["instance_id"], str)
+        assert len(data["instance_id"]) > 0
+
+    def test_delete_instance_returns_200(
+        self, client: TestClient, workspace: Path
+    ) -> None:
+        """DELETE /instances/{id} returns 200 after creating instance."""
+        create_resp = client.post(
+            "/instances",
+            json={"driver_type": "local", "config": {"workspace_dir": str(workspace)}},
+        )
+        assert create_resp.status_code == 200
+        instance_id = create_resp.json()["instance_id"]
+
+        delete_resp = client.delete(f"/instances/{instance_id}")
+        assert delete_resp.status_code == 200
+
+    def test_delete_nonexistent_instance_returns_404(self, client: TestClient) -> None:
+        """DELETE /instances/nonexistent returns 404."""
+        response = client.delete("/instances/nonexistent_id_xyz")
+        assert response.status_code == 404
+
+
+class TestInstanceExec:
+    """Tests for POST /instances/{id}/exec endpoint."""
+
+    @pytest.fixture
+    def workspace(self, tmp_path: Path) -> Path:
+        """Provide the workspace directory."""
+        return tmp_path
+
+    @pytest.fixture
+    def client(self, workspace: Path) -> TestClient:
+        """Create a TestClient with a known workspace directory."""
+        app = create_machine_app(workspace_dir=workspace)
+        return TestClient(app)
+
+    @pytest.fixture
+    def instance_id(self, client: TestClient, workspace: Path) -> str:
+        """Create an instance and return its ID."""
+        response = client.post(
+            "/instances",
+            json={"driver_type": "local", "config": {"workspace_dir": str(workspace)}},
+        )
+        assert response.status_code == 200
+        return response.json()["instance_id"]
+
+    def test_exec_on_instance_returns_stdout(
+        self, client: TestClient, instance_id: str
+    ) -> None:
+        """POST /instances/{id}/exec runs command and returns stdout."""
+        response = client.post(
+            f"/instances/{instance_id}/exec",
+            json={"command": "echo hello_instance"},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert "hello_instance" in data["stdout"]
+        assert data["exit_code"] == 0
+
+    def test_exec_on_nonexistent_instance_returns_404(self, client: TestClient) -> None:
+        """POST /instances/nonexistent/exec returns 404."""
+        response = client.post(
+            "/instances/nonexistent_id_xyz/exec",
+            json={"command": "echo hi"},
+        )
+        assert response.status_code == 404
+
+
+class TestInstanceFileOps:
+    """Tests for instance-scoped file operation endpoints."""
+
+    @pytest.fixture
+    def workspace(self, tmp_path: Path) -> Path:
+        """Provide the workspace directory."""
+        return tmp_path
+
+    @pytest.fixture
+    def client(self, workspace: Path) -> TestClient:
+        """Create a TestClient with a known workspace directory."""
+        app = create_machine_app(workspace_dir=workspace)
+        return TestClient(app)
+
+    @pytest.fixture
+    def instance_id(self, client: TestClient, workspace: Path) -> str:
+        """Create an instance and return its ID."""
+        response = client.post(
+            "/instances",
+            json={"driver_type": "local", "config": {"workspace_dir": str(workspace)}},
+        )
+        assert response.status_code == 200
+        return response.json()["instance_id"]
+
+    def test_write_then_read_file(self, client: TestClient, instance_id: str) -> None:
+        """Write then read file via instance-scoped endpoints works."""
+        write_resp = client.post(
+            f"/instances/{instance_id}/files/write",
+            json={"path": "test_file.txt", "content": "instance file content\n"},
+        )
+        assert write_resp.status_code == 200
+        assert write_resp.json()["success"] is True
+
+        read_resp = client.post(
+            f"/instances/{instance_id}/files/read",
+            json={"path": "test_file.txt"},
+        )
+        assert read_resp.status_code == 200
+        data = read_resp.json()
+        assert "instance file content" in data["content"]
+
+    def test_edit_file_returns_replacements_made_1(
+        self, client: TestClient, instance_id: str
+    ) -> None:
+        """Edit file via instance-scoped endpoint returns replacements_made: 1."""
+        # Write a file first
+        client.post(
+            f"/instances/{instance_id}/files/write",
+            json={"path": "edit_test.txt", "content": "hello world\n"},
+        )
+
+        edit_resp = client.post(
+            f"/instances/{instance_id}/files/edit",
+            json={
+                "path": "edit_test.txt",
+                "old_string": "world",
+                "new_string": "earth",
+            },
+        )
+        assert edit_resp.status_code == 200
+        data = edit_resp.json()
+        assert data["replacements_made"] == 1
