@@ -13,27 +13,17 @@ Covers:
 
 from __future__ import annotations
 
-import sys
+from io import StringIO
 from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock
 
-# ---------------------------------------------------------------------------
-# sys.path injection — makes the CLI package importable from this test file
-# regardless of whether it has been pip-installed into the test environment.
-# ---------------------------------------------------------------------------
-_CLI_SRC = Path(__file__).parent.parent / "amplifier-cli" / "src"
-if str(_CLI_SRC) not in sys.path:
-    sys.path.insert(0, str(_CLI_SRC))
+from rich.console import Console
 
-from io import StringIO  # noqa: E402
-from unittest.mock import AsyncMock, MagicMock  # noqa: E402
-
-from rich.console import Console  # noqa: E402
-
-from amplifier_cli.client import SSEEvent, SessionClient  # noqa: E402
-from amplifier_cli.commands import SlashResult, dispatch_slash  # noqa: E402
-from amplifier_cli.display import StreamingDisplay  # noqa: E402
-from amplifier_cli.settings import CLISettings  # noqa: E402
-from amplifier_cli.workspace import resolve_workspace_content  # noqa: E402
+from amplifier_cli.client import SSEEvent, SessionClient
+from amplifier_cli.commands import SlashResult, dispatch_slash
+from amplifier_cli.display import StreamingDisplay
+from amplifier_cli.settings import CLISettings
+from amplifier_cli.workspace import resolve_workspace_content
 
 
 # ---------------------------------------------------------------------------
@@ -363,7 +353,7 @@ class TestStreamingDisplay:
 
         output = buf.getvalue()
         # bash tool renders as "$ command" format (not the tool name explicitly)
-        assert "ls -la" in output
+        assert "$ ls -la" in output
 
     def test_tool_result_success(self) -> None:
         """tool_result event with success=True renders tool name and output."""

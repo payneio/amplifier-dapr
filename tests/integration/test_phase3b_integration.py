@@ -297,7 +297,7 @@ class TestDelegationService:
         tool_names = [t["name"] for t in data.get("tools", [])]
         assert "delegate" in tool_names
 
-    def test_delegation_tool_missing_prompt_returns_error(
+    def test_delegation_tool_missing_instruction_returns_error(
         self, client: TestClient
     ) -> None:
         """POST /tools/delegate/execute with empty input returns success=False."""
