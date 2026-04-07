@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass
 from typing import Any, AsyncIterator
 
@@ -75,6 +76,31 @@ class SessionClient:
 
     async def __aexit__(self, *_: object) -> None:
         await self.close()
+
+    async def create_session(
+        self,
+        agent_ref: str = "default",
+        machine_config: dict[str, Any] | None = None,
+        use_default_machine: bool = False,
+    ) -> dict[str, Any]:
+        """Create a new session via the session service.
+
+        POST /sessions/create
+        """
+        if machine_config is None and use_default_machine:
+            machine_config = {
+                "type": "ssh",
+                "host": "localhost",
+                "working_dir": os.getcwd(),
+            }
+        http = self._get_http()
+        body: dict[str, Any] = {
+            "agent_ref": agent_ref,
+            "machine_config": machine_config,
+        }
+        response = await http.post("/sessions/create", json=body, timeout=30.0)
+        response.raise_for_status()
+        return response.json()
 
     def _build_turn_body(
         self,

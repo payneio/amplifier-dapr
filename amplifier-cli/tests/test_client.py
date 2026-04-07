@@ -293,3 +293,97 @@ class TestSessionClientMetadataMethods:
             result = await client.get_agents(session_id)
 
         assert result == []
+
+
+class TestCreateSession:
+    """Tests for create_session() method."""
+
+    async def test_create_session_calls_correct_endpoint(self) -> None:
+        """create_session() performs POST /sessions/create with agent_ref and machine_config, returns session info."""
+        expected_response = {
+            "session_id": "ses-abc123",
+            "machine_instance_id": "mi-xyz456",
+        }
+        machine_config = {
+            "type": "ssh",
+            "host": "myserver.example.com",
+            "working_dir": "/home/user",
+        }
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            assert request.method == "POST"
+            assert request.url.path == "/sessions/create"
+            body = json.loads(request.content)
+            assert body["agent_ref"] == "custom-agent"
+            assert body["machine_config"] == machine_config
+            return httpx.Response(200, json=expected_response)
+
+        transport = httpx.MockTransport(handler)
+        async with httpx.AsyncClient(
+            base_url="http://localhost:8090", transport=transport
+        ) as http:
+            client = SessionClient()
+            client._http = http
+            result = await client.create_session(
+                agent_ref="custom-agent", machine_config=machine_config
+            )
+
+        assert result == expected_response
+        assert result["session_id"] == "ses-abc123"
+        assert result["machine_instance_id"] == "mi-xyz456"
+
+    async def test_create_session_without_machine_config(self) -> None:
+        """create_session() sends null machine_config when not provided, response has null machine_instance_id."""
+        expected_response = {
+            "session_id": "ses-def456",
+            "machine_instance_id": None,
+        }
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            assert request.method == "POST"
+            assert request.url.path == "/sessions/create"
+            body = json.loads(request.content)
+            assert body["agent_ref"] == "default"
+            assert body["machine_config"] is None
+            return httpx.Response(200, json=expected_response)
+
+        transport = httpx.MockTransport(handler)
+        async with httpx.AsyncClient(
+            base_url="http://localhost:8090", transport=transport
+        ) as http:
+            client = SessionClient()
+            client._http = http
+            result = await client.create_session()
+
+        assert result == expected_response
+        assert result["machine_instance_id"] is None
+
+    async def test_create_session_default_machine_config(self) -> None:
+        """create_session() with use_default_machine=True sends {type: ssh, host: localhost, working_dir: cwd}."""
+        expected_response = {
+            "session_id": "ses-ghi789",
+            "machine_instance_id": "mi-local001",
+        }
+        captured_body: dict = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            assert request.method == "POST"
+            assert request.url.path == "/sessions/create"
+            captured_body.update(json.loads(request.content))
+            return httpx.Response(200, json=expected_response)
+
+        transport = httpx.MockTransport(handler)
+        async with httpx.AsyncClient(
+            base_url="http://localhost:8090", transport=transport
+        ) as http:
+            client = SessionClient()
+            client._http = http
+            result = await client.create_session(use_default_machine=True)
+
+        assert result == expected_response
+        assert captured_body["agent_ref"] == "default"
+        machine_config = captured_body["machine_config"]
+        assert machine_config is not None
+        assert machine_config["type"] == "ssh"
+        assert machine_config["host"] == "localhost"
+        assert "working_dir" in machine_config
