@@ -293,3 +293,94 @@ class TestTurnPayloadIncludesMachineInstanceId:
             assert payload.get("machine_instance_id") is None
         finally:
             _sessions.pop(session_id, None)
+
+
+# ---------------------------------------------------------------------------
+# Tests: session clear destroys machine instance
+# ---------------------------------------------------------------------------
+
+
+class TestSessionClearDestroysMachineInstance:
+    """Verify that POST /sessions/{id}/clear destroys the machine instance if present."""
+
+    @pytest.fixture(autouse=True)
+    def isolate_from_yaml(self):
+        """Force get_agent_config to use hardcoded AGENTS dict (no YAML loading)."""
+        with patch(
+            "session_service.agents._load_from_yaml",
+            return_value=None,
+        ):
+            yield
+
+    def test_clear_session_calls_machine_delete(self) -> None:
+        """When session has machine_instance_id, DELETE is called on the machine service."""
+        from session_service.app import _sessions
+
+        session_id = "sess-with-machine"
+        _sessions[session_id] = {
+            "turn_count": 2,
+            "status": "active",
+            "machine_instance_id": "inst-delete-me",
+            "routing_table": {
+                "_behaviors": {"machine": "svc-machine-abc"},
+            },
+        }
+
+        mock_response = MagicMock()
+        mock_response.raise_for_status = MagicMock()
+
+        mock_http_client = AsyncMock()
+        mock_http_client.delete = AsyncMock(return_value=mock_response)
+        mock_http_client.__aenter__ = AsyncMock(return_value=mock_http_client)
+        mock_http_client.__aexit__ = AsyncMock(return_value=None)
+
+        try:
+            with patch(
+                "session_service.app.httpx.AsyncClient", return_value=mock_http_client
+            ):
+                client = _make_client("http://localhost:3500")
+                response = client.post(f"/sessions/{session_id}/clear")
+
+            assert response.status_code == 200
+            assert response.json() == {"status": "cleared"}
+
+            # Verify DELETE was called with a URL containing both the instance ID and the machine app ID
+            mock_http_client.delete.assert_called_once()
+            call_args = mock_http_client.delete.call_args
+            url = (
+                call_args.args[0] if call_args.args else call_args.kwargs.get("url", "")
+            )
+            assert "inst-delete-me" in url
+            assert "svc-machine-abc" in url
+        finally:
+            _sessions.pop(session_id, None)
+
+    def test_clear_session_without_machine_does_not_call_delete(self) -> None:
+        """When session has no machine_instance_id, no DELETE call is made."""
+        from session_service.app import _sessions
+
+        session_id = "sess-without-machine"
+        _sessions[session_id] = {
+            "turn_count": 1,
+            "status": "active",
+        }
+
+        mock_http_client = AsyncMock()
+        mock_http_client.delete = AsyncMock()
+        mock_http_client.__aenter__ = AsyncMock(return_value=mock_http_client)
+        mock_http_client.__aexit__ = AsyncMock(return_value=None)
+
+        try:
+            with patch(
+                "session_service.app.httpx.AsyncClient", return_value=mock_http_client
+            ):
+                client = _make_client("http://localhost:3500")
+                response = client.post(f"/sessions/{session_id}/clear")
+
+            assert response.status_code == 200
+            assert response.json() == {"status": "cleared"}
+
+            # Verify DELETE was NOT called
+            mock_http_client.delete.assert_not_called()
+        finally:
+            _sessions.pop(session_id, None)

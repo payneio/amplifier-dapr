@@ -445,7 +445,28 @@ def create_session_app(dapr_url: str | None = None) -> FastAPI:
 
     @app.post("/sessions/{session_id}/clear")
     async def session_clear(session_id: str) -> dict[str, Any]:
-        """Reset session state to initial values."""
+        """Reset session state to initial values, destroying any machine instance first."""
+        old_session = _sessions.get(session_id, {})
+        machine_instance_id = old_session.get("machine_instance_id")
+
+        if machine_instance_id:
+            routing_table = old_session.get("routing_table") or {}
+            machine_app_id = routing_table.get("_behaviors", {}).get("machine")
+            if machine_app_id:
+                delete_url = (
+                    f"{_dapr_url}/v1.0/invoke/{machine_app_id}"
+                    f"/method/instances/{machine_instance_id}"
+                )
+                try:
+                    async with httpx.AsyncClient() as client:
+                        await client.delete(delete_url, timeout=15.0)
+                except Exception:
+                    _logger.warning(
+                        "Failed to destroy machine instance %s for session %s",
+                        machine_instance_id,
+                        session_id,
+                    )
+
         # Upsert: create a fresh session entry whether or not one already existed.
         _sessions[session_id] = {"turn_count": 0, "status": "active"}
         return {"status": "cleared"}
