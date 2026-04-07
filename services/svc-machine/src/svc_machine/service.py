@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from typing import Any
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from amplifier_service_sdk.models import ToolCapability
 from amplifier_service_sdk.service import ServiceConfig, create_app
@@ -107,6 +108,18 @@ class CreateInstanceResponse(BaseModel):
     """Response body for POST /instances."""
 
     instance_id: str
+
+
+class ToolDispatchRequest(BaseModel):
+    """Request body for POST /tools/{name}/execute endpoints.
+
+    Matches the payload the orchestrator sends when dispatching tool calls:
+    ``{"name": "...", "input": {...}, "machine_instance_id": "optional"}``.
+    """
+
+    name: str
+    input: dict[str, Any] = {}
+    machine_instance_id: str | None = None
 
 
 async def _run_exec(
@@ -458,6 +471,159 @@ def create_machine_app(workspace_dir: Path) -> FastAPI:
             offset=request.offset,
             include_ignored=request.include_ignored,
             multiline=request.multiline,
+        )
+        if result is None:
+            raise HTTPException(status_code=404, detail="Path not found")
+        return result
+
+    # ------------------------------------------------------------------
+    # Standard orchestrator dispatch routes: POST /tools/{name}/execute
+    # These match the pattern used by all other tool services so the
+    # orchestrator can reach them uniformly via Dapr service invocation.
+    # ------------------------------------------------------------------
+
+    def _resolve_driver(machine_instance_id: str | None) -> MachineDriver:
+        """Return the driver for the given instance, or the global backend.
+
+        If ``machine_instance_id`` is provided but the instance is not found,
+        fall back silently to the global backend so that callers without a
+        provisioned instance still get a working driver.
+        """
+        if machine_instance_id is not None:
+            try:
+                return instance_manager.get_driver(machine_instance_id)
+            except InstanceNotFoundError:
+                pass
+        return backend
+
+    @app.post("/tools/bash/execute", response_model=None)
+    async def tool_bash_execute(
+        request: ToolDispatchRequest,
+    ) -> ExecResponse | JSONResponse:
+        """Execute a shell command — standard orchestrator dispatch endpoint."""
+        try:
+            exec_req = ExecRequest(**request.input)
+        except ValidationError as exc:
+            raise HTTPException(status_code=422, detail=exc.errors()) from exc
+        driver = _resolve_driver(request.machine_instance_id)
+        return await _run_exec(driver, exec_req, safety)
+
+    @app.post("/tools/read_file/execute")
+    async def tool_read_file_execute(request: ToolDispatchRequest) -> dict:
+        """Read a file — standard orchestrator dispatch endpoint.
+
+        Falls back to directory listing when the path resolves to a directory.
+        """
+        file_path = request.input.get("file_path")
+        if file_path is None:
+            raise HTTPException(status_code=422, detail="input.file_path is required")
+        offset: int = request.input.get("offset", 1)
+        limit: int | None = request.input.get("limit")
+        driver = _resolve_driver(request.machine_instance_id)
+        # Try reading as a file first; directories raise IsADirectoryError.
+        try:
+            result = driver.file_read(file_path, offset=offset, limit=limit)
+        except IsADirectoryError:
+            result = None
+            entries = driver.file_list(file_path)
+            if entries is None:
+                raise HTTPException(status_code=404, detail="Path not found")
+            return {"entries": entries}
+        if result is None:
+            # Path doesn't exist or escapes workspace — check if it's a directory.
+            entries = driver.file_list(file_path)
+            if entries is not None:
+                return {"entries": entries}
+            raise HTTPException(status_code=404, detail="File not found")
+        return {"content": result.content, "total_lines": result.total_lines}
+
+    @app.post("/tools/write_file/execute")
+    async def tool_write_file_execute(request: ToolDispatchRequest) -> dict:
+        """Write a file — standard orchestrator dispatch endpoint."""
+        try:
+            write_req = FileWriteRequest(
+                path=request.input.get("file_path", request.input.get("path", "")),
+                content=request.input["content"],
+            )
+        except (KeyError, ValidationError) as exc:
+            raise HTTPException(
+                status_code=422,
+                detail=str(exc),
+            ) from exc
+        driver = _resolve_driver(request.machine_instance_id)
+        success = driver.file_write(write_req.path, write_req.content)
+        if not success:
+            raise HTTPException(status_code=403, detail="Path escapes workspace")
+        return {"success": True}
+
+    @app.post("/tools/edit_file/execute")
+    async def tool_edit_file_execute(request: ToolDispatchRequest) -> dict:
+        """Replace string(s) in a file — standard orchestrator dispatch endpoint."""
+        try:
+            edit_req = FileEditRequest(
+                path=request.input.get("file_path", request.input.get("path", "")),
+                old_string=request.input["old_string"],
+                new_string=request.input["new_string"],
+                replace_all=request.input.get("replace_all", False),
+            )
+        except (KeyError, ValidationError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        driver = _resolve_driver(request.machine_instance_id)
+        result = driver.file_edit(
+            edit_req.path,
+            edit_req.old_string,
+            edit_req.new_string,
+            edit_req.replace_all,
+        )
+        if result is None:
+            raise HTTPException(status_code=404, detail="File not found")
+        return {
+            "success": result.success,
+            "replacements_made": result.replacements_made,
+        }
+
+    @app.post("/tools/glob/execute")
+    async def tool_glob_execute(request: ToolDispatchRequest) -> dict:
+        """Match files using a glob pattern — standard orchestrator dispatch endpoint."""
+        try:
+            glob_req = FileGlobRequest(**request.input)
+        except ValidationError as exc:
+            raise HTTPException(status_code=422, detail=exc.errors()) from exc
+        driver = _resolve_driver(request.machine_instance_id)
+        result = driver.file_glob(
+            glob_req.pattern,
+            glob_req.path,
+            exclude=glob_req.exclude,
+            type_filter=glob_req.type,
+            include_ignored=glob_req.include_ignored,
+        )
+        if result is None:
+            raise HTTPException(status_code=404, detail="Base path not found")
+        return {"matches": result.matches, "total_files": result.total_files}
+
+    @app.post("/tools/grep/execute")
+    async def tool_grep_execute(request: ToolDispatchRequest) -> dict:
+        """Search file contents with regex — standard orchestrator dispatch endpoint."""
+        try:
+            grep_req = FileGrepRequest(**request.input)
+        except ValidationError as exc:
+            raise HTTPException(status_code=422, detail=exc.errors()) from exc
+        driver = _resolve_driver(request.machine_instance_id)
+        result = await driver.file_grep(  # type: ignore[misc]
+            pattern=grep_req.pattern,
+            path=grep_req.path,
+            output_mode=grep_req.output_mode,
+            glob_pattern=grep_req.glob,
+            file_type=grep_req.type,
+            after_context=grep_req.after_context,
+            before_context=grep_req.before_context,
+            context=grep_req.context,
+            case_insensitive=grep_req.case_insensitive,
+            line_numbers=grep_req.line_numbers,
+            head_limit=grep_req.head_limit,
+            offset=grep_req.offset,
+            include_ignored=grep_req.include_ignored,
+            multiline=grep_req.multiline,
         )
         if result is None:
             raise HTTPException(status_code=404, detail="Path not found")
