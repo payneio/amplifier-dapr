@@ -1,0 +1,47 @@
+agents:
+  default:
+    behaviors:
+      content-amplifier: svc-content-amplifier-16055c9c
+      content-browser-tester: svc-content-browser-tester-62808e53
+      content-core: svc-content-core-3c987fd4
+      content-design-intelligence: svc-content-design-intelligence-e11f49fb
+      content-filesystem: svc-content-filesystem-cd9e1c1d
+      content-foundation: svc-content-foundation-c2fd7564
+      content-recipes: svc-content-recipes-86df66c9
+      content-superpowers: svc-content-superpowers-12753568
+      delegation: svc-delegation-46b68076
+      hooks-approval: svc-hooks-approval-6d408233
+      hooks-async: svc-hooks-async-e693dd18
+      hooks-routing: svc-hooks-routing-76b1da46
+      hooks-shell: svc-hooks-shell-08750e21
+      machine: svc-machine-6719a84c
+      modes: svc-modes-80bfc322
+      skills: svc-skills-d6816deb
+      todo: svc-todo-138c608f
+      web: svc-web-cd2a2a7c
+    context_manager: svc-context_manager-a06bdd0b
+    orchestrator: svc-orchestrator-7e84473e
+    providers: svc-providers-9f752646
+  foundation:
+    behaviors:
+      content-amplifier: svc-content-amplifier-16055c9c
+      content-browser-tester: svc-content-browser-tester-62808e53
+      content-core: svc-content-core-3c987fd4
+      content-design-intelligence: svc-content-design-intelligence-e11f49fb
+      content-filesystem: svc-content-filesystem-cd9e1c1d
+      content-foundation: svc-content-foundation-c2fd7564
+      content-recipes: svc-content-recipes-86df66c9
+      content-superpowers: svc-content-superpowers-12753568
+      delegation: svc-delegation-46b68076
+      hooks-approval: svc-hooks-approval-6d408233
+      hooks-async: svc-hooks-async-e693dd18
+      hooks-routing: svc-hooks-routing-76b1da46
+      hooks-shell: svc-hooks-shell-08750e21
+      machine: svc-machine-6719a84c
+      modes: svc-modes-80bfc322
+      skills: svc-skills-d6816deb
+      todo: svc-todo-138c608f
+      web: svc-web-cd2a2a7c
+    context_manager: svc-context_manager-a06bdd0b
+    orchestrator: svc-orchestrator-7e84473e
+    providers: svc-providers-7dbacd13
