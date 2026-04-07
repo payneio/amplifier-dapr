@@ -1,0 +1,619 @@
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+    - 6379:6379
+  svc-orchestrator-7e84473e:
+    build:
+      context: .
+      dockerfile: services/svc-orchestrator/Dockerfile
+    environment:
+      DAPR_HTTP_PORT: '3500'
+    depends_on:
+    - redis
+    - svc-context_manager-a06bdd0b-dapr
+    - svc-providers-7dbacd13-dapr
+    - svc-machine-6719a84c-dapr
+    - svc-web-cd2a2a7c-dapr
+    - svc-skills-d6816deb-dapr
+    - svc-todo-138c608f-dapr
+    - svc-modes-80bfc322-dapr
+    - svc-delegation-46b68076-dapr
+    - svc-hooks-approval-6d408233-dapr
+    - svc-hooks-routing-76b1da46-dapr
+    - svc-hooks-async-e693dd18-dapr
+    - svc-hooks-shell-08750e21-dapr
+    - svc-content-core-3c987fd4-dapr
+    - svc-content-amplifier-16055c9c-dapr
+    - svc-content-browser-tester-62808e53-dapr
+    - svc-content-design-intelligence-e11f49fb-dapr
+    - svc-content-filesystem-cd9e1c1d-dapr
+    - svc-content-recipes-86df66c9-dapr
+    - svc-content-superpowers-12753568-dapr
+    - svc-content-foundation-c2fd7564-dapr
+  svc-orchestrator-7e84473e-dapr:
+    image: daprio/daprd:1.14.4
+    command:
+    - ./daprd
+    - --app-id=svc-orchestrator-7e84473e
+    - --app-port=8000
+    - --dapr-http-port=3500
+    - --dapr-grpc-port=50001
+    - --resources-path=/components
+    - --config=/config/config.yaml
+    volumes:
+    - ./docker/dapr/components:/components
+    - ./docker/dapr:/config
+    network_mode: service:svc-orchestrator-7e84473e
+    depends_on:
+    - svc-orchestrator-7e84473e
+  svc-context_manager-a06bdd0b:
+    build:
+      context: .
+      dockerfile: services/svc-context/Dockerfile
+    environment:
+      DAPR_HTTP_PORT: '3500'
+    depends_on:
+    - redis
+  svc-context_manager-a06bdd0b-dapr:
+    image: daprio/daprd:1.14.4
+    command:
+    - ./daprd
+    - --app-id=svc-context_manager-a06bdd0b
+    - --app-port=8000
+    - --dapr-http-port=3500
+    - --dapr-grpc-port=50001
+    - --resources-path=/components
+    - --config=/config/config.yaml
+    volumes:
+    - ./docker/dapr/components:/components
+    - ./docker/dapr:/config
+    network_mode: service:svc-context_manager-a06bdd0b
+    depends_on:
+    - svc-context_manager-a06bdd0b
+  svc-providers-9f752646:
+    build:
+      context: .
+      dockerfile: services/svc-mock-provider/Dockerfile
+    environment:
+      DAPR_HTTP_PORT: '3500'
+    depends_on:
+    - redis
+  svc-providers-9f752646-dapr:
+    image: daprio/daprd:1.14.4
+    command:
+    - ./daprd
+    - --app-id=svc-providers-9f752646
+    - --app-port=8000
+    - --dapr-http-port=3500
+    - --dapr-grpc-port=50001
+    - --resources-path=/components
+    - --config=/config/config.yaml
+    volumes:
+    - ./docker/dapr/components:/components
+    - ./docker/dapr:/config
+    network_mode: service:svc-providers-9f752646
+    depends_on:
+    - svc-providers-9f752646
+  svc-machine-6719a84c:
+    build:
+      context: .
+      dockerfile: services/svc-machine/Dockerfile
+    environment:
+      DAPR_HTTP_PORT: '3500'
+      WORKSPACE_DIR: /workspace
+    depends_on:
+    - redis
+    volumes:
+    - ${WORKSPACE_PATH:-.}:/workspace
+  svc-machine-6719a84c-dapr:
+    image: daprio/daprd:1.14.4
+    command:
+    - ./daprd
+    - --app-id=svc-machine-6719a84c
+    - --app-port=8000
+    - --dapr-http-port=3500
+    - --dapr-grpc-port=50001
+    - --resources-path=/components
+    - --config=/config/config.yaml
+    volumes:
+    - ./docker/dapr/components:/components
+    - ./docker/dapr:/config
+    network_mode: service:svc-machine-6719a84c
+    depends_on:
+    - svc-machine-6719a84c
+  svc-web-cd2a2a7c:
+    build:
+      context: .
+      dockerfile: services/svc-web/Dockerfile
+    environment:
+      DAPR_HTTP_PORT: '3500'
+    depends_on:
+    - redis
+  svc-web-cd2a2a7c-dapr:
+    image: daprio/daprd:1.14.4
+    command:
+    - ./daprd
+    - --app-id=svc-web-cd2a2a7c
+    - --app-port=8000
+    - --dapr-http-port=3500
+    - --dapr-grpc-port=50001
+    - --resources-path=/components
+    - --config=/config/config.yaml
+    volumes:
+    - ./docker/dapr/components:/components
+    - ./docker/dapr:/config
+    network_mode: service:svc-web-cd2a2a7c
+    depends_on:
+    - svc-web-cd2a2a7c
+  svc-skills-d6816deb:
+    build:
+      context: .
+      dockerfile: services/svc-skills/Dockerfile
+    environment:
+      DAPR_HTTP_PORT: '3500'
+    depends_on:
+    - redis
+  svc-skills-d6816deb-dapr:
+    image: daprio/daprd:1.14.4
+    command:
+    - ./daprd
+    - --app-id=svc-skills-d6816deb
+    - --app-port=8000
+    - --dapr-http-port=3500
+    - --dapr-grpc-port=50001
+    - --resources-path=/components
+    - --config=/config/config.yaml
+    volumes:
+    - ./docker/dapr/components:/components
+    - ./docker/dapr:/config
+    network_mode: service:svc-skills-d6816deb
+    depends_on:
+    - svc-skills-d6816deb
+  svc-todo-138c608f:
+    build:
+      context: .
+      dockerfile: services/svc-todo/Dockerfile
+    environment:
+      DAPR_HTTP_PORT: '3500'
+    depends_on:
+    - redis
+  svc-todo-138c608f-dapr:
+    image: daprio/daprd:1.14.4
+    command:
+    - ./daprd
+    - --app-id=svc-todo-138c608f
+    - --app-port=8000
+    - --dapr-http-port=3500
+    - --dapr-grpc-port=50001
+    - --resources-path=/components
+    - --config=/config/config.yaml
+    volumes:
+    - ./docker/dapr/components:/components
+    - ./docker/dapr:/config
+    network_mode: service:svc-todo-138c608f
+    depends_on:
+    - svc-todo-138c608f
+  svc-modes-80bfc322:
+    build:
+      context: .
+      dockerfile: services/svc-modes/Dockerfile
+    environment:
+      DAPR_HTTP_PORT: '3500'
+    depends_on:
+    - redis
+  svc-modes-80bfc322-dapr:
+    image: daprio/daprd:1.14.4
+    command:
+    - ./daprd
+    - --app-id=svc-modes-80bfc322
+    - --app-port=8000
+    - --dapr-http-port=3500
+    - --dapr-grpc-port=50001
+    - --resources-path=/components
+    - --config=/config/config.yaml
+    volumes:
+    - ./docker/dapr/components:/components
+    - ./docker/dapr:/config
+    network_mode: service:svc-modes-80bfc322
+    depends_on:
+    - svc-modes-80bfc322
+  svc-delegation-46b68076:
+    build:
+      context: .
+      dockerfile: services/svc-delegation/Dockerfile
+    environment:
+      DAPR_HTTP_PORT: '3500'
+    depends_on:
+    - redis
+  svc-delegation-46b68076-dapr:
+    image: daprio/daprd:1.14.4
+    command:
+    - ./daprd
+    - --app-id=svc-delegation-46b68076
+    - --app-port=8000
+    - --dapr-http-port=3500
+    - --dapr-grpc-port=50001
+    - --resources-path=/components
+    - --config=/config/config.yaml
+    volumes:
+    - ./docker/dapr/components:/components
+    - ./docker/dapr:/config
+    network_mode: service:svc-delegation-46b68076
+    depends_on:
+    - svc-delegation-46b68076
+  svc-hooks-approval-6d408233:
+    build:
+      context: .
+      dockerfile: services/svc-hooks-approval/Dockerfile
+    environment:
+      DAPR_HTTP_PORT: '3500'
+      DENY_TOOLS: ''
+    depends_on:
+    - redis
+  svc-hooks-approval-6d408233-dapr:
+    image: daprio/daprd:1.14.4
+    command:
+    - ./daprd
+    - --app-id=svc-hooks-approval-6d408233
+    - --app-port=8000
+    - --dapr-http-port=3500
+    - --dapr-grpc-port=50001
+    - --resources-path=/components
+    - --config=/config/config.yaml
+    volumes:
+    - ./docker/dapr/components:/components
+    - ./docker/dapr:/config
+    network_mode: service:svc-hooks-approval-6d408233
+    depends_on:
+    - svc-hooks-approval-6d408233
+  svc-hooks-routing-76b1da46:
+    build:
+      context: .
+      dockerfile: services/svc-hooks-routing/Dockerfile
+    environment:
+      DAPR_HTTP_PORT: '3500'
+      ROUTING_MATRIX_PATH: ''
+    depends_on:
+    - redis
+  svc-hooks-routing-76b1da46-dapr:
+    image: daprio/daprd:1.14.4
+    command:
+    - ./daprd
+    - --app-id=svc-hooks-routing-76b1da46
+    - --app-port=8000
+    - --dapr-http-port=3500
+    - --dapr-grpc-port=50001
+    - --resources-path=/components
+    - --config=/config/config.yaml
+    volumes:
+    - ./docker/dapr/components:/components
+    - ./docker/dapr:/config
+    network_mode: service:svc-hooks-routing-76b1da46
+    depends_on:
+    - svc-hooks-routing-76b1da46
+  svc-hooks-async-e693dd18:
+    build:
+      context: .
+      dockerfile: services/svc-hooks-async/Dockerfile
+    environment:
+      DAPR_HTTP_PORT: '3500'
+      LOG_TEMPLATE: ~/.amplifier/logs/{session_id}/events.jsonl
+    depends_on:
+    - redis
+  svc-hooks-async-e693dd18-dapr:
+    image: daprio/daprd:1.14.4
+    command:
+    - ./daprd
+    - --app-id=svc-hooks-async-e693dd18
+    - --app-port=8000
+    - --dapr-http-port=3500
+    - --dapr-grpc-port=50001
+    - --resources-path=/components
+    - --config=/config/config.yaml
+    volumes:
+    - ./docker/dapr/components:/components
+    - ./docker/dapr:/config
+    network_mode: service:svc-hooks-async-e693dd18
+    depends_on:
+    - svc-hooks-async-e693dd18
+  svc-hooks-shell-08750e21:
+    build:
+      context: .
+      dockerfile: services/svc-hooks-shell/Dockerfile
+    environment:
+      DAPR_HTTP_PORT: '3500'
+      SHELL_HOOKS_DIR: ''
+    depends_on:
+    - redis
+  svc-hooks-shell-08750e21-dapr:
+    image: daprio/daprd:1.14.4
+    command:
+    - ./daprd
+    - --app-id=svc-hooks-shell-08750e21
+    - --app-port=8000
+    - --dapr-http-port=3500
+    - --dapr-grpc-port=50001
+    - --resources-path=/components
+    - --config=/config/config.yaml
+    volumes:
+    - ./docker/dapr/components:/components
+    - ./docker/dapr:/config
+    network_mode: service:svc-hooks-shell-08750e21
+    depends_on:
+    - svc-hooks-shell-08750e21
+  svc-content-core-3c987fd4:
+    build:
+      context: .
+      dockerfile: services/svc-content-core/Dockerfile
+    environment:
+      DAPR_HTTP_PORT: '3500'
+    depends_on:
+    - redis
+  svc-content-core-3c987fd4-dapr:
+    image: daprio/daprd:1.14.4
+    command:
+    - ./daprd
+    - --app-id=svc-content-core-3c987fd4
+    - --app-port=8000
+    - --dapr-http-port=3500
+    - --dapr-grpc-port=50001
+    - --resources-path=/components
+    - --config=/config/config.yaml
+    volumes:
+    - ./docker/dapr/components:/components
+    - ./docker/dapr:/config
+    network_mode: service:svc-content-core-3c987fd4
+    depends_on:
+    - svc-content-core-3c987fd4
+  svc-content-amplifier-16055c9c:
+    build:
+      context: .
+      dockerfile: services/svc-content-amplifier/Dockerfile
+    environment:
+      DAPR_HTTP_PORT: '3500'
+    depends_on:
+    - redis
+  svc-content-amplifier-16055c9c-dapr:
+    image: daprio/daprd:1.14.4
+    command:
+    - ./daprd
+    - --app-id=svc-content-amplifier-16055c9c
+    - --app-port=8000
+    - --dapr-http-port=3500
+    - --dapr-grpc-port=50001
+    - --resources-path=/components
+    - --config=/config/config.yaml
+    volumes:
+    - ./docker/dapr/components:/components
+    - ./docker/dapr:/config
+    network_mode: service:svc-content-amplifier-16055c9c
+    depends_on:
+    - svc-content-amplifier-16055c9c
+  svc-content-browser-tester-62808e53:
+    build:
+      context: .
+      dockerfile: services/svc-content-browser-tester/Dockerfile
+    environment:
+      DAPR_HTTP_PORT: '3500'
+    depends_on:
+    - redis
+  svc-content-browser-tester-62808e53-dapr:
+    image: daprio/daprd:1.14.4
+    command:
+    - ./daprd
+    - --app-id=svc-content-browser-tester-62808e53
+    - --app-port=8000
+    - --dapr-http-port=3500
+    - --dapr-grpc-port=50001
+    - --resources-path=/components
+    - --config=/config/config.yaml
+    volumes:
+    - ./docker/dapr/components:/components
+    - ./docker/dapr:/config
+    network_mode: service:svc-content-browser-tester-62808e53
+    depends_on:
+    - svc-content-browser-tester-62808e53
+  svc-content-design-intelligence-e11f49fb:
+    build:
+      context: .
+      dockerfile: services/svc-content-design-intelligence/Dockerfile
+    environment:
+      DAPR_HTTP_PORT: '3500'
+    depends_on:
+    - redis
+  svc-content-design-intelligence-e11f49fb-dapr:
+    image: daprio/daprd:1.14.4
+    command:
+    - ./daprd
+    - --app-id=svc-content-design-intelligence-e11f49fb
+    - --app-port=8000
+    - --dapr-http-port=3500
+    - --dapr-grpc-port=50001
+    - --resources-path=/components
+    - --config=/config/config.yaml
+    volumes:
+    - ./docker/dapr/components:/components
+    - ./docker/dapr:/config
+    network_mode: service:svc-content-design-intelligence-e11f49fb
+    depends_on:
+    - svc-content-design-intelligence-e11f49fb
+  svc-content-filesystem-cd9e1c1d:
+    build:
+      context: .
+      dockerfile: services/svc-content-filesystem/Dockerfile
+    environment:
+      DAPR_HTTP_PORT: '3500'
+    depends_on:
+    - redis
+  svc-content-filesystem-cd9e1c1d-dapr:
+    image: daprio/daprd:1.14.4
+    command:
+    - ./daprd
+    - --app-id=svc-content-filesystem-cd9e1c1d
+    - --app-port=8000
+    - --dapr-http-port=3500
+    - --dapr-grpc-port=50001
+    - --resources-path=/components
+    - --config=/config/config.yaml
+    volumes:
+    - ./docker/dapr/components:/components
+    - ./docker/dapr:/config
+    network_mode: service:svc-content-filesystem-cd9e1c1d
+    depends_on:
+    - svc-content-filesystem-cd9e1c1d
+  svc-content-recipes-86df66c9:
+    build:
+      context: .
+      dockerfile: services/svc-content-recipes/Dockerfile
+    environment:
+      DAPR_HTTP_PORT: '3500'
+    depends_on:
+    - redis
+  svc-content-recipes-86df66c9-dapr:
+    image: daprio/daprd:1.14.4
+    command:
+    - ./daprd
+    - --app-id=svc-content-recipes-86df66c9
+    - --app-port=8000
+    - --dapr-http-port=3500
+    - --dapr-grpc-port=50001
+    - --resources-path=/components
+    - --config=/config/config.yaml
+    volumes:
+    - ./docker/dapr/components:/components
+    - ./docker/dapr:/config
+    network_mode: service:svc-content-recipes-86df66c9
+    depends_on:
+    - svc-content-recipes-86df66c9
+  svc-content-superpowers-12753568:
+    build:
+      context: .
+      dockerfile: services/svc-content-superpowers/Dockerfile
+    environment:
+      DAPR_HTTP_PORT: '3500'
+    depends_on:
+    - redis
+  svc-content-superpowers-12753568-dapr:
+    image: daprio/daprd:1.14.4
+    command:
+    - ./daprd
+    - --app-id=svc-content-superpowers-12753568
+    - --app-port=8000
+    - --dapr-http-port=3500
+    - --dapr-grpc-port=50001
+    - --resources-path=/components
+    - --config=/config/config.yaml
+    volumes:
+    - ./docker/dapr/components:/components
+    - ./docker/dapr:/config
+    network_mode: service:svc-content-superpowers-12753568
+    depends_on:
+    - svc-content-superpowers-12753568
+  svc-content-foundation-c2fd7564:
+    build:
+      context: .
+      dockerfile: services/svc-content-foundation/Dockerfile
+    environment:
+      DAPR_HTTP_PORT: '3500'
+    depends_on:
+    - redis
+  svc-content-foundation-c2fd7564-dapr:
+    image: daprio/daprd:1.14.4
+    command:
+    - ./daprd
+    - --app-id=svc-content-foundation-c2fd7564
+    - --app-port=8000
+    - --dapr-http-port=3500
+    - --dapr-grpc-port=50001
+    - --resources-path=/components
+    - --config=/config/config.yaml
+    volumes:
+    - ./docker/dapr/components:/components
+    - ./docker/dapr:/config
+    network_mode: service:svc-content-foundation-c2fd7564
+    depends_on:
+    - svc-content-foundation-c2fd7564
+  svc-providers-7dbacd13:
+    build:
+      context: .
+      dockerfile: services/svc-providers/Dockerfile
+    environment:
+      DAPR_HTTP_PORT: '3500'
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      AZURE_OPENAI_API_KEY: ${AZURE_OPENAI_API_KEY:-}
+      AZURE_OPENAI_ENDPOINT: ${AZURE_OPENAI_ENDPOINT:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+    depends_on:
+    - redis
+  svc-providers-7dbacd13-dapr:
+    image: daprio/daprd:1.14.4
+    command:
+    - ./daprd
+    - --app-id=svc-providers-7dbacd13
+    - --app-port=8000
+    - --dapr-http-port=3500
+    - --dapr-grpc-port=50001
+    - --resources-path=/components
+    - --config=/config/config.yaml
+    volumes:
+    - ./docker/dapr/components:/components
+    - ./docker/dapr:/config
+    network_mode: service:svc-providers-7dbacd13
+    depends_on:
+    - svc-providers-7dbacd13
+  session-service:
+    build:
+      context: .
+      dockerfile: services/session-service/Dockerfile
+    ports:
+    - ${SESSION_SERVICE_PORT:-8090}:8000
+    environment:
+      DAPR_HTTP_PORT: '3500'
+      AMPLIFIER_AGENTS_DIR: /agents
+      AMPLIFIER_SERVICE_MAP: /agents/service-map.yaml
+    volumes:
+    - ./agents:/agents
+    - ~/.amplifier/service-map.yaml:/agents/service-map.yaml:ro
+    depends_on:
+    - redis
+    - svc-content-amplifier-16055c9c-dapr
+    - svc-content-browser-tester-62808e53-dapr
+    - svc-content-core-3c987fd4-dapr
+    - svc-content-design-intelligence-e11f49fb-dapr
+    - svc-content-filesystem-cd9e1c1d-dapr
+    - svc-content-foundation-c2fd7564-dapr
+    - svc-content-recipes-86df66c9-dapr
+    - svc-content-superpowers-12753568-dapr
+    - svc-context_manager-a06bdd0b-dapr
+    - svc-delegation-46b68076-dapr
+    - svc-hooks-approval-6d408233-dapr
+    - svc-hooks-async-e693dd18-dapr
+    - svc-hooks-routing-76b1da46-dapr
+    - svc-hooks-shell-08750e21-dapr
+    - svc-machine-6719a84c-dapr
+    - svc-modes-80bfc322-dapr
+    - svc-orchestrator-7e84473e-dapr
+    - svc-providers-7dbacd13-dapr
+    - svc-providers-9f752646-dapr
+    - svc-skills-d6816deb-dapr
+    - svc-todo-138c608f-dapr
+    - svc-web-cd2a2a7c-dapr
+  session-service-dapr:
+    image: daprio/daprd:1.14.4
+    command:
+    - ./daprd
+    - --app-id=session-service
+    - --app-port=8000
+    - --dapr-http-port=3500
+    - --dapr-grpc-port=50001
+    - --resources-path=/components
+    - --config=/config/config.yaml
+    volumes:
+    - ./docker/dapr/components:/components
+    - ./docker/dapr:/config
+    network_mode: service:session-service
+    depends_on:
+    - session-service
