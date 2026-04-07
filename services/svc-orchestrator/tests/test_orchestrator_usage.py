@@ -40,7 +40,7 @@ def _routing_table_with_tool(
 ) -> RoutingTable:
     return RoutingTable(
         providers={"mock": provider_app_id},
-        tools={"bash": "svc-bash"},
+        tools={"bash": "svc-machine"},
         context=context,
         hooks={},
     )
@@ -192,7 +192,7 @@ class TestCompleteEventUsage:
                         "usage": {"input_tokens": 200, "output_tokens": 30},
                         "stop_reason": "end_turn",
                     }
-            if app_id == "svc-bash" and "tools/bash/execute" in method:
+            if app_id == "svc-machine" and "tools/bash/execute" in method:
                 return {"success": True, "output": "hello"}
             return {"ok": True}
 

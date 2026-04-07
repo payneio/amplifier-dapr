@@ -227,7 +227,7 @@ class TestOrchestratorToolLoop:
                         "stop_reason": "end_turn",
                     }
 
-            if app_id == "svc-bash" and "tools/bash/execute" in method:
+            if app_id == "svc-machine" and "tools/bash/execute" in method:
                 tool_invoked = True
                 return {"output": "hi", "success": True}
 
@@ -246,7 +246,7 @@ class TestOrchestratorToolLoop:
         dapr.invoke_get = mock_invoke_get  # type: ignore[method-assign]
         dapr.publish = mock_publish  # type: ignore[method-assign]
 
-        routing = _routing_table(tools={"bash": "svc-bash"})
+        routing = _routing_table(tools={"bash": "svc-machine"})
         orch = Orchestrator(dapr=dapr)
         result_text, messages = await orch.execute(
             system_prompt="You are a shell assistant.",
@@ -359,7 +359,7 @@ class TestOrchestratorMaxIterations:
                     "stop_reason": "tool_use",
                 }
 
-            if app_id == "svc-bash" and "tools/bash/execute" in method:
+            if app_id == "svc-machine" and "tools/bash/execute" in method:
                 return {"output": "loop", "success": True}
 
             return {"ok": True}
@@ -376,7 +376,7 @@ class TestOrchestratorMaxIterations:
         dapr.invoke_get = mock_invoke_get  # type: ignore[method-assign]
         dapr.publish = mock_publish  # type: ignore[method-assign]
 
-        routing = _routing_table(tools={"bash": "svc-bash"})
+        routing = _routing_table(tools={"bash": "svc-machine"})
         orch = Orchestrator(dapr=dapr)
 
         result_text, messages = await orch.execute(
@@ -427,7 +427,7 @@ class TestOrchestratorMaxIterations:
                         "stop_reason": "end_turn",
                     }
 
-            if app_id == "svc-bash" and "tools/bash/execute" in method:
+            if app_id == "svc-machine" and "tools/bash/execute" in method:
                 return {"output": "ok", "success": True}
 
             return {"ok": True}
@@ -444,7 +444,7 @@ class TestOrchestratorMaxIterations:
         dapr.invoke_get = mock_invoke_get  # type: ignore[method-assign]
         dapr.publish = mock_publish  # type: ignore[method-assign]
 
-        routing = _routing_table(tools={"bash": "svc-bash"})
+        routing = _routing_table(tools={"bash": "svc-machine"})
         orch = Orchestrator(dapr=dapr)
 
         result_text, messages = await orch.execute(
@@ -585,9 +585,9 @@ class TestToolDispatchEdgeCases:
                         "stop_reason": "end_turn",
                     }
 
-            if app_id == "svc-bash" and "tools/bash/execute" in method:
+            if app_id == "svc-machine" and "tools/bash/execute" in method:
                 # Simulate a 500 HTTP error from the tool service
-                request = httpx.Request("POST", "http://svc-bash/tools/bash/execute")
+                request = httpx.Request("POST", "http://svc-machine/tools/bash/execute")
                 response = httpx.Response(500, request=request)
                 raise httpx.HTTPStatusError(
                     "500 Internal Server Error",
@@ -615,7 +615,7 @@ class TestToolDispatchEdgeCases:
         dapr.invoke_get = mock_invoke_get  # type: ignore[method-assign]
         dapr.publish = mock_publish  # type: ignore[method-assign]
 
-        routing = _routing_table(tools={"bash": "svc-bash"})
+        routing = _routing_table(tools={"bash": "svc-machine"})
         orch = Orchestrator(dapr=dapr)
 
         # Should NOT raise
@@ -781,7 +781,7 @@ class TestOrchestratorPreHookDeny:
 
         # Routing table with 'tool:pre' hook pointing to guard service
         routing = _routing_table(
-            tools={"bash": "svc-bash"},
+            tools={"bash": "svc-machine"},
             hooks={"tool:pre": ["svc-guard-hook"]},
         )
         orch = Orchestrator(dapr=dapr)
@@ -794,8 +794,8 @@ class TestOrchestratorPreHookDeny:
             session_id="session-deny-1",
         )
 
-        assert "svc-bash" not in invocation_log, (
-            "Tool service 'svc-bash' should NOT have been invoked when pre-hook denies"
+        assert "svc-machine" not in invocation_log, (
+            "Tool service 'svc-machine' should NOT have been invoked when pre-hook denies"
         )
         assert len(context_tool_messages) >= 1, (
             "Expected at least one tool result message in context (the denial message)"
@@ -866,7 +866,7 @@ class TestOrchestratorPreHookDeny:
         dapr.publish = mock_publish  # type: ignore[method-assign]
 
         routing = _routing_table(
-            tools={"bash": "svc-bash"},
+            tools={"bash": "svc-machine"},
             hooks={"tool:pre": ["svc-policy-hook"]},
         )
         orch = Orchestrator(dapr=dapr)
@@ -930,7 +930,7 @@ class TestOrchestratorPostHookPublish:
                         "stop_reason": "end_turn",
                     }
 
-            if app_id == "svc-bash" and "tools/bash/execute" in method:
+            if app_id == "svc-machine" and "tools/bash/execute" in method:
                 return {"output": "hi", "success": True}
 
             return {"ok": True}
@@ -949,7 +949,7 @@ class TestOrchestratorPostHookPublish:
         dapr.invoke_get = mock_invoke_get  # type: ignore[method-assign]
         dapr.publish = mock_publish  # type: ignore[method-assign]
 
-        routing = _routing_table(tools={"bash": "svc-bash"})
+        routing = _routing_table(tools={"bash": "svc-machine"})
         orch = Orchestrator(dapr=dapr)
 
         result_text, messages = await orch.execute(
@@ -1016,7 +1016,7 @@ class TestOrchestratorProviderRequestHook:
                         "stop_reason": "end_turn",
                     }
 
-            if app_id == "svc-bash" and "tools/bash/execute" in method:
+            if app_id == "svc-machine" and "tools/bash/execute" in method:
                 return {"output": "hi", "success": True}
 
             return {"ok": True}
@@ -1034,7 +1034,7 @@ class TestOrchestratorProviderRequestHook:
         dapr.publish = mock_publish  # type: ignore[method-assign]
 
         routing = _routing_table(
-            tools={"bash": "svc-bash"},
+            tools={"bash": "svc-machine"},
             hooks={"provider:request": ["svc-request-hook"]},
         )
         orch = Orchestrator(dapr=dapr)
@@ -1384,7 +1384,7 @@ class TestMachineInstanceIdForwarding:
                         "stop_reason": "end_turn",
                     }
 
-            if app_id == "svc-bash" and "tools/bash/execute" in method:
+            if app_id == "svc-machine" and "tools/bash/execute" in method:
                 tool_invoke_payloads.append(data)
                 return {"output": "hi", "success": True}
 
@@ -1402,7 +1402,7 @@ class TestMachineInstanceIdForwarding:
         dapr.invoke_get = mock_invoke_get  # type: ignore[method-assign]
         dapr.publish = mock_publish  # type: ignore[method-assign]
 
-        routing = _routing_table(tools={"bash": "svc-bash"})
+        routing = _routing_table(tools={"bash": "svc-machine"})
         orch = Orchestrator(dapr=dapr)
 
         await orch.execute(
@@ -1457,7 +1457,7 @@ class TestMachineInstanceIdForwarding:
                         "stop_reason": "end_turn",
                     }
 
-            if app_id == "svc-bash" and "tools/bash/execute" in method:
+            if app_id == "svc-machine" and "tools/bash/execute" in method:
                 tool_invoke_payloads.append(data)
                 return {"output": "hi", "success": True}
 
@@ -1475,7 +1475,7 @@ class TestMachineInstanceIdForwarding:
         dapr.invoke_get = mock_invoke_get  # type: ignore[method-assign]
         dapr.publish = mock_publish  # type: ignore[method-assign]
 
-        routing = _routing_table(tools={"bash": "svc-bash"})
+        routing = _routing_table(tools={"bash": "svc-machine"})
         orch = Orchestrator(dapr=dapr)
 
         # No machine_instance_id kwarg

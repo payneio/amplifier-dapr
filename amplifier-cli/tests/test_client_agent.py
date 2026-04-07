@@ -57,13 +57,13 @@ class TestBuildTurnBodyAgentRef:
             "hi",
             workspace_content="<ctx/>",
             provider_name="anthropic",
-            services=[{"id": "svc-bash"}],
+            services=[{"id": "svc-machine"}],
             agent_ref="foundation",
         )
         assert body["prompt"] == "hi"
         assert body["workspace_content"] == "<ctx/>"
         assert body["provider_name"] == "anthropic"
-        assert body["services"] == [{"id": "svc-bash"}]
+        assert body["services"] == [{"id": "svc-machine"}]
         assert body["agent_ref"] == "foundation"
 
 
