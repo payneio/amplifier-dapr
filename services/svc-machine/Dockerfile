@@ -10,7 +10,7 @@ EXPOSE 8000
 
 # ── Stage 2: svc-machine ───────────────────────────────────────────────
 FROM amplifier-service-base
-RUN apt-get update && apt-get install -y ripgrep && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y ripgrep openssh-client && rm -rf /var/lib/apt/lists/*
 # Copy SDK to the path [tool.uv.sources] expects: ../../amplifier-service-sdk
 # from /build/svc-machine/ resolves to /amplifier-service-sdk/
 COPY amplifier-service-sdk/ /amplifier-service-sdk/
