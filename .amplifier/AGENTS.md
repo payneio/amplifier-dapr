@@ -8,7 +8,7 @@ The design document at docs/design/amplifier-ipc-microservices-design.md provide
 
 The Dapr microservices framework is implemented and running:
 
-- **~26 services** are defined in docker-compose.yaml, each with Dapr sidecars
+- **~23 services** are defined in docker-compose.yaml, each with Dapr sidecars
 - **Session CLI** (`amplifier-svc`) works with streaming SSE, tool calls, and real LLM providers (Anthropic, OpenAI, etc.)
 - **Docker compose** builds and runs successfully end-to-end
 - **All unit tests pass** across all services (74 in ampctl, 107 in session-service, 124 in CLI, 56 in orchestrator, 42 in delegation)
@@ -17,6 +17,7 @@ The Dapr microservices framework is implemented and running:
 - **Session-service** loads agent definitions from YAML files with hardcoded fallback
 - **SSE event parity with legacy Amplifier** — all streaming events use legacy-compatible names and data shapes (content_block:start/end, thinking:delta/final, delegate:agent_spawned/completed)
 - **Streaming delegation** — svc-delegation streams child session events in real time via SSE; CLI displays nested delegation progress
+- **Machine service consolidation complete** — svc-machine now provides all machine tools (bash, read_file, write_file, edit_file, grep, glob) with per-session instance management, driver abstraction (SSH/SFTP and local), and proper session lifecycle integration. Old services (svc-bash, svc-filesystem, svc-search) have been removed.
 
 ## Recent Design Decisions
 
@@ -27,6 +28,7 @@ The Dapr microservices framework is implemented and running:
 - **SSE event naming**: Uses legacy Amplifier event names with colon separators (e.g., content_block:start, delegate:agent_spawned) to ease future migration of monolith bundles into services.
 - **Display belongs in CLI**: Todo display, streaming UI, and thinking block rendering are CLI presentation concerns, not server-side hooks. The server emits structured SSE events; the CLI renders them with Rich. This is the correct separation for a client-server architecture.
 - **HookResult contract**: Matches legacy amplifier-core — context_injection, ephemeral, and context_injection_role are top-level fields on HookResult, not nested in data.
+- **Machine service consolidation**: All machine tools (bash, read_file, write_file, edit_file, grep, glob) are now consolidated in svc-machine with per-session instance management. Uses a driver abstraction layer supporting SSH/SFTP (remote) and local drivers. Old services (svc-bash, svc-filesystem, svc-search) have been deleted. This eliminates redundant IPC and simplifies session lifecycle integration.
 
 ## Key Design Documents
 
@@ -42,10 +44,11 @@ In priority order:
 1. **Update the spec** (`docs/specs/amplifier-spec.md`) to reflect the new agent definition format and `ampctl` design
 2. ~~**Implement `ampctl`**~~ -- DONE. See `ampctl/` package.
 3. ~~**Implement the definition system in session-service**~~ -- DONE. See `services/session-service/src/session_service/agents.py`.
-4. **Implement remaining session CLI slash commands**: `/mode`, `/save`, `/status`, `/clear`, `/config`, `/rename`, `/fork`, `/skills`, `/skill`
-5. **Replace `docker-compose.yaml`** with a generated version from `ampctl compose` (currently the existing hand-written compose still works but `ampctl compose` can generate a new one)
-6. **Wire session-service to use service-map app-ids** for orchestrator/context routing instead of hardcoded `svc-orchestrator` / `svc-context` names
-7. **True incremental streaming** — provider calls currently return full responses; token-by-token streaming requires provider service interface changes
+4. ~~**Machine service consolidation**~~ -- DONE. Consolidated all machine tools (bash, filesystem, search) into svc-machine with driver abstraction, SSH/SFTP support, and per-session instance management.
+5. **Implement remaining session CLI slash commands**: `/mode`, `/save`, `/status`, `/clear`, `/config`, `/rename`, `/fork`, `/skills`, `/skill`
+6. **Replace `docker-compose.yaml`** with a generated version from `ampctl compose` (currently the existing hand-written compose still works but `ampctl compose` can generate a new one)
+7. **Wire session-service to use service-map app-ids** for orchestrator/context routing instead of hardcoded `svc-orchestrator` / `svc-context` names
+8. **True incremental streaming** — provider calls currently return full responses; token-by-token streaming requires provider service interface changes
 
 ## Reference Material
 
@@ -79,7 +82,7 @@ services/                 Dapr-native microservices. Each svc-* directory is an 
   svc-hooks-shell/        Hybrid hook: shell script bridge.
   svc-content-*/          8 content-only services (core, amplifier, browser-tester, etc.).
 docker/                   Base Dockerfile, Dapr component configs (Redis state store + pub/sub).
-docker-compose.yaml       Full stack: ~29 services + Dapr sidecars + Redis.
+docker-compose.yaml       Full stack: ~26 services + Dapr sidecars + Redis.
 docs/                     Spec, design document, implementation plans.
 related-projects/         Reference projects from the old Amplifier platform for historical context.
 tests/                    Integration tests for the microservices stack.
@@ -93,7 +96,8 @@ Amplifier is a Dapr-native microservices framework for AI agent orchestration. E
 CLI (user's machine) --HTTP/SSE--> session-service (gateway)
   --> svc-orchestrator (agent loop)
     --> svc-providers / svc-mock-provider (LLM)
-    --> svc-machine (bash, filesystem, search), svc-web, etc. (tools)
+    --> svc-machine (per-session instances: bash, read_file, write_file, edit_file, grep, glob via SSH/SFTP or local driver)
+    --> svc-web, svc-skills, svc-todo, svc-modes (standalone tool services)
     --> svc-hooks-* (pre-hooks via SI, post-hooks via pub/sub)
     --> svc-context (conversation memory)
   --> svc-content-* (context docs, agent definitions)
