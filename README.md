@@ -11,7 +11,7 @@ For design rationale, see `docs/design/amplifier-ipc-microservices-design.md`.
 CLI (amplifier-ipc) --HTTP/SSE--> session-service (gateway)
   --> svc-orchestrator (agent loop)
     --> svc-providers / svc-mock-provider (LLM)
-    --> svc-bash, svc-filesystem, svc-search, svc-web, etc. (tools) --> svc-machine (filesystem)
+    --> svc-machine (bash, filesystem, search), svc-web, etc. (tools)
     --> svc-hooks-* (pre-hooks via service invocation, post-hooks via pub/sub)
     --> svc-context (conversation memory)
   --> svc-content-* (context docs, agent definitions)
@@ -30,7 +30,7 @@ The CLI sends requests over HTTP/SSE to the **session-service**, which acts as t
 ### Install the CLI
 
 ```bash
-cd amplifier-ipc-cli
+cd amplifier-cli
 uv sync
 ```
 
@@ -56,15 +56,12 @@ amplifier-ipc run
 
 ```
 amplifier-service-sdk/    Shared SDK: Pydantic v2 models, FastAPI app factory, content serving, amplifier-serve CLI.
-amplifier-ipc-cli/        The `amplifier-ipc` CLI. HTTP client to session-service with REPL, streaming display, workspace resolution.
+amplifier-cli/            The Amplifier CLI. HTTP client to session-service with REPL, streaming display, workspace resolution.
 services/                 Dapr-native microservices. Each svc-* directory is an independent container.
   session-service/        Session lifecycle gateway (discovery, content assembly, state, SSE streaming, child spawning).
   svc-orchestrator/       Agent loop with forward Dapr calls (tool dispatch, provider dispatch, hook dispatch).
   svc-context/            Context manager with progressive compaction.
-  svc-machine/            Machine abstraction (filesystem + command execution). Volume-mounted workspace in local mode.
-  svc-bash/               BashTool -- calls svc-machine /exec.
-  svc-filesystem/         ReadFileTool, WriteFileTool, EditFileTool -- calls svc-machine /files/*.
-  svc-search/             GrepTool, GlobTool -- calls svc-machine /files/grep, /files/glob.
+  svc-machine/            Consolidated machine service (bash, read_file, write_file, edit_file, grep, glob).
   svc-web/                WebSearchTool, WebFetchTool -- self-contained (aiohttp, duckduckgo-search).
   svc-skills/             SkillsTool with skill discovery.
   svc-todo/               TodoTool + in-process TodoReminderHook + TodoDisplayHook.
@@ -143,7 +140,7 @@ Each service has its own `pyproject.toml` and `uv.lock`. Dependencies are isolat
 
 ```bash
 # Run tests for a specific service
-cd services/svc-bash
+cd services/svc-machine
 uv run pytest
 
 # Run cross-service integration tests
