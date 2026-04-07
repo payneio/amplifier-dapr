@@ -28,21 +28,6 @@ agent:
       volumes:
         - "${WORKSPACE_PATH:-.}:/workspace"
 
-    bash:
-      build: ./services/svc-bash
-      depends_on:
-        - machine
-
-    filesystem:
-      build: ./services/svc-filesystem
-      depends_on:
-        - machine
-
-    search:
-      build: ./services/svc-search
-      depends_on:
-        - machine
-
     web:
       build: ./services/svc-web
 
