@@ -12,6 +12,7 @@ from pydantic import BaseModel
 from amplifier_service_sdk.models import ToolCapability
 from amplifier_service_sdk.service import ServiceConfig, create_app
 
+from svc_machine.driver import MachineDriver
 from svc_machine.instance_manager import InstanceManager, InstanceNotFoundError
 from svc_machine.local_backend import LocalBackend
 from svc_machine.safety import SafetyValidator
@@ -109,7 +110,7 @@ class CreateInstanceResponse(BaseModel):
 
 
 async def _run_exec(
-    driver: LocalBackend, request: ExecRequest, safety: SafetyValidator
+    driver: MachineDriver, request: ExecRequest, safety: SafetyValidator
 ) -> ExecResponse | JSONResponse:
     """Execute a command on a driver with safety validation, background support, and truncation.
 
@@ -126,7 +127,7 @@ async def _run_exec(
 
     if request.run_in_background:
         try:
-            result_bg = await driver.exec_background(
+            result_bg = await driver.exec_background(  # type: ignore[misc]
                 command=request.command,
                 working_dir=request.working_dir,
             )
@@ -135,7 +136,7 @@ async def _run_exec(
         return JSONResponse(content=result_bg)
 
     try:
-        result = await driver.exec(
+        result = await driver.exec(  # type: ignore[misc]
             command=request.command,
             timeout=request.timeout,
             working_dir=request.working_dir,
@@ -257,10 +258,10 @@ def create_machine_app(workspace_dir: Path) -> FastAPI:
     safety = SafetyValidator()
     instance_manager = InstanceManager()
 
-    def _get_driver(instance_id: str) -> LocalBackend:
+    def _get_driver(instance_id: str) -> MachineDriver:
         """Return driver for an instance or raise HTTP 404."""
         try:
-            return instance_manager.get_driver(instance_id)  # type: ignore[return-value]
+            return instance_manager.get_driver(instance_id)
         except InstanceNotFoundError:
             raise HTTPException(
                 status_code=404,
@@ -359,7 +360,7 @@ def create_machine_app(workspace_dir: Path) -> FastAPI:
     async def instance_grep_files(instance_id: str, request: FileGrepRequest) -> dict:
         """Search file contents with a regex pattern on a specific instance."""
         driver = _get_driver(instance_id)
-        result = await driver.file_grep(
+        result = await driver.file_grep(  # type: ignore[misc]
             pattern=request.pattern,
             path=request.path,
             output_mode=request.output_mode,

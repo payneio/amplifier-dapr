@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import posixpath
 from typing import Any
 
@@ -17,6 +18,16 @@ from svc_machine.driver import (
     FileGlobResult,
     FileReadResult,
     MachineDriver,
+)
+
+logger = logging.getLogger(__name__)
+
+# Use asyncssh.Error when available; fall back to OSError so the sentinel is
+# always a valid exception type even when asyncssh is not installed.
+_AsyncSSHError: type[Exception] = (
+    asyncssh.Error  # type: ignore[union-attr]
+    if asyncssh is not None
+    else OSError
 )
 
 
@@ -163,7 +174,10 @@ class SSHDriver(MachineDriver):
             finally:
                 await f.close()
             return True
+        except (OSError, _AsyncSSHError):
+            return False
         except Exception:
+            logger.exception("Unexpected error in file_write_async")
             return False
 
     async def file_edit_async(
@@ -188,7 +202,10 @@ class SSHDriver(MachineDriver):
                 count = min(count, 1)
             success = await self.file_write_async(path, new_content)
             return FileEditResult(success=success, replacements_made=count)
+        except (OSError, _AsyncSSHError):
+            return None
         except Exception:
+            logger.exception("Unexpected error in file_edit_async")
             return None
 
     async def file_list_async(self, path: str = ".") -> list[dict[str, Any]] | None:
@@ -220,7 +237,10 @@ class SSHDriver(MachineDriver):
                 result.append({"name": name, "type": entry_type})
             result.sort(key=lambda x: x["name"])
             return result
+        except (OSError, _AsyncSSHError):
+            return None
         except Exception:
+            logger.exception("Unexpected error in file_list_async")
             return None
 
     async def file_glob_async(
@@ -251,7 +271,10 @@ class SSHDriver(MachineDriver):
                 line.strip() for line in exec_result.stdout.splitlines() if line.strip()
             ]
             return FileGlobResult(matches=matches, total_files=len(matches))
+        except (OSError, _AsyncSSHError):
+            return None
         except Exception:
+            logger.exception("Unexpected error in file_glob_async")
             return None
 
     async def file_grep(  # type: ignore[override]
@@ -322,7 +345,10 @@ class SSHDriver(MachineDriver):
                 "matches": matches,
                 "total_matches": len(matches),
             }
+        except (OSError, _AsyncSSHError):
+            return None
         except Exception:
+            logger.exception("Unexpected error in file_grep")
             return None
 
     @staticmethod
