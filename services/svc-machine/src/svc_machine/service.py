@@ -107,6 +107,52 @@ class CreateInstanceResponse(BaseModel):
     instance_id: str
 
 
+async def _run_exec(
+    driver: LocalBackend, request: ExecRequest, safety: SafetyValidator
+) -> ExecResponse | JSONResponse:
+    """Execute a command on a driver with safety validation, background support, and truncation.
+
+    Shared implementation for both the flat /exec endpoint and the
+    instance-scoped /instances/{id}/exec endpoint. The only difference between
+    the two callers is the driver they supply (global backend vs instance driver).
+    """
+    allowed, reason = safety.validate(request.command)
+    if not allowed:
+        raise HTTPException(
+            status_code=403,
+            detail={"denied": True, "reason": reason},
+        )
+
+    if request.run_in_background:
+        try:
+            result_bg = await driver.exec_background(
+                command=request.command,
+                working_dir=request.working_dir,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return JSONResponse(content=result_bg)
+
+    try:
+        result = await driver.exec(
+            command=request.command,
+            timeout=request.timeout,
+            working_dir=request.working_dir,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    stdout, stdout_truncated = truncate_output(result.stdout)
+    stderr, stderr_truncated = truncate_output(result.stderr)
+
+    return ExecResponse(
+        stdout=stdout,
+        stderr=stderr,
+        exit_code=result.exit_code,
+        truncated=stdout_truncated or stderr_truncated,
+    )
+
+
 def create_machine_app(workspace_dir: Path) -> FastAPI:
     """Create the svc-machine FastAPI application.
 
@@ -162,46 +208,7 @@ def create_machine_app(workspace_dir: Path) -> FastAPI:
         instance_id: str, request: ExecRequest
     ) -> ExecResponse | JSONResponse:
         """Execute a shell command on a specific instance."""
-        driver = _get_driver(instance_id)
-
-        # Safety check
-        allowed, reason = safety.validate(request.command)
-        if not allowed:
-            raise HTTPException(
-                status_code=403,
-                detail={"denied": True, "reason": reason},
-            )
-
-        # Background execution
-        if request.run_in_background:
-            try:
-                result_bg = await driver.exec_background(
-                    command=request.command,
-                    working_dir=request.working_dir,
-                )
-            except ValueError as exc:
-                raise HTTPException(status_code=422, detail=str(exc)) from exc
-            return JSONResponse(content=result_bg)
-
-        # Normal execution with truncation
-        try:
-            result = await driver.exec(
-                command=request.command,
-                timeout=request.timeout,
-                working_dir=request.working_dir,
-            )
-        except ValueError as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
-
-        stdout, stdout_truncated = truncate_output(result.stdout)
-        stderr, stderr_truncated = truncate_output(result.stderr)
-
-        return ExecResponse(
-            stdout=stdout,
-            stderr=stderr,
-            exit_code=result.exit_code,
-            truncated=stdout_truncated or stderr_truncated,
-        )
+        return await _run_exec(_get_driver(instance_id), request, safety)
 
     @app.post("/instances/{instance_id}/files/read")
     def instance_read_file(instance_id: str, request: FileReadRequest) -> dict:
@@ -290,44 +297,7 @@ def create_machine_app(workspace_dir: Path) -> FastAPI:
     @app.post("/exec", response_model=None)
     async def exec_command(request: ExecRequest) -> ExecResponse | JSONResponse:
         """Execute a shell command within the workspace directory."""
-        # Safety check
-        allowed, reason = safety.validate(request.command)
-        if not allowed:
-            raise HTTPException(
-                status_code=403,
-                detail={"denied": True, "reason": reason},
-            )
-
-        # Background execution
-        if request.run_in_background:
-            try:
-                result_bg = await backend.exec_background(
-                    command=request.command,
-                    working_dir=request.working_dir,
-                )
-            except ValueError as exc:
-                raise HTTPException(status_code=422, detail=str(exc)) from exc
-            return JSONResponse(content=result_bg)
-
-        # Normal execution with truncation
-        try:
-            result = await backend.exec(
-                command=request.command,
-                timeout=request.timeout,
-                working_dir=request.working_dir,
-            )
-        except ValueError as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
-
-        stdout, stdout_truncated = truncate_output(result.stdout)
-        stderr, stderr_truncated = truncate_output(result.stderr)
-
-        return ExecResponse(
-            stdout=stdout,
-            stderr=stderr,
-            exit_code=result.exit_code,
-            truncated=stdout_truncated or stderr_truncated,
-        )
+        return await _run_exec(backend, request, safety)
 
     @app.post("/files/read")
     def read_file(request: FileReadRequest) -> dict:
