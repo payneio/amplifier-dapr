@@ -9,6 +9,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
+from amplifier_service_sdk.models import ToolCapability
 from amplifier_service_sdk.service import ServiceConfig, create_app
 
 from svc_machine.instance_manager import InstanceManager, InstanceNotFoundError
@@ -165,7 +166,91 @@ def create_machine_app(workspace_dir: Path) -> FastAPI:
     Returns:
         Configured FastAPI application.
     """
-    config = ServiceConfig(name="svc-machine")
+    config = ServiceConfig(
+        name="svc-machine",
+        tools=[
+            ToolCapability(
+                name="bash",
+                description="Execute shell commands",
+                input_schema={
+                    "type": "object",
+                    "properties": {
+                        "command": {"type": "string"},
+                        "timeout": {"type": "integer", "default": 30},
+                        "run_in_background": {"type": "boolean", "default": False},
+                    },
+                    "required": ["command"],
+                },
+            ),
+            ToolCapability(
+                name="read_file",
+                description="Read file contents",
+                input_schema={
+                    "type": "object",
+                    "properties": {
+                        "file_path": {"type": "string"},
+                        "offset": {"type": "integer"},
+                        "limit": {"type": "integer"},
+                    },
+                    "required": ["file_path"],
+                },
+            ),
+            ToolCapability(
+                name="write_file",
+                description="Write content to file",
+                input_schema={
+                    "type": "object",
+                    "properties": {
+                        "file_path": {"type": "string"},
+                        "content": {"type": "string"},
+                    },
+                    "required": ["file_path", "content"],
+                },
+            ),
+            ToolCapability(
+                name="edit_file",
+                description="Edit file by string replacement",
+                input_schema={
+                    "type": "object",
+                    "properties": {
+                        "file_path": {"type": "string"},
+                        "old_string": {"type": "string"},
+                        "new_string": {"type": "string"},
+                        "replace_all": {"type": "boolean", "default": False},
+                    },
+                    "required": ["file_path", "old_string", "new_string"],
+                },
+            ),
+            ToolCapability(
+                name="grep",
+                description="Search file contents with regex",
+                input_schema={
+                    "type": "object",
+                    "properties": {
+                        "pattern": {"type": "string"},
+                        "path": {"type": "string"},
+                        "output_mode": {
+                            "type": "string",
+                            "enum": ["files_with_matches", "content", "count"],
+                        },
+                    },
+                    "required": ["pattern"],
+                },
+            ),
+            ToolCapability(
+                name="glob",
+                description="Match files using glob patterns",
+                input_schema={
+                    "type": "object",
+                    "properties": {
+                        "pattern": {"type": "string"},
+                        "path": {"type": "string"},
+                    },
+                    "required": ["pattern"],
+                },
+            ),
+        ],
+    )
     app = create_app(config)
 
     backend = LocalBackend(workspace_dir=workspace_dir)

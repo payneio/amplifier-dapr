@@ -83,6 +83,26 @@ class TestDescribe:
         assert data["name"] == "svc-machine"
         assert "version" in data
 
+    def test_describe_exposes_all_machine_tools(self, client: TestClient) -> None:
+        """GET /describe returns a tools array with all six machine tool names."""
+        response = client.get("/describe")
+        assert response.status_code == 200
+        data = response.json()
+        assert "tools" in data, "Response must include a 'tools' key"
+        assert isinstance(data["tools"], list), "'tools' must be a list"
+        tool_names = {tool["name"] for tool in data["tools"]}
+        expected_names = {
+            "bash",
+            "read_file",
+            "write_file",
+            "edit_file",
+            "grep",
+            "glob",
+        }
+        assert tool_names == expected_names, (
+            f"Expected tool names {expected_names}, got {tool_names}"
+        )
+
 
 class TestFileReadEndpoint:
     """Tests for POST /files/read endpoint."""
