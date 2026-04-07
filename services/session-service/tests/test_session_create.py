@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -68,7 +69,7 @@ def _make_client(dapr_url: str) -> TestClient:
 # Tests: POST /sessions/create endpoint
 # ---------------------------------------------------------------------------
 
-_EMPTY_ROUTING_TABLE: dict = {
+_EMPTY_ROUTING_TABLE: dict[str, Any] = {
     "tools": {},
     "providers": {},
     "_behaviors": {},
@@ -163,6 +164,11 @@ class TestCreateSessionEndpoint:
         assert response.status_code == 200
         data = response.json()
         assert data["machine_instance_id"] == "machine-abc123"
+        mock_http_client.post.assert_called_once_with(
+            "http://localhost:3500/v1.0/invoke/svc-machine/method/instances",
+            json={"driver_type": "ssh", "config": machine_config},
+            timeout=30.0,
+        )
 
     def test_create_session_stores_session_state(self, mock_discover) -> None:
         """After POST /sessions/create, GET /sessions/{id} returns status=active, turn_count=0."""
