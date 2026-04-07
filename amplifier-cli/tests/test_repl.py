@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import os
 import tempfile
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from rich.console import Console
 
 from amplifier_cli.repl import (
     CancellationState,
     build_prompt_html,
+    interactive_repl,
     process_mentions,
 )
 
@@ -130,3 +132,46 @@ class TestBuildPromptHtml:
         assert "&amp;" in html_str or "a&b" not in html_str
         assert "&lt;" in html_str or "<c>" not in html_str
         assert "&gt;" in html_str or ">d" not in html_str
+
+
+# ---------------------------------------------------------------------------
+# TestReplCallsCreateSession tests
+# ---------------------------------------------------------------------------
+
+
+class TestReplCallsCreateSession:
+    async def test_repl_calls_create_session_on_start(self) -> None:
+        """interactive_repl calls client.create_session() before entering the prompt loop."""
+        # Set up mock client with create_session returning expected dict
+        mock_client = MagicMock()
+        mock_client.create_session = AsyncMock(
+            return_value={
+                "session_id": "server-session-123",
+                "machine_instance_id": "machine-456",
+            }
+        )
+
+        # Mock _create_prompt_session to return a prompt session that exits immediately
+        mock_prompt_session = MagicMock()
+        mock_prompt_session.prompt_async = AsyncMock(side_effect=EOFError)
+
+        console = Console(quiet=True)
+
+        with patch(
+            "amplifier_cli.repl._create_prompt_session",
+            return_value=mock_prompt_session,
+        ):
+            await interactive_repl(
+                client=mock_client,
+                session_id="local-session-id",
+                provider_name=None,
+                workspace_content=None,
+                console=console,
+                agent_ref="foundation",
+            )
+
+        # Assert create_session was awaited once with correct arguments
+        mock_client.create_session.assert_awaited_once_with(
+            agent_ref="foundation",
+            use_default_machine=True,
+        )

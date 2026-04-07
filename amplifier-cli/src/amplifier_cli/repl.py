@@ -195,6 +195,17 @@ async def interactive_repl(
 
     console.print(Panel(BANNER.strip(), title="Amplifier IPC REPL", expand=False))
 
+    try:
+        create_result = await client.create_session(
+            agent_ref=agent_ref or "default",
+            use_default_machine=True,
+        )
+        session_id = create_result["session_id"]
+    except Exception as exc:
+        console.print(
+            f"[yellow]Warning: session creation failed ({exc}), using local session ID[/yellow]"
+        )
+
     session = _create_prompt_session(history_path)
     cancellation = CancellationState()
 
