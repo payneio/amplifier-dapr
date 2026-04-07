@@ -20,15 +20,18 @@ class TestArchitectureDiagram:
     def test_architecture_shows_consolidated_machine_service(self):
         """Architecture diagram should show svc-machine with bash/filesystem/search."""
         content = get_readme_content()
-        assert "--> svc-machine (bash, filesystem, search), svc-web, etc. (tools)" in content, (
-            "Architecture diagram should reference consolidated svc-machine service"
-        )
+        assert (
+            "--> svc-machine (bash, filesystem, search), svc-web, etc. (tools)"
+            in content
+        ), "Architecture diagram should reference consolidated svc-machine service"
 
     def test_architecture_no_separate_tool_services(self):
         """Old split tool services should not appear in architecture diagram."""
         content = get_readme_content()
         # The old line that listed svc-bash, svc-filesystem, svc-search as separate tool services
-        assert "svc-bash, svc-filesystem, svc-search, svc-web, etc. (tools)" not in content, (
+        assert (
+            "svc-bash, svc-filesystem, svc-search, svc-web, etc. (tools)" not in content
+        ), (
             "Architecture diagram should not list svc-bash/svc-filesystem/svc-search separately"
         )
 

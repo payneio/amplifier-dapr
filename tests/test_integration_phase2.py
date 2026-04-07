@@ -48,10 +48,11 @@ class TestEndToEndFlow:
         provider_client: TestClient,
     ) -> None:
         """Full text flow: system + user -> provider -> assistant stored in context."""
+        session_id = "test-session-text"
 
         # Step 1: Add system message to context
         resp = context_client.post(
-            "/context/messages",
+            f"/context/{session_id}/messages",
             json={"role": "system", "content": "You are a helpful assistant."},
         )
         assert resp.status_code == 200
@@ -59,14 +60,14 @@ class TestEndToEndFlow:
 
         # Step 2: Add user message to context
         resp = context_client.post(
-            "/context/messages",
+            f"/context/{session_id}/messages",
             json={"role": "user", "content": "Hello, how are you?"},
         )
         assert resp.status_code == 200
         assert resp.json()["success"] is True
 
         # Step 3: Get messages, verify 2 messages stored
-        resp = context_client.get("/context/messages")
+        resp = context_client.get(f"/context/{session_id}/messages")
         assert resp.status_code == 200
         messages = resp.json()["messages"]
         assert len(messages) == 2
@@ -86,14 +87,14 @@ class TestEndToEndFlow:
         # Step 5: Add assistant response to context
         assistant_content = provider_data["content"]
         resp = context_client.post(
-            "/context/messages",
+            f"/context/{session_id}/messages",
             json={"role": "assistant", "content": assistant_content},
         )
         assert resp.status_code == 200
         assert resp.json()["success"] is True
 
         # Step 6 & 7: Verify 3 messages with correct roles
-        resp = context_client.get("/context/messages")
+        resp = context_client.get(f"/context/{session_id}/messages")
         assert resp.status_code == 200
         messages = resp.json()["messages"]
         assert len(messages) == 3
@@ -110,6 +111,7 @@ class TestEndToEndFlow:
         provider_client: TestClient,
     ) -> None:
         """Tool call flow: provider returns tool_call, then text after tool result."""
+        session_id = "test-session-tool"
 
         bash_tool_spec = {
             "name": "bash",
@@ -125,21 +127,21 @@ class TestEndToEndFlow:
 
         # Step 1: Add system and user messages mentioning bash
         resp = context_client.post(
-            "/context/messages",
+            f"/context/{session_id}/messages",
             json={"role": "system", "content": "You have access to bash."},
         )
         assert resp.status_code == 200
         assert resp.json()["success"] is True
 
         resp = context_client.post(
-            "/context/messages",
+            f"/context/{session_id}/messages",
             json={"role": "user", "content": "Please run bash to check disk space."},
         )
         assert resp.status_code == 200
         assert resp.json()["success"] is True
 
         # Step 2: Get messages from context
-        resp = context_client.get("/context/messages")
+        resp = context_client.get(f"/context/{session_id}/messages")
         assert resp.status_code == 200
         messages = resp.json()["messages"]
         assert len(messages) == 2
@@ -158,7 +160,7 @@ class TestEndToEndFlow:
 
         # Step 4: Add assistant message with tool_call to context
         resp = context_client.post(
-            "/context/messages",
+            f"/context/{session_id}/messages",
             json={
                 "role": "assistant",
                 "content": None,
@@ -170,7 +172,7 @@ class TestEndToEndFlow:
         # Step 5: Add simulated tool result to context
         tool_result_content = "Filesystem: /dev/sda1  Size: 100G  Used: 50G"
         resp = context_client.post(
-            "/context/messages",
+            f"/context/{session_id}/messages",
             json={
                 "role": "tool",
                 "content": tool_result_content,
@@ -180,7 +182,7 @@ class TestEndToEndFlow:
         assert resp.status_code == 200
 
         # Step 6: Call provider again with all messages, verify text + end_turn
-        resp = context_client.get("/context/messages")
+        resp = context_client.get(f"/context/{session_id}/messages")
         assert resp.status_code == 200
         all_messages = resp.json()["messages"]
 
@@ -196,7 +198,7 @@ class TestEndToEndFlow:
         assert tool_result_content in final_data["content"]
 
         # Step 7: Verify roles in context = [system, user, assistant, tool]
-        resp = context_client.get("/context/messages")
+        resp = context_client.get(f"/context/{session_id}/messages")
         assert resp.status_code == 200
         messages_final = resp.json()["messages"]
         roles = [m["role"] for m in messages_final]

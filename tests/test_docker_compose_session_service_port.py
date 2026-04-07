@@ -17,9 +17,7 @@ COMPOSE_PATH = REPO_ROOT / "docker-compose.yaml"
 
 def _load_compose() -> dict:
     """Load and parse the docker-compose.yaml; fails with a clear message if missing."""
-    assert COMPOSE_PATH.exists(), (
-        f"Required file not found: {COMPOSE_PATH}."
-    )
+    assert COMPOSE_PATH.exists(), f"Required file not found: {COMPOSE_PATH}."
     with COMPOSE_PATH.open() as f:
         return yaml.safe_load(f)
 
@@ -98,6 +96,5 @@ class TestSessionServicePortExposure:
         session_service = _services(compose)["session-service"]
         depends_on = session_service.get("depends_on", [])
         assert "redis" in depends_on, (
-            f"session-service should depend on redis. "
-            f"Found depends_on: {depends_on}"
+            f"session-service should depend on redis. Found depends_on: {depends_on}"
         )

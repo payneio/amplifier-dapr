@@ -10,6 +10,7 @@ Covers:
   - client.SessionClient / SSEEvent
   - repl.process_mentions
 """
+
 from __future__ import annotations
 
 import sys
@@ -19,21 +20,20 @@ from pathlib import Path
 # sys.path injection — makes the CLI package importable from this test file
 # regardless of whether it has been pip-installed into the test environment.
 # ---------------------------------------------------------------------------
-_CLI_SRC = Path(__file__).parent.parent / "amplifier-ipc-cli" / "src"
+_CLI_SRC = Path(__file__).parent.parent / "amplifier-cli" / "src"
 if str(_CLI_SRC) not in sys.path:
     sys.path.insert(0, str(_CLI_SRC))
 
-from io import StringIO
-from unittest.mock import AsyncMock, MagicMock
+from io import StringIO  # noqa: E402
+from unittest.mock import AsyncMock, MagicMock  # noqa: E402
 
-import pytest
-from rich.console import Console
+from rich.console import Console  # noqa: E402
 
-from amplifier_ipc_cli.client import SSEEvent, SessionClient
-from amplifier_ipc_cli.commands import SlashResult, dispatch_slash
-from amplifier_ipc_cli.display import StreamingDisplay
-from amplifier_ipc_cli.settings import CLISettings
-from amplifier_ipc_cli.workspace import resolve_workspace_content
+from amplifier_cli.client import SSEEvent, SessionClient  # noqa: E402
+from amplifier_cli.commands import SlashResult, dispatch_slash  # noqa: E402
+from amplifier_cli.display import StreamingDisplay  # noqa: E402
+from amplifier_cli.settings import CLISettings  # noqa: E402
+from amplifier_cli.workspace import resolve_workspace_content  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -323,7 +323,9 @@ class TestStreamingDisplay:
         console, buf = _make_console()
         display = StreamingDisplay(console=console)
 
-        display.handle_sse_event(SSEEvent(event="token", data={"text": "Hello, world!"}))
+        display.handle_sse_event(
+            SSEEvent(event="token", data={"text": "Hello, world!"})
+        )
 
         assert "Hello, world!" in buf.getvalue()
 
@@ -332,7 +334,9 @@ class TestStreamingDisplay:
         console, buf = _make_console()
         display = StreamingDisplay(console=console, show_thinking=True)
 
-        display.handle_sse_event(SSEEvent(event="thinking", data={"text": "deep thoughts"}))
+        display.handle_sse_event(
+            SSEEvent(event="thinking", data={"thinking": "deep thoughts"})
+        )
 
         assert "deep thoughts" in buf.getvalue()
 
@@ -353,13 +357,12 @@ class TestStreamingDisplay:
         display.handle_sse_event(
             SSEEvent(
                 event="tool_call",
-                data={"name": "bash", "arguments": {"command": "ls -la"}},
+                data={"tool_name": "bash", "arguments": {"command": "ls -la"}},
             )
         )
 
         output = buf.getvalue()
-        assert "bash" in output
-        assert "command" in output
+        # bash tool renders as "$ command" format (not the tool name explicitly)
         assert "ls -la" in output
 
     def test_tool_result_success(self) -> None:
@@ -370,7 +373,7 @@ class TestStreamingDisplay:
         display.handle_sse_event(
             SSEEvent(
                 event="tool_result",
-                data={"name": "bash", "success": True, "output": "tests passed"},
+                data={"tool_name": "bash", "success": True, "output": "tests passed"},
             )
         )
 
@@ -386,7 +389,11 @@ class TestStreamingDisplay:
         display.handle_sse_event(
             SSEEvent(
                 event="tool_result",
-                data={"name": "bash", "success": False, "output": "command not found"},
+                data={
+                    "tool_name": "bash",
+                    "success": False,
+                    "output": "command not found",
+                },
             )
         )
 
@@ -401,7 +408,9 @@ class TestStreamingDisplay:
 
         assert display.response is None
 
-        display.handle_sse_event(SSEEvent(event="complete", data={"response": "Final answer"}))
+        display.handle_sse_event(
+            SSEEvent(event="complete", data={"response": "Final answer"})
+        )
 
         assert display.response == "Final answer"
 
@@ -438,7 +447,9 @@ class TestStreamingDisplay:
         console, buf = _make_console()
         display = StreamingDisplay(console=console)
 
-        display.handle_sse_event(SSEEvent(event="content_block_start", data={}))
+        display.handle_sse_event(
+            SSEEvent(event="content_block_start", data={"type": "thinking"})
+        )
 
         output = buf.getvalue()
         # Either "Thinking" label or the ╭ box-drawing character
@@ -449,10 +460,16 @@ class TestStreamingDisplay:
         console, buf = _make_console()
         display = StreamingDisplay(console=console)
 
-        display.handle_sse_event(SSEEvent(event="content_block_end", data={}))
+        # Must start the thinking block first so the end handler has state to close.
+        display.handle_sse_event(
+            SSEEvent(event="content_block_start", data={"type": "thinking"})
+        )
+        display.handle_sse_event(
+            SSEEvent(event="content_block_end", data={"type": "thinking"})
+        )
 
-        # ╰ box-drawing character
-        assert "\u2570" in buf.getvalue()
+        # ╚ double-line box-drawing character (bottom-left corner)
+        assert "\u255a" in buf.getvalue()
 
     def test_full_streaming_sequence_no_error(self) -> None:
         """A realistic sequence of events renders without exceptions."""
@@ -460,14 +477,17 @@ class TestStreamingDisplay:
         display = StreamingDisplay(console=console)
 
         events = [
-            SSEEvent(event="content_block_start", data={}),
-            SSEEvent(event="thinking", data={"text": "Let me think..."}),
-            SSEEvent(event="content_block_end", data={}),
+            SSEEvent(event="content_block_start", data={"type": "thinking"}),
+            SSEEvent(event="thinking", data={"thinking": "Let me think..."}),
+            SSEEvent(event="content_block_end", data={"type": "thinking"}),
             SSEEvent(event="token", data={"text": "Here is my answer: "}),
-            SSEEvent(event="tool_call", data={"name": "bash", "arguments": {"cmd": "ls"}}),
+            SSEEvent(
+                event="tool_call",
+                data={"tool_name": "bash", "arguments": {"cmd": "ls"}},
+            ),
             SSEEvent(
                 event="tool_result",
-                data={"name": "bash", "success": True, "output": "file.txt"},
+                data={"tool_name": "bash", "success": True, "output": "file.txt"},
             ),
             SSEEvent(event="token", data={"text": "Done."}),
             SSEEvent(event="complete", data={"response": "Here is my answer: Done."}),
@@ -533,7 +553,7 @@ class TestSSEEventParsing:
 
     def test_extra_whitespace_is_trimmed(self) -> None:
         """Leading/trailing whitespace around event and data values is stripped."""
-        raw = "event:   token   \ndata:   {\"text\": \"trimmed\"}   "
+        raw = 'event:   token   \ndata:   {"text": "trimmed"}   '
         event = SSEEvent.from_lines(raw)
 
         assert event is not None
@@ -711,7 +731,7 @@ class TestProcessMentions:
 
     def test_no_mentions_returns_input_unchanged(self) -> None:
         """Input with no @mentions is returned unchanged."""
-        from amplifier_ipc_cli.repl import process_mentions
+        from amplifier_cli.repl import process_mentions
 
         console, _ = _make_console()
         result = process_mentions("hello world", console)
@@ -720,7 +740,7 @@ class TestProcessMentions:
 
     def test_mention_nonexistent_file_strips_token(self) -> None:
         """@mention for a nonexistent file silently strips the token."""
-        from amplifier_ipc_cli.repl import process_mentions
+        from amplifier_cli.repl import process_mentions
 
         console, _ = _make_console()
         result = process_mentions("check @nonexistent.txt please", console)
@@ -729,7 +749,7 @@ class TestProcessMentions:
 
     def test_mention_existing_file_injects_context_block(self, tmp_path: Path) -> None:
         """@mention for a readable file prepends a <context_file> block."""
-        from amplifier_ipc_cli.repl import process_mentions
+        from amplifier_cli.repl import process_mentions
 
         notes = tmp_path / "notes.txt"
         notes.write_text("important notes here")
@@ -743,7 +763,7 @@ class TestProcessMentions:
 
     def test_mention_strips_token_from_user_text(self, tmp_path: Path) -> None:
         """The @mention token itself is removed from the final prompt text."""
-        from amplifier_ipc_cli.repl import process_mentions
+        from amplifier_cli.repl import process_mentions
 
         notes = tmp_path / "notes.txt"
         notes.write_text("file content")

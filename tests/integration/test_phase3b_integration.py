@@ -307,4 +307,4 @@ class TestDelegationService:
         data = response.json()
         assert data["success"] is False
         assert data["error"] is not None
-        assert "prompt" in data["error"]["message"]
+        assert "instruction" in data["error"]["message"]

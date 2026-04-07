@@ -28,7 +28,9 @@ def test_no_svc_bash_reference():
 def test_no_svc_filesystem_reference():
     """agents/default.yaml must have no reference to svc-filesystem."""
     content = AGENTS_DEFAULT_YAML.read_text()
-    assert "svc-filesystem" not in content, "Found unexpected reference to svc-filesystem"
+    assert "svc-filesystem" not in content, (
+        "Found unexpected reference to svc-filesystem"
+    )
 
 
 def test_no_svc_search_reference():
@@ -46,7 +48,7 @@ def test_machine_behavior_directly_followed_by_web():
     web_idx = behavior_keys.index("web")
     assert web_idx == machine_idx + 1, (
         f"Expected 'web' to immediately follow 'machine' in behaviors, "
-        f"but found keys in between: {behavior_keys[machine_idx + 1:web_idx]}"
+        f"but found keys in between: {behavior_keys[machine_idx + 1 : web_idx]}"
     )
 
 

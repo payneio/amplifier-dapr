@@ -140,7 +140,14 @@ class TestPhase3aFullRouting:
 
         # Tool specs collected (6 tools from svc-machine)
         tool_names = {s["name"] for s in routing["_tool_specs"]}
-        assert tool_names == {"bash", "read_file", "write_file", "edit_file", "grep", "glob"}
+        assert tool_names == {
+            "bash",
+            "read_file",
+            "write_file",
+            "edit_file",
+            "grep",
+            "glob",
+        }
 
 
 # ---------------------------------------------------------------------------

@@ -29,7 +29,9 @@ def test_container_count_updated_to_26():
 def test_architecture_diagram_shows_consolidated_machine():
     """Architecture diagram should show svc-machine handling bash/filesystem/search directly."""
     content = read_agents_md()
-    assert "--> svc-machine (bash, filesystem, search), svc-web, etc. (tools)" in content, (
+    assert (
+        "--> svc-machine (bash, filesystem, search), svc-web, etc. (tools)" in content
+    ), (
         "Architecture diagram should show svc-machine (bash, filesystem, search) directly, "
         "not the old split svc-bash/svc-filesystem/svc-search services."
     )
@@ -46,9 +48,10 @@ def test_architecture_diagram_no_old_split_services():
 def test_workspace_layout_single_svc_machine_entry():
     """Workspace layout should have a single consolidated svc-machine/ entry."""
     content = read_agents_md()
-    assert "Consolidated machine service (bash, read_file, write_file, edit_file, grep, glob)" in content, (
-        "svc-machine/ workspace entry should describe the consolidated service."
-    )
+    assert (
+        "Consolidated machine service (bash, read_file, write_file, edit_file, grep, glob)"
+        in content
+    ), "svc-machine/ workspace entry should describe the consolidated service."
     assert "Per-session instances via SSH/SFTP or local driver" in content, (
         "svc-machine/ workspace entry should mention per-session instance management."
     )
@@ -94,6 +97,9 @@ def test_key_patterns_no_old_delegation_description():
     """Key patterns should not have the old 'Tool services call svc-machine via Dapr SI' text."""
     content = read_agents_md()
     # The old content uses markdown bold: **Tool services** call svc-machine via Dapr SI...
-    assert "**Tool services** call svc-machine via Dapr SI for filesystem/command access" not in content, (
+    assert (
+        "**Tool services** call svc-machine via Dapr SI for filesystem/command access"
+        not in content
+    ), (
         "Old delegation pattern description should be replaced with consolidated machine service description."
     )

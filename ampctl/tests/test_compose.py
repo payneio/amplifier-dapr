@@ -265,7 +265,9 @@ def test_compose_behavior_depends_on() -> None:
         providers=ServiceEntry(build="./services/svc-providers"),
         behaviors={
             "machine": ServiceEntry(build="./services/svc-machine"),
-            "bash": ServiceEntry(build="./services/svc-executor", depends_on=["machine"]),
+            "bash": ServiceEntry(
+                build="./services/svc-executor", depends_on=["machine"]
+            ),
         },
     )
     sme = build_service_map_entry(agent)

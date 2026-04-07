@@ -18,8 +18,8 @@ from ampctl.models import AgentDefinition, ServiceEntry, ServiceMapEntry
 def _expand_build(build_path: str) -> dict[str, str]:
     """Expand a shorthand build path string to a compose ``build:`` dict.
 
-    Agent definitions use ``./services/svc-bash`` as shorthand.  The compose
-    generator translates this to ``{context: ".", dockerfile: "services/svc-bash/Dockerfile"}``
+    Agent definitions use ``./services/svc-machine`` as shorthand.  The compose
+    generator translates this to ``{context: ".", dockerfile: "services/svc-machine/Dockerfile"}``
     to match the repo-root context convention.
     """
     # Strip a leading "./" so the dockerfile path is relative to context "."

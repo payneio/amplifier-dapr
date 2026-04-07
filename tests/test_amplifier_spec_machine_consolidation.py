@@ -57,16 +57,16 @@ class TestServiceInvocationPattern:
     def test_invocation_uses_svc_machine_directly(self):
         """Orchestrator should invoke svc-machine directly for bash."""
         content = get_spec_content()
-        assert "Orchestrator --[Dapr SI]--> svc-machine /tools/bash/execute" in content, (
-            "Service invocation pattern should show Orchestrator -> svc-machine directly"
-        )
+        assert (
+            "Orchestrator --[Dapr SI]--> svc-machine /tools/bash/execute" in content
+        ), "Service invocation pattern should show Orchestrator -> svc-machine directly"
 
     def test_invocation_no_svc_bash_endpoint(self):
         """svc-bash endpoint should be removed from invocation pattern."""
         content = get_spec_content()
-        assert "Orchestrator --[Dapr SI]--> svc-bash /tools/bash/execute" not in content, (
-            "Service invocation pattern should not have svc-bash endpoint"
-        )
+        assert (
+            "Orchestrator --[Dapr SI]--> svc-bash /tools/bash/execute" not in content
+        ), "Service invocation pattern should not have svc-bash endpoint"
 
     def test_invocation_no_proxy_hop(self):
         """Proxy hop line (svc-bash -> svc-machine /exec) should be removed."""
@@ -78,9 +78,10 @@ class TestServiceInvocationPattern:
     def test_invocation_keeps_providers_line(self):
         """Provider invocation line should be preserved."""
         content = get_spec_content()
-        assert "Orchestrator --[Dapr SI]--> svc-providers /providers/anthropic/complete" in content, (
-            "Provider invocation line should still be present"
-        )
+        assert (
+            "Orchestrator --[Dapr SI]--> svc-providers /providers/anthropic/complete"
+            in content
+        ), "Provider invocation line should still be present"
 
     def test_invocation_keeps_modes_line(self):
         """Modes invocation line should be preserved."""
@@ -103,9 +104,10 @@ class TestServiceInventoryTable:
     def test_table_no_svc_filesystem_row(self):
         """Service inventory table should not have svc-filesystem row."""
         content = get_spec_content()
-        assert "| `svc-filesystem` | (tool) | ReadTool, WriteTool, EditTool |" not in content, (
-            "Service inventory table should not have svc-filesystem row"
-        )
+        assert (
+            "| `svc-filesystem` | (tool) | ReadTool, WriteTool, EditTool |"
+            not in content
+        ), "Service inventory table should not have svc-filesystem row"
 
     def test_table_no_svc_search_row(self):
         """Service inventory table should not have svc-search row."""
@@ -165,9 +167,9 @@ class TestIndividualServiceSections:
     def test_consolidated_section_has_all_six_tools(self):
         """The consolidated svc-machine section should list all 6 tools."""
         content = get_spec_content()
-        assert "| Tools | bash, read_file, write_file, edit_file, grep, glob |" in content, (
-            "Consolidated section should list all 6 machine tools"
-        )
+        assert (
+            "| Tools | bash, read_file, write_file, edit_file, grep, glob |" in content
+        ), "Consolidated section should list all 6 machine tools"
 
 
 class TestContainerCount:

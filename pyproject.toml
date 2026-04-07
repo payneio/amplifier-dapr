@@ -1,6 +1,6 @@
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "amplifier-ipc"
@@ -49,6 +49,10 @@ pythonpath = [
 markers = [
     "slow: marks tests as slow-running (requires Docker Compose stack)",
 ]
+
+[tool.setuptools]
+# Root project has no Python packages — it is a dev/test meta-project only.
+packages = []
 
 [tool.pyright]
 pythonVersion = "3.11"

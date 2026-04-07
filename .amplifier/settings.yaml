@@ -9,5 +9,5 @@
 # For local development of individual services, you can run them
 # directly with uv and override the Dapr endpoint:
 #
-#   cd services/svc-bash
-#   uv run uvicorn svc_bash.main:app --port 8001
+#   cd services/svc-machine
+#   uv run uvicorn svc_machine.main:app --port 8001
