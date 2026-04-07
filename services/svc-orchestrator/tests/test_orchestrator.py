@@ -1339,3 +1339,157 @@ class TestContextURLPaths:
             assert path == "context/test-session-xyz/messages", (
                 f"Expected 'context/test-session-xyz/messages', got {path!r}"
             )
+
+
+# ---------------------------------------------------------------------------
+# TestMachineInstanceIdForwarding
+# ---------------------------------------------------------------------------
+
+
+class TestMachineInstanceIdForwarding:
+    """machine_instance_id is forwarded in every tool dispatch request body."""
+
+    @pytest.mark.asyncio
+    async def test_tool_dispatch_includes_machine_instance_id(self) -> None:
+        """When machine_instance_id='inst-xyz789', it appears in tool dispatch body."""
+        dapr = _make_dapr()
+        provider_call_count = 0
+        tool_invoke_payloads: list[dict[str, Any]] = []
+
+        async def mock_invoke(
+            app_id: str, method: str, data: dict[str, Any], **kwargs: Any
+        ) -> dict[str, Any]:
+            nonlocal provider_call_count
+
+            if app_id == "svc-provider-mock" and "complete" in method:
+                provider_call_count += 1
+                if provider_call_count == 1:
+                    return {
+                        "content": None,
+                        "tool_calls": [
+                            {
+                                "id": "call-mid-1",
+                                "name": "bash",
+                                "arguments": {"cmd": "echo hi"},
+                            }
+                        ],
+                        "usage": None,
+                        "stop_reason": "tool_use",
+                    }
+                else:
+                    return {
+                        "content": "Done.",
+                        "tool_calls": None,
+                        "usage": None,
+                        "stop_reason": "end_turn",
+                    }
+
+            if app_id == "svc-bash" and "tools/bash/execute" in method:
+                tool_invoke_payloads.append(data)
+                return {"output": "hi", "success": True}
+
+            return {"ok": True}
+
+        async def mock_invoke_get(
+            app_id: str, method: str, **kwargs: Any
+        ) -> dict[str, Any]:
+            return {"messages": [{"role": "user", "content": "Run bash"}]}
+
+        async def mock_publish(*args: Any, **kwargs: Any) -> None:
+            pass
+
+        dapr.invoke = mock_invoke  # type: ignore[method-assign]
+        dapr.invoke_get = mock_invoke_get  # type: ignore[method-assign]
+        dapr.publish = mock_publish  # type: ignore[method-assign]
+
+        routing = _routing_table(tools={"bash": "svc-bash"})
+        orch = Orchestrator(dapr=dapr)
+
+        await orch.execute(
+            system_prompt="You are a shell assistant.",
+            messages=[Message(role="user", content="Run bash")],
+            config={"provider": "mock"},
+            routing_table=routing,
+            session_id="session-mid-1",
+            machine_instance_id="inst-xyz789",
+        )
+
+        assert len(tool_invoke_payloads) == 1, (
+            f"Expected exactly 1 tool invocation, got {len(tool_invoke_payloads)}"
+        )
+        assert tool_invoke_payloads[0].get("machine_instance_id") == "inst-xyz789", (
+            f"Expected machine_instance_id='inst-xyz789', "
+            f"got: {tool_invoke_payloads[0]}"
+        )
+
+    @pytest.mark.asyncio
+    async def test_tool_dispatch_without_machine_instance_id(self) -> None:
+        """When no machine_instance_id is provided, None appears in tool dispatch body."""
+        dapr = _make_dapr()
+        provider_call_count = 0
+        tool_invoke_payloads: list[dict[str, Any]] = []
+
+        async def mock_invoke(
+            app_id: str, method: str, data: dict[str, Any], **kwargs: Any
+        ) -> dict[str, Any]:
+            nonlocal provider_call_count
+
+            if app_id == "svc-provider-mock" and "complete" in method:
+                provider_call_count += 1
+                if provider_call_count == 1:
+                    return {
+                        "content": None,
+                        "tool_calls": [
+                            {
+                                "id": "call-mid-2",
+                                "name": "bash",
+                                "arguments": {"cmd": "echo hi"},
+                            }
+                        ],
+                        "usage": None,
+                        "stop_reason": "tool_use",
+                    }
+                else:
+                    return {
+                        "content": "Done.",
+                        "tool_calls": None,
+                        "usage": None,
+                        "stop_reason": "end_turn",
+                    }
+
+            if app_id == "svc-bash" and "tools/bash/execute" in method:
+                tool_invoke_payloads.append(data)
+                return {"output": "hi", "success": True}
+
+            return {"ok": True}
+
+        async def mock_invoke_get(
+            app_id: str, method: str, **kwargs: Any
+        ) -> dict[str, Any]:
+            return {"messages": [{"role": "user", "content": "Run bash"}]}
+
+        async def mock_publish(*args: Any, **kwargs: Any) -> None:
+            pass
+
+        dapr.invoke = mock_invoke  # type: ignore[method-assign]
+        dapr.invoke_get = mock_invoke_get  # type: ignore[method-assign]
+        dapr.publish = mock_publish  # type: ignore[method-assign]
+
+        routing = _routing_table(tools={"bash": "svc-bash"})
+        orch = Orchestrator(dapr=dapr)
+
+        # No machine_instance_id kwarg
+        await orch.execute(
+            system_prompt="You are a shell assistant.",
+            messages=[Message(role="user", content="Run bash")],
+            config={"provider": "mock"},
+            routing_table=routing,
+            session_id="session-mid-2",
+        )
+
+        assert len(tool_invoke_payloads) == 1, (
+            f"Expected exactly 1 tool invocation, got {len(tool_invoke_payloads)}"
+        )
+        assert tool_invoke_payloads[0].get("machine_instance_id") is None, (
+            f"Expected machine_instance_id=None, got: {tool_invoke_payloads[0]}"
+        )

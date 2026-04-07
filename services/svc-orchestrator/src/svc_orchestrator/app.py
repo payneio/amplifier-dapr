@@ -25,6 +25,7 @@ class ExecuteRequest(BaseModel):
     config: dict[str, Any] = {}
     routing_table: RoutingTable
     session_id: str = ""
+    machine_instance_id: str | None = None
 
 
 class ExecuteResponse(BaseModel):
@@ -98,6 +99,7 @@ def create_orchestrator_app(dapr_url: str | None = None) -> FastAPI:
             config=request.config,
             routing_table=request.routing_table,
             session_id=request.session_id,
+            machine_instance_id=request.machine_instance_id,
         )
         return ExecuteResponse(result=result, messages=messages).model_dump()
 
@@ -123,6 +125,7 @@ def create_orchestrator_app(dapr_url: str | None = None) -> FastAPI:
                 config=request.config,
                 routing_table=request.routing_table,
                 session_id=request.session_id,
+                machine_instance_id=request.machine_instance_id,
             ):
                 # Strip the "stream." prefix so the SSE event type matches
                 # what sse-starlette / CLI consumers expect (e.g. "token",

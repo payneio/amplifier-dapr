@@ -39,6 +39,7 @@ class Orchestrator:
         config: dict[str, Any],
         routing_table: RoutingTable,
         session_id: str = "",
+        machine_instance_id: str | None = None,
     ) -> tuple[str, list[Message]]:
         """Execute an orchestration session.
 
@@ -62,6 +63,9 @@ class Orchestrator:
             ``final_messages`` is the conversation as stored in the context
             service after the session ends.
         """
+        # Store machine_instance_id for use in tool dispatch
+        self._machine_instance_id = machine_instance_id
+
         # ------------------------------------------------------------------
         # Extract config
         # ------------------------------------------------------------------
@@ -198,6 +202,7 @@ class Orchestrator:
         config: dict[str, Any],
         routing_table: RoutingTable,
         session_id: str = "",
+        machine_instance_id: str | None = None,
     ) -> AsyncGenerator[dict[str, Any], None]:
         """Execute an orchestration session, yielding SSE events as they happen.
 
@@ -235,6 +240,9 @@ class Orchestrator:
         # Use a nested async generator so we can cleanly wrap the whole thing
         # in a try/except that yields a stream.error event on failure.
         async def _inner() -> AsyncGenerator[dict[str, Any], None]:
+            # Store machine_instance_id for use in tool dispatch
+            self._machine_instance_id = machine_instance_id
+
             # ------------------------------------------------------------------
             # Extract config (mirrors execute())
             # ------------------------------------------------------------------
@@ -660,7 +668,11 @@ class Orchestrator:
             raw_result = await self._dapr.invoke(
                 tool_app_id,
                 f"tools/{tool_call.name}/execute",
-                {"name": tool_call.name, "input": tool_call.arguments},
+                {
+                    "name": tool_call.name,
+                    "input": tool_call.arguments,
+                    "machine_instance_id": self._machine_instance_id,
+                },
             )
 
             # Serialise output to a string
