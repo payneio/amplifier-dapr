@@ -15,9 +15,7 @@ import yaml
 AGENTS: dict[str, dict] = {
     "default": {
         "services": [
-            "svc-bash",
-            "svc-filesystem",
-            "svc-search",
+            "svc-machine",
             "svc-web",
             "svc-skills",
             "svc-todo",
@@ -44,9 +42,7 @@ AGENTS: dict[str, dict] = {
     },
     "foundation": {
         "services": [
-            "svc-bash",
-            "svc-filesystem",
-            "svc-search",
+            "svc-machine",
             "svc-web",
             "svc-skills",
             "svc-todo",

@@ -170,11 +170,9 @@ class TestDefaultServicesList:
     """DEFAULT_SERVICES constant contains all Phase 3a services."""
 
     def test_default_services_contains_phase3a_services(self) -> None:
-        """DEFAULT_SERVICES must include all required Phase 3a service app-ids."""
+        """DEFAULT_SERVICES must include all required service app-ids."""
         required = {
-            "svc-bash",
-            "svc-filesystem",
-            "svc-search",
+            "svc-machine",
             "svc-web",
             "svc-skills",
             "svc-todo",
@@ -267,9 +265,7 @@ class TestTurnHandlerDefaultServices:
             assert len(captured_app_ids) == 1, "discover_services was not called"
             called_with = set(captured_app_ids[0])
             required = {
-                "svc-bash",
-                "svc-filesystem",
-                "svc-search",
+                "svc-machine",
                 "svc-providers",
             }
             assert required.issubset(called_with), (

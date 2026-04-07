@@ -75,9 +75,7 @@ class CreateSessionResponse(BaseModel):
 
 #: Phase 3a + 3b service app-ids discovered when TurnRequest.services is empty.
 DEFAULT_SERVICES: list[str] = [
-    "svc-bash",
-    "svc-filesystem",
-    "svc-search",
+    "svc-machine",
     "svc-web",
     "svc-skills",
     "svc-todo",

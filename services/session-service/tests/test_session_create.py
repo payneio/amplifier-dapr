@@ -384,3 +384,52 @@ class TestSessionClearDestroysMachineInstance:
             mock_http_client.delete.assert_not_called()
         finally:
             _sessions.pop(session_id, None)
+
+
+# ---------------------------------------------------------------------------
+# Tests: old proxy services removed, svc-machine added
+# ---------------------------------------------------------------------------
+
+
+class TestOldServicesRemoved:
+    """Verify that svc-bash, svc-filesystem, svc-search are removed and svc-machine is added."""
+
+    def test_default_services_excludes_old_proxy_services(self) -> None:
+        """DEFAULT_SERVICES must NOT contain svc-bash, svc-filesystem, or svc-search."""
+        from session_service.app import DEFAULT_SERVICES
+
+        assert "svc-bash" not in DEFAULT_SERVICES, (
+            "DEFAULT_SERVICES still contains 'svc-bash' — it should be replaced by 'svc-machine'"
+        )
+        assert "svc-filesystem" not in DEFAULT_SERVICES, (
+            "DEFAULT_SERVICES still contains 'svc-filesystem' — it should be replaced by 'svc-machine'"
+        )
+        assert "svc-search" not in DEFAULT_SERVICES, (
+            "DEFAULT_SERVICES still contains 'svc-search' — it should be replaced by 'svc-machine'"
+        )
+
+    def test_agents_dict_excludes_old_proxy_services(self) -> None:
+        """No AGENTS entry's services list must contain svc-bash, svc-filesystem, or svc-search."""
+        from session_service.agents import AGENTS
+
+        for agent_name, config in AGENTS.items():
+            services = config.get("services", [])
+            assert "svc-bash" not in services, (
+                f"AGENTS[{agent_name!r}]['services'] still contains 'svc-bash'"
+            )
+            assert "svc-filesystem" not in services, (
+                f"AGENTS[{agent_name!r}]['services'] still contains 'svc-filesystem'"
+            )
+            assert "svc-search" not in services, (
+                f"AGENTS[{agent_name!r}]['services'] still contains 'svc-search'"
+            )
+
+    def test_agents_dict_includes_svc_machine(self) -> None:
+        """All AGENTS entries must include 'svc-machine' in their services list."""
+        from session_service.agents import AGENTS
+
+        for agent_name, config in AGENTS.items():
+            services = config.get("services", [])
+            assert "svc-machine" in services, (
+                f"AGENTS[{agent_name!r}]['services'] is missing 'svc-machine'"
+            )

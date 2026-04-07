@@ -63,9 +63,7 @@ class TestResolveAgent:
         """The foundation agent service list includes the standard tool services."""
         cfg = resolve_agent("foundation")
         expected = {
-            "svc-bash",
-            "svc-filesystem",
-            "svc-search",
+            "svc-machine",
             "svc-web",
             "svc-providers",
         }
