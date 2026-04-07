@@ -1,4 +1,4 @@
-"""Integration tests for the svc-bash -> svc-machine -> subprocess call chain.
+"""Integration tests for the consolidated svc-machine service.
 
 These tests run entirely in-process without Docker or Dapr.
 """
@@ -6,14 +6,10 @@ These tests run entirely in-process without Docker or Dapr.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
-from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
 
-from svc_bash.app import create_bash_app
-from svc_bash.tool import BashTool
 from svc_machine.service import create_machine_app
 
 
@@ -44,8 +40,8 @@ def machine_client(workspace: Path) -> TestClient:
 # ---------------------------------------------------------------------------
 
 
-class TestServiceContracts:
-    """Verify that both services implement the standard /healthz and /describe contract."""
+class TestMachineServiceContract:
+    """Verify that svc-machine implements the standard /healthz and /describe contract."""
 
     def test_machine_healthz(self, machine_client: TestClient) -> None:
         """GET /healthz on svc-machine returns 200 with status='healthy'."""
@@ -61,84 +57,57 @@ class TestServiceContracts:
         data = response.json()
         assert data["name"] == "svc-machine"
 
-    def test_bash_healthz(self) -> None:
-        """GET /healthz on svc-bash (with fake machine URL) returns 200."""
-        app = create_bash_app(machine_base_url="http://fake-machine:8080")
-        client = TestClient(app)
-        response = client.get("/healthz")
-        assert response.status_code == 200
-        data = response.json()
-        assert data["status"] == "healthy"
-
-    def test_bash_describe(self) -> None:
-        """GET /describe on svc-bash returns name='svc-bash' and includes 'bash' tool."""
-        app = create_bash_app(machine_base_url="http://fake-machine:8080")
-        client = TestClient(app)
-        response = client.get("/describe")
-        assert response.status_code == 200
-        data = response.json()
-        assert data["name"] == "svc-bash"
-        tool_names = [t["name"] for t in data["tools"]]
-        assert "bash" in tool_names
-
-
-# ---------------------------------------------------------------------------
-# End-to-end execution tests
-# ---------------------------------------------------------------------------
-
-
-class TestEndToEndExecution:
-    """End-to-end tests verifying the full svc-bash -> svc-machine -> subprocess chain."""
-
-    def _make_patched_tool(self, workspace: Path) -> tuple[BashTool, Any]:
-        """Return (tool, patcher) with _call_machine_exec wired to a TestClient.
-
-        The patcher is a context manager; use it with `with patcher:` around the
-        async tool.execute() call so the real HTTP layer is bypassed in-process.
-        """
-        machine_client = TestClient(create_machine_app(workspace))
-        tool = BashTool(machine_base_url="http://fake-machine:8080")
-
-        async def _fake_call(command: str, timeout: int = 30) -> dict[str, Any]:
-            resp = machine_client.post(
-                "/exec", json={"command": command, "timeout": timeout}
-            )
-            resp.raise_for_status()
-            return resp.json()  # type: ignore[no-any-return]
-
-        return tool, patch.object(tool, "_call_machine_exec", new=_fake_call)
-
-    async def test_bash_echo_via_machine(self, workspace: Path) -> None:
-        """BashTool routes 'echo hello from bash' through the machine service in-process."""
-        tool, patcher = self._make_patched_tool(workspace)
-        with patcher:
-            result = await tool.execute({"command": "echo hello from bash"})
-
-        assert result.success is True
-        assert result.output is not None
-        assert "hello from bash" in result.output["stdout"]
-
-    async def test_bash_reads_workspace_file(self, workspace: Path) -> None:
-        """BashTool can cat hello.txt via the machine service in-process."""
-        tool, patcher = self._make_patched_tool(workspace)
-        with patcher:
-            result = await tool.execute({"command": "cat hello.txt"})
-
-        assert result.success is True
-        assert result.output is not None
-        assert "Hello, World!" in result.output["stdout"]
-
-    def test_machine_file_operations(
-        self, machine_client: TestClient, workspace: Path
+    def test_machine_describe_advertises_all_tools(
+        self, machine_client: TestClient
     ) -> None:
-        """All machine file operations work correctly end-to-end."""
-        # --- /files/read ---
+        """GET /describe on svc-machine lists all 6 consolidated tools."""
+        response = machine_client.get("/describe")
+        assert response.status_code == 200
+        data = response.json()
+        tool_names = [t["name"] for t in data["tools"]]
+        expected_tools = {
+            "bash",
+            "read_file",
+            "write_file",
+            "edit_file",
+            "grep",
+            "glob",
+        }
+        for tool in expected_tools:
+            assert tool in tool_names, (
+                f"Expected tool '{tool}' in /describe tools, got: {tool_names}"
+            )
+
+
+# ---------------------------------------------------------------------------
+# File operation tests
+# ---------------------------------------------------------------------------
+
+
+class TestMachineFileOperations:
+    """Test all machine service file and exec operations end-to-end."""
+
+    def test_exec(self, machine_client: TestClient) -> None:
+        """POST /exec runs a shell command and returns stdout."""
+        response = machine_client.post(
+            "/exec", json={"command": "echo hello from machine"}
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert "hello from machine" in data["stdout"]
+        assert data["exit_code"] == 0
+
+    def test_file_read(self, machine_client: TestClient) -> None:
+        """POST /files/read returns the content of hello.txt."""
         response = machine_client.post("/files/read", json={"path": "hello.txt"})
         assert response.status_code == 200
-        read_data = response.json()
-        assert "Hello, World!" in read_data["content"]
+        data = response.json()
+        assert "Hello, World!" in data["content"]
 
-        # --- /files/write ---
+    def test_file_write_and_read_back(
+        self, machine_client: TestClient, workspace: Path
+    ) -> None:
+        """POST /files/write writes a file; reading it back returns the content."""
         response = machine_client.post(
             "/files/write",
             json={"path": "output.txt", "content": "written by test\n"},
@@ -147,14 +116,21 @@ class TestEndToEndExecution:
         assert response.json()["success"] is True
         assert (workspace / "output.txt").read_text() == "written by test\n"
 
-        # --- /files/list ---
+        # Read it back via the API
+        response = machine_client.post("/files/read", json={"path": "output.txt"})
+        assert response.status_code == 200
+        assert "written by test" in response.json()["content"]
+
+    def test_file_list(self, machine_client: TestClient) -> None:
+        """POST /files/list returns entries including hello.txt and src."""
         response = machine_client.post("/files/list", json={"path": "."})
         assert response.status_code == 200
         entry_names = [e["name"] for e in response.json()["entries"]]
         assert "hello.txt" in entry_names
         assert "src" in entry_names
 
-        # --- /files/glob ---
+    def test_file_glob(self, machine_client: TestClient) -> None:
+        """POST /files/glob returns matches for **/*.py including src/main.py."""
         response = machine_client.post(
             "/files/glob", json={"pattern": "**/*.py", "path": "."}
         )
@@ -162,16 +138,19 @@ class TestEndToEndExecution:
         matches = response.json()["matches"]
         assert any("main.py" in m for m in matches)
 
-        # --- /files/grep ---
+    def test_file_grep(self, machine_client: TestClient) -> None:
+        """POST /files/grep finds 'print' in src/main.py (files_with_matches mode)."""
         response = machine_client.post(
             "/files/grep", json={"pattern": "print", "path": "src/main.py"}
         )
         assert response.status_code == 200
         grep_matches = response.json()["matches"]
         assert len(grep_matches) >= 1
-        assert any("print" in m["content"] for m in grep_matches)
+        # Default output_mode is files_with_matches: matches are file path strings
+        assert any("main.py" in m for m in grep_matches)
 
-        # --- /files/edit ---
+    def test_file_edit(self, machine_client: TestClient, workspace: Path) -> None:
+        """POST /files/edit replaces a string in hello.txt."""
         response = machine_client.post(
             "/files/edit",
             json={

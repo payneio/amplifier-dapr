@@ -14,10 +14,8 @@ import yaml
 REPO_ROOT = Path(__file__).parent.parent
 COMPOSE_PATH = REPO_ROOT / "docker-compose.yaml"
 
-# Tool services (6 pairs) — depend on redis; filesystem+search also depend on svc-machine-dapr
+# Tool services (4 pairs) — depend on redis
 TOOL_SERVICES = [
-    "svc-filesystem",
-    "svc-search",
     "svc-web",
     "svc-skills",
     "svc-todo",
@@ -25,10 +23,8 @@ TOOL_SERVICES = [
 ]
 
 # Services that depend on svc-machine-dapr in addition to redis
-MACHINE_DEPENDENT_TOOL_SERVICES = [
-    "svc-filesystem",
-    "svc-search",
-]
+# (svc-filesystem and svc-search have been consolidated into svc-machine)
+MACHINE_DEPENDENT_TOOL_SERVICES: list[str] = []
 
 # Provider service (1 pair)
 PROVIDER_SERVICES = [
@@ -189,7 +185,9 @@ class TestPhase3aDependencies:
             )
 
     def test_machine_dependent_services_depend_on_svc_machine_dapr(self) -> None:
-        """svc-filesystem and svc-search depend on svc-machine-dapr."""
+        """No tool services require svc-machine-dapr (filesystem/search consolidated into svc-machine)."""
+        # svc-filesystem and svc-search have been consolidated into svc-machine.
+        # MACHINE_DEPENDENT_TOOL_SERVICES is now empty; this test is a no-op.
         compose = _load_compose()
         services = _services(compose)
         for svc in MACHINE_DEPENDENT_TOOL_SERVICES:

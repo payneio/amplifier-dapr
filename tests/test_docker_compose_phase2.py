@@ -14,10 +14,9 @@ import yaml
 REPO_ROOT = Path(__file__).parent.parent
 COMPOSE_PATH = REPO_ROOT / "docker-compose.yaml"
 
-# The 6 application services (not sidecars) required in Phase 2
+# The 5 application services (not sidecars) required in Phase 2
 PHASE2_SERVICES = [
     "svc-machine",
-    "svc-bash",
     "svc-context",
     "svc-mock-provider",
     "svc-orchestrator",
@@ -26,17 +25,13 @@ PHASE2_SERVICES = [
 
 # All service names expected (application services + sidecars + redis)
 ALL_EXPECTED_SERVICES = (
-    ["redis"]
-    + PHASE2_SERVICES
-    + [f"{svc}-dapr" for svc in PHASE2_SERVICES]
+    ["redis"] + PHASE2_SERVICES + [f"{svc}-dapr" for svc in PHASE2_SERVICES]
 )
 
 
 def _load_compose() -> dict:
     """Load and parse the docker-compose.yaml; fails with a clear message if missing."""
-    assert COMPOSE_PATH.exists(), (
-        f"Required file not found: {COMPOSE_PATH}."
-    )
+    assert COMPOSE_PATH.exists(), f"Required file not found: {COMPOSE_PATH}."
     with COMPOSE_PATH.open() as f:
         return yaml.safe_load(f)
 
@@ -239,7 +234,11 @@ class TestDependencyChains:
         services = _services(compose)
         deps = services["svc-orchestrator"].get("depends_on", [])
         deps_list = list(deps) if isinstance(deps, dict) else deps
-        for required in ["svc-context-dapr", "svc-mock-provider-dapr", "svc-bash-dapr"]:
+        for required in [
+            "svc-context-dapr",
+            "svc-mock-provider-dapr",
+            "svc-machine-dapr",
+        ]:
             assert required in deps_list, (
                 f"svc-orchestrator should depend on '{required}', got: {deps_list}"
             )
@@ -263,26 +262,39 @@ class TestDependencyChains:
                 f"session-service should depend on '{sidecar}', got: {deps_list}"
             )
 
-    def test_svc_bash_dapr_http_port_env(self) -> None:
-        """svc-bash has DAPR_HTTP_PORT=3500 environment variable."""
+    def test_svc_machine_dapr_http_port_env(self) -> None:
+        """svc-machine has DAPR_HTTP_PORT=3500 environment variable."""
         compose = _load_compose()
         services = _services(compose)
-        env = services["svc-bash"].get("environment", {})
+        # Handle hash-suffixed service names (e.g., svc-machine-<hash>)
+        svc_machine_key = next(
+            (k for k in services if k == "svc-machine" or k.startswith("svc-machine-")),
+            None,
+        )
+        assert svc_machine_key is not None, (
+            f"svc-machine service not found in docker-compose.yaml. Found: {sorted(services.keys())}"
+        )
+        env = services[svc_machine_key].get("environment", {})
         if isinstance(env, list):
-            env_str = " ".join(env)
+            env_str = " ".join(str(e) for e in env)
             assert "DAPR_HTTP_PORT" in env_str and "3500" in env_str, (
-                f"svc-bash should have DAPR_HTTP_PORT=3500 in environment, got: {env}"
+                f"svc-machine should have DAPR_HTTP_PORT=3500 in environment, got: {env}"
             )
         else:
             assert str(env.get("DAPR_HTTP_PORT", "")) == "3500", (
-                f"svc-bash should have DAPR_HTTP_PORT=3500, got: {env}"
+                f"svc-machine should have DAPR_HTTP_PORT=3500, got: {env}"
             )
 
     def test_new_services_dapr_http_port_env(self) -> None:
         """New services (svc-context, svc-mock-provider, svc-orchestrator, session-service) have DAPR_HTTP_PORT=3500."""
         compose = _load_compose()
         services = _services(compose)
-        for svc in ["svc-context", "svc-mock-provider", "svc-orchestrator", "session-service"]:
+        for svc in [
+            "svc-context",
+            "svc-mock-provider",
+            "svc-orchestrator",
+            "session-service",
+        ]:
             env = services[svc].get("environment", {})
             if isinstance(env, list):
                 env_str = " ".join(str(e) for e in env)
