@@ -8,7 +8,7 @@ The design document at docs/design/amplifier-ipc-microservices-design.md provide
 
 The Dapr microservices framework is implemented and running:
 
-- **~29 services** are defined in docker-compose.yaml, each with Dapr sidecars
+- **~26 services** are defined in docker-compose.yaml, each with Dapr sidecars
 - **Session CLI** (`amplifier-svc`) works with streaming SSE, tool calls, and real LLM providers (Anthropic, OpenAI, etc.)
 - **Docker compose** builds and runs successfully end-to-end
 - **All unit tests pass** across all services (74 in ampctl, 107 in session-service, 124 in CLI, 56 in orchestrator, 42 in delegation)
@@ -60,15 +60,12 @@ In priority order:
 ampctl/                   Management CLI for agent definitions. `ampctl add`, `ampctl compose`, etc.
 agents/                   Agent definition YAML files (foundation.yaml, default.yaml).
 amplifier-service-sdk/    Shared SDK: Pydantic v2 models, FastAPI app factory, content serving, amplifier-serve CLI.
-amplifier-ipc-cli/        The `amplifier-ipc` CLI. HTTP client to session-service with REPL, streaming display, workspace resolution.
+amplifier-cli/            The Amplifier CLI. HTTP client to session-service with REPL, streaming display, workspace resolution.
 services/                 Dapr-native microservices. Each svc-* directory is an independent container.
   session-service/        Session lifecycle gateway (discovery, content assembly, state, SSE streaming, child spawning).
   svc-orchestrator/       Agent loop with forward Dapr calls (tool dispatch, provider dispatch, hook dispatch).
   svc-context/            Context manager with progressive compaction.
-  svc-machine/            Machine abstraction (filesystem + command execution). Volume-mounted workspace in local mode.
-  svc-bash/               BashTool -- calls svc-machine /exec.
-  svc-filesystem/         ReadFileTool, WriteFileTool, EditFileTool -- calls svc-machine /files/*.
-  svc-search/             GrepTool, GlobTool -- calls svc-machine /files/grep, /files/glob.
+  svc-machine/            Consolidated machine service (bash, read_file, write_file, edit_file, grep, glob). Per-session instances via SSH/SFTP or local driver.
   svc-web/                WebSearchTool, WebFetchTool -- self-contained (aiohttp, duckduckgo-search).
   svc-skills/             SkillsTool with skill discovery.
   svc-todo/               TodoTool + in-process TodoReminderHook. Todo display is a CLI concern.
@@ -96,7 +93,7 @@ Amplifier is a Dapr-native microservices framework for AI agent orchestration. E
 CLI (user's machine) --HTTP/SSE--> session-service (gateway)
   --> svc-orchestrator (agent loop)
     --> svc-providers / svc-mock-provider (LLM)
-    --> svc-bash, svc-filesystem, svc-search, svc-web, etc. (tools) --> svc-machine (filesystem)
+    --> svc-machine (bash, filesystem, search), svc-web, etc. (tools)
     --> svc-hooks-* (pre-hooks via SI, post-hooks via pub/sub)
     --> svc-context (conversation memory)
   --> svc-content-* (context docs, agent definitions)
@@ -105,7 +102,7 @@ CLI (user's machine) --HTTP/SSE--> session-service (gateway)
 
 ## Key Patterns
 
-- **Tool services** call svc-machine via Dapr SI for filesystem/command access. They never touch the filesystem directly.
+- **Machine tools** (bash, read_file, write_file, edit_file, grep, glob) are consolidated in svc-machine with per-session instance management. Other tool services (web, skills, etc.) are standalone.
 - **Pre-hooks** (approval, routing) are called via Dapr service invocation (sequential, may DENY/MODIFY).
 - **Post-hooks** (logging, shell) subscribe to Dapr pub/sub topics (parallel, fire-and-forget).
 - **Content services** are zero-code containers: just describe.yaml + Dockerfile using amplifier-serve --config.
