@@ -2,7 +2,16 @@
 
 from __future__ import annotations
 
-from session_service.app import CreateSessionRequest, CreateSessionResponse
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+from fastapi.testclient import TestClient
+
+from session_service.app import (
+    CreateSessionRequest,
+    CreateSessionResponse,
+    create_session_app,
+)
 
 
 class TestCreateSessionModels:
@@ -43,3 +52,127 @@ class TestCreateSessionModels:
         resp = CreateSessionResponse(session_id="sess-def456")
         assert resp.session_id == "sess-def456"
         assert resp.machine_instance_id is None
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _make_client(dapr_url: str) -> TestClient:
+    """Create a TestClient wrapping create_session_app with the given dapr_url."""
+    return TestClient(create_session_app(dapr_url=dapr_url))
+
+
+# ---------------------------------------------------------------------------
+# Tests: POST /sessions/create endpoint
+# ---------------------------------------------------------------------------
+
+_EMPTY_ROUTING_TABLE: dict = {
+    "tools": {},
+    "providers": {},
+    "_behaviors": {},
+    "_tool_specs": [],
+    "context": "svc-context",
+    "hook_endpoints": {},
+    "hook_priorities": {},
+}
+
+
+class TestCreateSessionEndpoint:
+    """Tests for the POST /sessions/create endpoint."""
+
+    @pytest.fixture(autouse=True)
+    def isolate_from_yaml(self):
+        """Force get_agent_config to use hardcoded AGENTS dict (no YAML loading).
+
+        Ensures tests are environment-agnostic regardless of whether YAML agent
+        definitions are present on the local machine.
+        """
+        with patch(
+            "session_service.agents._load_from_yaml",
+            return_value=None,
+        ):
+            yield
+
+    @pytest.fixture()
+    def mock_discover(self):
+        """Patch discover_services to return an empty routing table without Dapr I/O."""
+        with patch(
+            "session_service.app.discover_services",
+            new_callable=AsyncMock,
+            return_value=_EMPTY_ROUTING_TABLE,
+        ) as m:
+            yield m
+
+    def test_create_session_returns_session_id(self, mock_discover) -> None:
+        """POST /sessions/create returns 200 with a non-empty session_id."""
+        client = _make_client("http://localhost:3500")
+        response = client.post("/sessions/create", json={"agent_ref": "default"})
+        assert response.status_code == 200
+        data = response.json()
+        assert "session_id" in data
+        assert len(data["session_id"]) > 0
+
+    def test_create_session_without_machine_config(self, mock_discover) -> None:
+        """machine_instance_id is null when no machine_config is provided."""
+        client = _make_client("http://localhost:3500")
+        response = client.post("/sessions/create", json={"agent_ref": "default"})
+        assert response.status_code == 200
+        data = response.json()
+        assert data["machine_instance_id"] is None
+
+    def test_create_session_with_machine_config_provisions_instance(self) -> None:
+        """When machine_config is provided and machine behavior exists, Dapr POST is made and instance_id returned."""
+        machine_config = {
+            "type": "ssh",
+            "host": "example.com",
+            "working_dir": "/workspace",
+        }
+        routing_with_machine = {
+            **_EMPTY_ROUTING_TABLE,
+            "_behaviors": {"machine": "svc-machine"},
+        }
+
+        # Mock Dapr HTTP call to machine service
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"instance_id": "machine-abc123"}
+        mock_response.raise_for_status = MagicMock()
+
+        mock_http_client = AsyncMock()
+        mock_http_client.post = AsyncMock(return_value=mock_response)
+        mock_http_client.__aenter__ = AsyncMock(return_value=mock_http_client)
+        mock_http_client.__aexit__ = AsyncMock(return_value=None)
+
+        with (
+            patch(
+                "session_service.app.discover_services",
+                new_callable=AsyncMock,
+                return_value=routing_with_machine,
+            ),
+            patch(
+                "session_service.app.httpx.AsyncClient", return_value=mock_http_client
+            ),
+        ):
+            client = _make_client("http://localhost:3500")
+            response = client.post(
+                "/sessions/create",
+                json={"agent_ref": "default", "machine_config": machine_config},
+            )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["machine_instance_id"] == "machine-abc123"
+
+    def test_create_session_stores_session_state(self, mock_discover) -> None:
+        """After POST /sessions/create, GET /sessions/{id} returns status=active, turn_count=0."""
+        client = _make_client("http://localhost:3500")
+        response = client.post("/sessions/create", json={"agent_ref": "default"})
+        assert response.status_code == 200
+        session_id = response.json()["session_id"]
+
+        get_response = client.get(f"/sessions/{session_id}")
+        assert get_response.status_code == 200
+        data = get_response.json()
+        assert data["status"] == "active"
+        assert data["turn_count"] == 0

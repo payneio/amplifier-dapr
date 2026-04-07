@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import uuid
 from collections.abc import AsyncGenerator
 from typing import Any
 
@@ -446,6 +447,57 @@ def create_session_app(dapr_url: str | None = None) -> FastAPI:
         # Upsert: create a fresh session entry whether or not one already existed.
         _sessions[session_id] = {"turn_count": 0, "status": "active"}
         return {"status": "cleared"}
+
+    @app.post("/sessions/create")
+    async def session_create(request: CreateSessionRequest) -> dict[str, Any]:
+        """Create a new session, optionally provisioning a machine instance."""
+        session_id = uuid.uuid4().hex[:16]
+
+        # Resolve agent config
+        agent_config = get_agent_config(request.agent_ref)
+        service_ids = agent_config.get("services", [])
+        context_app_id = agent_config.get("context_app_id", "svc-context")
+
+        # Discover services
+        routing_table_dict: dict[str, Any] = await discover_services(
+            service_ids,
+            _dapr_url,
+            context_app_id=context_app_id,
+        )
+
+        # Optionally provision a machine instance
+        machine_instance_id: str | None = None
+        if request.machine_config is not None:
+            machine_app_id: str | None = routing_table_dict.get("_behaviors", {}).get(
+                "machine"
+            )
+            if machine_app_id:
+                invoke_url = (
+                    f"{_dapr_url}/v1.0/invoke/{machine_app_id}/method/instances"
+                )
+                machine_config = request.machine_config
+                body = {
+                    "driver_type": machine_config.get("type"),
+                    "config": machine_config,
+                }
+                async with httpx.AsyncClient() as client:
+                    response = await client.post(invoke_url, json=body, timeout=30.0)
+                    response.raise_for_status()
+                    machine_instance_id = response.json().get("instance_id")
+
+        # Store session state
+        _sessions[session_id] = {
+            "turn_count": 0,
+            "status": "active",
+            "agent_ref": request.agent_ref,
+            "routing_table": routing_table_dict,
+            "machine_instance_id": machine_instance_id,
+        }
+
+        return CreateSessionResponse(
+            session_id=session_id,
+            machine_instance_id=machine_instance_id,
+        ).model_dump()
 
     @app.get("/sessions/{session_id}/messages")
     async def session_messages(session_id: str) -> dict[str, Any]:
