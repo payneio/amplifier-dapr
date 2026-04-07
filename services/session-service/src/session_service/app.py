@@ -465,6 +465,7 @@ def create_session_app(dapr_url: str | None = None) -> FastAPI:
                         "Failed to destroy machine instance %s for session %s",
                         machine_instance_id,
                         session_id,
+                        exc_info=True,
                     )
 
         # Upsert: create a fresh session entry whether or not one already existed.
