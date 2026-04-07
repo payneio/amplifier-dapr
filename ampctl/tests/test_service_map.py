@@ -73,7 +73,7 @@ def test_save_and_load_round_trip(tmp_path: Path) -> None:
                 orchestrator="svc-orchestrator-abc12345",
                 context_manager="svc-context_manager-def67890",
                 providers="svc-providers-fed09876",
-                behaviors={"search": "svc-search-11223344"},
+                behaviors={"machine": "svc-machine-11223344"},
             )
         }
     )
@@ -84,7 +84,7 @@ def test_save_and_load_round_trip(tmp_path: Path) -> None:
     assert loaded.agents["my-agent"].orchestrator == "svc-orchestrator-abc12345"
     assert loaded.agents["my-agent"].context_manager == "svc-context_manager-def67890"
     assert loaded.agents["my-agent"].providers == "svc-providers-fed09876"
-    assert loaded.agents["my-agent"].behaviors["search"] == "svc-search-11223344"
+    assert loaded.agents["my-agent"].behaviors["machine"] == "svc-machine-11223344"
 
 
 def test_save_creates_parent_dirs(tmp_path: Path) -> None:

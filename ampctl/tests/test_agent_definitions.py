@@ -74,9 +74,7 @@ def test_foundation_machine_behavior_has_workspace_volume() -> None:
 def test_foundation_has_expected_tool_behaviors() -> None:
     d = fetch_definition(str(FOUNDATION_YAML))
     expected = {
-        "bash",
-        "filesystem",
-        "search",
+        "machine",
         "web",
         "skills",
         "todo",
@@ -163,9 +161,7 @@ def test_default_machine_behavior_has_workspace_volume() -> None:
 def test_default_has_expected_tool_behaviors() -> None:
     d = fetch_definition(str(DEFAULT_YAML))
     expected = {
-        "bash",
-        "filesystem",
-        "search",
+        "machine",
         "web",
         "skills",
         "todo",

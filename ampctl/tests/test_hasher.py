@@ -20,12 +20,12 @@ def test_hash_different_inputs() -> None:
 
 def test_generate_service_name_format() -> None:
     """Service name follows the svc-{role}-{hash} pattern."""
-    name = generate_service_name("bash", "ghcr.io/example/bash:latest")
-    assert name.startswith("svc-bash-")
+    name = generate_service_name("machine", "ghcr.io/example/machine:latest")
+    assert name.startswith("svc-machine-")
     parts = name.split("-")
-    # svc, bash, <8-char-hash>
+    # svc, machine, <8-char-hash>
     assert parts[0] == "svc"
-    assert parts[1] == "bash"
+    assert parts[1] == "machine"
     assert len(parts[2]) == 8
 
 

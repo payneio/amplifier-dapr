@@ -194,10 +194,10 @@ def test_compose_dapr_sidecar_format() -> None:
 
 
 def test_compose_build_path_expansion() -> None:
-    """`build: ./services/svc-bash` expands to a full build dict."""
+    """`build: ./services/svc-machine` expands to a full build dict."""
     agent = AgentDefinition(
         ref="test/bash-agent",
-        orchestrator=ServiceEntry(build="./services/svc-bash"),
+        orchestrator=ServiceEntry(build="./services/svc-machine"),
         context_manager=ServiceEntry(image="ctx:latest"),
         providers=ServiceEntry(image="prov:latest"),
     )
@@ -205,11 +205,11 @@ def test_compose_build_path_expansion() -> None:
     result = generate_compose({"test/bash-agent": (agent, sme)})
     services = result["services"]
 
-    # orchestrator uses build="./services/svc-bash" -> hashed service name
+    # orchestrator uses build="./services/svc-machine" -> hashed service name
     orch = services[sme.orchestrator]
     assert isinstance(orch["build"], dict)
     assert orch["build"]["context"] == "."
-    assert orch["build"]["dockerfile"] == "services/svc-bash/Dockerfile"
+    assert orch["build"]["dockerfile"] == "services/svc-machine/Dockerfile"
 
 
 # ---------------------------------------------------------------------------
@@ -265,7 +265,7 @@ def test_compose_behavior_depends_on() -> None:
         providers=ServiceEntry(build="./services/svc-providers"),
         behaviors={
             "machine": ServiceEntry(build="./services/svc-machine"),
-            "bash": ServiceEntry(build="./services/svc-bash", depends_on=["machine"]),
+            "bash": ServiceEntry(build="./services/svc-executor", depends_on=["machine"]),
         },
     )
     sme = build_service_map_entry(agent)
