@@ -25,7 +25,7 @@ _EMPTY_ROUTING_TABLE: dict[str, Any] = {
 }
 
 _SAMPLE_ROUTING_TABLE: dict[str, Any] = {
-    "tools": {"bash": "svc-bash", "read_file": "svc-filesystem"},
+    "tools": {"bash": "svc-machine", "read_file": "svc-machine"},
     "providers": {},
     "hooks": {},
     "hook_endpoints": {},

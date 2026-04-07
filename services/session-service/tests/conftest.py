@@ -39,9 +39,13 @@ class _Message(BaseModel):
 
 def _make_sdk_stub() -> None:
     """Inject stub modules into sys.modules for amplifier_service_sdk."""
-    # Only inject if not already present (e.g., the real package is installed).
-    if "amplifier_service_sdk" in sys.modules:
-        return
+    # Only inject if the real package cannot be imported.
+    try:
+        import amplifier_service_sdk  # noqa: F401
+
+        return  # Real package is available; no stub needed.
+    except ImportError:
+        pass
 
     # Top-level package stub
     sdk = ModuleType("amplifier_service_sdk")

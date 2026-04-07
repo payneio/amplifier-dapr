@@ -1,10 +1,9 @@
 """Tests verifying Phase 3a service discovery and routing-table construction.
 
 Phase 3a introduces:
-  svc-filesystem  — tools: read_file, write_file, edit_file
-  svc-search      — tools: grep, glob
-  svc-providers   — providers: anthropic, openai
-  svc-context     — stored as routing_table['context']
+  svc-machine  — tools: bash, read_file, write_file, edit_file, grep, glob
+  svc-providers — providers: anthropic, openai
+  svc-context   — stored as routing_table['context']
 
 This file also verifies the DEFAULT_SERVICES constant and the turn-handler
 fallback that uses it when TurnRequest.services is empty.
@@ -25,28 +24,16 @@ from session_service.app import DEFAULT_SERVICES
 # ---------------------------------------------------------------------------
 
 
-def _describe_filesystem() -> dict:
-    """Minimal /describe response for svc-filesystem."""
+def _describe_machine() -> dict:
+    """Minimal /describe response for svc-machine."""
     return {
-        "name": "svc-filesystem",
+        "name": "svc-machine",
         "version": "0.1.0",
         "tools": [
+            {"name": "bash", "description": "Run shell commands", "input_schema": {}},
             {"name": "read_file", "description": "Read a file", "input_schema": {}},
             {"name": "write_file", "description": "Write a file", "input_schema": {}},
             {"name": "edit_file", "description": "Edit a file", "input_schema": {}},
-        ],
-        "providers": [],
-        "hooks": [],
-        "content_paths": [],
-    }
-
-
-def _describe_search() -> dict:
-    """Minimal /describe response for svc-search."""
-    return {
-        "name": "svc-search",
-        "version": "0.1.0",
-        "tools": [
             {"name": "grep", "description": "Search file contents", "input_schema": {}},
             {
                 "name": "glob",
@@ -76,29 +63,24 @@ def _describe_providers() -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Test 1 – routing table for svc-filesystem and svc-search
+# Test 1 – routing table for svc-machine
 # ---------------------------------------------------------------------------
 
 
 class TestPhase3aToolRouting:
     """build_routing_table correctly maps Phase 3a tool services."""
 
-    def test_filesystem_tools_route_to_svc_filesystem(self) -> None:
-        """read_file, write_file, edit_file must all map to svc-filesystem."""
-        describe_results = {"svc-filesystem": _describe_filesystem()}
+    def test_machine_tools_route_to_svc_machine(self) -> None:
+        """All six machine tools must map to svc-machine."""
+        describe_results = {"svc-machine": _describe_machine()}
         routing = build_routing_table(describe_results, context_app_id="svc-context")
 
-        assert routing["tools"]["read_file"] == "svc-filesystem"
-        assert routing["tools"]["write_file"] == "svc-filesystem"
-        assert routing["tools"]["edit_file"] == "svc-filesystem"
-
-    def test_search_tools_route_to_svc_search(self) -> None:
-        """grep and glob must both map to svc-search."""
-        describe_results = {"svc-search": _describe_search()}
-        routing = build_routing_table(describe_results, context_app_id="svc-context")
-
-        assert routing["tools"]["grep"] == "svc-search"
-        assert routing["tools"]["glob"] == "svc-search"
+        assert routing["tools"]["bash"] == "svc-machine"
+        assert routing["tools"]["read_file"] == "svc-machine"
+        assert routing["tools"]["write_file"] == "svc-machine"
+        assert routing["tools"]["edit_file"] == "svc-machine"
+        assert routing["tools"]["grep"] == "svc-machine"
+        assert routing["tools"]["glob"] == "svc-machine"
 
 
 # ---------------------------------------------------------------------------
@@ -136,18 +118,18 @@ class TestPhase3aFullRouting:
     def test_full_phase3a_routing_table(self) -> None:
         """All Phase 3a tools and providers resolve correctly when all services are included."""
         describe_results = {
-            "svc-filesystem": _describe_filesystem(),
-            "svc-search": _describe_search(),
+            "svc-machine": _describe_machine(),
             "svc-providers": _describe_providers(),
         }
         routing = build_routing_table(describe_results, context_app_id="svc-context")
 
         # Tools
-        assert routing["tools"]["read_file"] == "svc-filesystem"
-        assert routing["tools"]["write_file"] == "svc-filesystem"
-        assert routing["tools"]["edit_file"] == "svc-filesystem"
-        assert routing["tools"]["grep"] == "svc-search"
-        assert routing["tools"]["glob"] == "svc-search"
+        assert routing["tools"]["bash"] == "svc-machine"
+        assert routing["tools"]["read_file"] == "svc-machine"
+        assert routing["tools"]["write_file"] == "svc-machine"
+        assert routing["tools"]["edit_file"] == "svc-machine"
+        assert routing["tools"]["grep"] == "svc-machine"
+        assert routing["tools"]["glob"] == "svc-machine"
 
         # Providers
         assert routing["providers"]["anthropic"] == "svc-providers"
@@ -156,9 +138,9 @@ class TestPhase3aFullRouting:
         # Context
         assert routing["context"] == "svc-context"
 
-        # Tool specs collected (5 tools from filesystem + search)
+        # Tool specs collected (6 tools from svc-machine)
         tool_names = {s["name"] for s in routing["_tool_specs"]}
-        assert tool_names == {"read_file", "write_file", "edit_file", "grep", "glob"}
+        assert tool_names == {"bash", "read_file", "write_file", "edit_file", "grep", "glob"}
 
 
 # ---------------------------------------------------------------------------

@@ -95,10 +95,8 @@ agent:
   providers:
     build: ./services/svc-providers
   behaviors:
-    bash:
-      build: ./services/svc-bash
-    filesystem:
-      build: ./services/svc-filesystem
+    machine:
+      build: ./services/svc-machine
 """
 
 SERVICE_MAP_YAML = """\
@@ -108,8 +106,7 @@ agents:
     context_manager: svc-context-manager-def67890
     providers: svc-providers-123abcde
     behaviors:
-      bash: svc-bash-456fghij
-      filesystem: svc-filesystem-789klmno
+      machine: svc-machine-abcd1234
 """
 
 
@@ -125,7 +122,7 @@ def test_resolve_from_yaml(tmp_path, monkeypatch):
 
     config = get_agent_config("foundation")
     assert "svc-orchestrator-abc12345" in config["services"]
-    assert "svc-bash-456fghij" in config["services"]
+    assert "svc-machine-abcd1234" in config["services"]
     assert config["system_prompt"] == "You are Amplifier, a helpful AI assistant.\n"
     assert config["orchestrator_app_id"] == "svc-orchestrator-abc12345"
     assert config["context_app_id"] == "svc-context-manager-def67890"

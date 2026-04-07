@@ -190,7 +190,7 @@ class TestTurnAgentResolution:
     ) -> None:
         """When the caller supplies an explicit services list it overrides the agent default."""
         client = _make_client()
-        custom_services = ["svc-bash", "svc-filesystem"]
+        custom_services = ["svc-machine", "svc-web"]
         client.post(
             "/sessions/s7/turn",
             json={
@@ -210,7 +210,7 @@ class TestTurnAgentResolution:
         with patch(
             "session_service.app.get_agent_config",
             return_value={
-                "services": ["svc-bash"],
+                "services": ["svc-machine"],
                 "default_provider": "anthropic",
                 "orchestrator_app_id": "svc-orchestrator-abc123",
                 "context_app_id": hashed_context_id,
@@ -234,7 +234,7 @@ class TestTurnAgentResolution:
         with patch(
             "session_service.app.get_agent_config",
             return_value={
-                "services": ["svc-bash"],
+                "services": ["svc-machine"],
                 "default_provider": "anthropic",
                 "orchestrator_app_id": hashed_orch_id,
                 "context_app_id": "svc-context_manager-def456",

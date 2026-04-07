@@ -143,7 +143,7 @@ class TestBuildRoutingTable:
     def test_modes_empty_when_none_advertised(self) -> None:
         """_modes is an empty list when no services advertise modes."""
         describe_results = {
-            "svc-bash": _make_describe(
+            "svc-machine": _make_describe(
                 tools=[{"name": "bash", "description": "Run shell", "input_schema": {}}]
             )
         }
@@ -262,7 +262,7 @@ class TestDiscoverServices:
     def test_agents_empty_when_none_advertised(self) -> None:
         """_agents is an empty list when no services advertise agents."""
         describe_results = {
-            "svc-bash": _make_describe(
+            "svc-machine": _make_describe(
                 tools=[{"name": "bash", "description": "Run shell", "input_schema": {}}]
             )
         }
