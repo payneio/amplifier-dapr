@@ -90,7 +90,8 @@ class SessionClient:
         if machine_config is None and use_default_machine:
             machine_config = {
                 "type": "ssh",
-                "host": "localhost",
+                "host": "host.docker.internal",
+                "username": os.environ.get("USER", os.environ.get("USERNAME", "root")),
                 "working_dir": os.getcwd(),
             }
         http = self._get_http()

@@ -63,12 +63,24 @@ def test_foundation_providers_has_api_key_env_vars() -> None:
     assert "ANTHROPIC_API_KEY" in d.providers.environment
 
 
-def test_foundation_machine_behavior_has_workspace_volume() -> None:
+def test_foundation_machine_behavior_has_ssh_volume() -> None:
     d = fetch_definition(str(FOUNDATION_YAML))
     assert "machine" in d.behaviors, "Expected 'machine' behavior"
     machine = d.behaviors["machine"]
     assert machine.volumes is not None
-    assert any("/workspace" in v for v in machine.volumes)
+    assert any(".ssh" in v for v in machine.volumes), (
+        f"Expected an SSH key volume in machine.volumes, got: {machine.volumes}"
+    )
+
+
+def test_foundation_machine_behavior_has_extra_hosts() -> None:
+    d = fetch_definition(str(FOUNDATION_YAML))
+    assert "machine" in d.behaviors, "Expected 'machine' behavior"
+    machine = d.behaviors["machine"]
+    assert machine.extra_hosts is not None, "Expected extra_hosts on machine behavior"
+    assert any("host.docker.internal" in h for h in machine.extra_hosts), (
+        f"Expected host.docker.internal in machine.extra_hosts, got: {machine.extra_hosts}"
+    )
 
 
 def test_foundation_has_expected_tool_behaviors() -> None:

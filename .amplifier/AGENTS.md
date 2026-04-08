@@ -11,13 +11,14 @@ The Dapr microservices framework is implemented and running:
 - **~23 services** are defined in docker-compose.yaml, each with Dapr sidecars
 - **Session CLI** (`amplifier-svc`) works with streaming SSE, tool calls, and real LLM providers (Anthropic, OpenAI, etc.)
 - **Docker compose** builds and runs successfully end-to-end
-- **All unit tests pass** across all services (74 in ampctl, 107 in session-service, 124 in CLI, 56 in orchestrator, 42 in delegation)
+- **All unit tests pass** across all services (74 in ampctl, 126 in session-service, 148 in CLI, 58 in orchestrator, 136 in svc-machine, 42 in delegation)
 - The orchestrator agent loop, context management, hook pipeline, and content assembly are all functional
 - **Agent definition system** (`ampctl`) is implemented: YAML-based agent definitions, deterministic service name hashing, docker-compose generation, and a management CLI
 - **Session-service** loads agent definitions from YAML files with hardcoded fallback
 - **SSE event parity with legacy Amplifier** — all streaming events use legacy-compatible names and data shapes (content_block:start/end, thinking:delta/final, delegate:agent_spawned/completed)
 - **Streaming delegation** — svc-delegation streams child session events in real time via SSE; CLI displays nested delegation progress
-- **Machine service consolidation complete** — svc-machine now provides all machine tools (bash, read_file, write_file, edit_file, grep, glob) with per-session instance management, driver abstraction (SSH/SFTP and local), and proper session lifecycle integration. Old services (svc-bash, svc-filesystem, svc-search) have been removed.
+- **Machine service consolidation complete** — svc-machine now provides all machine tools (bash, read_file, write_file, edit_file, grep, glob) with per-session instance management, async driver abstraction (SSH/SFTP via asyncssh), and proper session lifecycle integration. Old services (svc-bash, svc-filesystem, svc-search) have been removed.
+- **SSH machine access works end-to-end** — Docker containers connect to the host via SSH using `host.docker.internal`. The CLI creates sessions with machine provisioning, the session-service stores machine_instance_id, and svc-machine routes tool calls through the async SSH driver.
 
 ## Recent Design Decisions
 
@@ -28,7 +29,9 @@ The Dapr microservices framework is implemented and running:
 - **SSE event naming**: Uses legacy Amplifier event names with colon separators (e.g., content_block:start, delegate:agent_spawned) to ease future migration of monolith bundles into services.
 - **Display belongs in CLI**: Todo display, streaming UI, and thinking block rendering are CLI presentation concerns, not server-side hooks. The server emits structured SSE events; the CLI renders them with Rich. This is the correct separation for a client-server architecture.
 - **HookResult contract**: Matches legacy amplifier-core — context_injection, ephemeral, and context_injection_role are top-level fields on HookResult, not nested in data.
-- **Machine service consolidation**: All machine tools (bash, read_file, write_file, edit_file, grep, glob) are now consolidated in svc-machine with per-session instance management. Uses a driver abstraction layer supporting SSH/SFTP (remote) and local drivers. Old services (svc-bash, svc-filesystem, svc-search) have been deleted. This eliminates redundant IPC and simplifies session lifecycle integration.
+- **Machine service consolidation**: All machine tools (bash, read_file, write_file, edit_file, grep, glob) are now consolidated in svc-machine with per-session instance management. Uses an async driver abstraction layer supporting SSH/SFTP (via asyncssh). Old services (svc-bash, svc-filesystem, svc-search) have been deleted. This eliminates redundant IPC and simplifies session lifecycle integration.
+- **SSH host access from Docker**: Agent definitions support `extra_hosts` (maps to Docker Compose `extra_hosts`). Foundation agent uses `host.docker.internal:host-gateway` so containers can SSH to the host. The CLI creates sessions with `use_default_machine=True`, which tells session-service to provision an SSH machine instance pointing at `host.docker.internal`.
+- **Session creation is mandatory before tool use**: The CLI's `run` command (single-turn mode) now calls `POST /sessions/create` before streaming turns. This provisions the machine instance so svc-machine has a valid `machine_instance_id` for SSH connections. The REPL already handled this correctly.
 
 ## Key Design Documents
 

@@ -6,7 +6,6 @@ import asyncio
 import json
 import os
 import sys
-import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -59,9 +58,6 @@ async def _run_impl(
 
     console = Console(stderr=(output_format == "json"))
 
-    # Resolve session ID
-    effective_session_id: str = session_id or str(uuid.uuid4())
-
     # Resolve workspace content — sent as a dict to the server, which
     # handles formatting into <context_file> blocks for the system prompt.
     workspace_path = Path(workspace)
@@ -76,15 +72,26 @@ async def _run_impl(
         if not sys.stdin.isatty():
             piped = sys.stdin.read()
             if not piped.strip():
-                _emit_json_error(
-                    "No message provided and stdin is empty.", effective_session_id
-                )
+                _emit_json_error("No message provided and stdin is empty.", session_id)
                 return 1
             prompt = piped.strip()
 
     async with SessionClient(base_url=url) as client:
         if prompt is not None:
-            # Single-turn mode
+            # Single-turn mode — create a session with machine provisioning
+            if session_id is None:
+                try:
+                    create_result = await client.create_session(
+                        agent_ref=agent or "default",
+                        use_default_machine=True,
+                    )
+                    effective_session_id: str = create_result["session_id"]
+                except Exception as exc:
+                    _emit_json_error(f"Session creation failed: {exc}", None)
+                    return 1
+            else:
+                effective_session_id = session_id
+
             if output_format == "json":
                 # Accumulate response for JSON output
                 accumulated_response = ""
@@ -135,16 +142,14 @@ async def _run_impl(
                     console.print(f"[red]Error: {exc}[/red]")
                     return 1
         else:
-            # REPL mode
+            # REPL mode — session creation handled by interactive_repl
             from amplifier_cli.repl import interactive_repl
 
             # Check health first
             is_healthy = await client.healthcheck()
             if not is_healthy:
                 if output_format == "json":
-                    _emit_json_error(
-                        f"Service at {url} is not available.", effective_session_id
-                    )
+                    _emit_json_error(f"Service at {url} is not available.", None)
                 else:
                     console.print(
                         f"[red]Error: Service at {url} is not available.[/red]"
@@ -153,7 +158,6 @@ async def _run_impl(
 
             await interactive_repl(
                 client=client,
-                session_id=effective_session_id,
                 provider_name=provider,
                 workspace_content=workspace_content,
                 console=console,

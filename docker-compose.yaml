@@ -106,6 +106,9 @@ services:
     - redis
     volumes:
     - ${WORKSPACE_PATH:-.}:/workspace
+    - ${HOME:-.}/.ssh:/root/.ssh:ro
+    extra_hosts:
+    - host.docker.internal:host-gateway
   svc-machine-6719a84c-dapr:
     image: daprio/daprd:1.14.4
     command:

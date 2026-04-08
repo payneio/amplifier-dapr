@@ -61,13 +61,13 @@ class LocalBackend(MachineDriver):
     def __init__(self, workspace_dir: Path) -> None:
         self.workspace_dir = workspace_dir.resolve()
 
-    async def connect(self) -> None:  # type: ignore[override]
+    async def connect(self) -> None:
         """No-op — local backend requires no connection setup."""
 
-    async def disconnect(self) -> None:  # type: ignore[override]
+    async def disconnect(self) -> None:
         """No-op — local backend requires no connection teardown."""
 
-    async def exec(  # type: ignore[override]
+    async def exec(
         self,
         command: str,
         timeout: int = 30,
@@ -126,7 +126,7 @@ class LocalBackend(MachineDriver):
             exit_code=process.returncode if process.returncode is not None else -1,
         )
 
-    async def exec_background(  # type: ignore[override]
+    async def exec_background(
         self,
         command: str,
         working_dir: str | None = None,
@@ -165,7 +165,7 @@ class LocalBackend(MachineDriver):
             return None
         return resolved
 
-    def file_read(
+    async def file_read(
         self,
         path: str,
         offset: int = 1,
@@ -196,7 +196,7 @@ class LocalBackend(MachineDriver):
 
         return FileReadResult(content=content, total_lines=total_lines)
 
-    def file_write(self, path: str, content: str) -> bool:
+    async def file_write(self, path: str, content: str) -> bool:
         """Write content to a file within the workspace, creating parent directories.
 
         Args:
@@ -214,7 +214,7 @@ class LocalBackend(MachineDriver):
         resolved.write_text(content, encoding="utf-8")
         return True
 
-    def file_edit(
+    async def file_edit(
         self,
         path: str,
         old_string: str,
@@ -253,7 +253,7 @@ class LocalBackend(MachineDriver):
             success=replacements_made > 0, replacements_made=replacements_made
         )
 
-    def file_list(self, path: str = ".") -> list[dict[str, Any]] | None:
+    async def file_list(self, path: str = ".") -> list[dict[str, Any]] | None:
         """List directory entries within the workspace.
 
         Args:
@@ -277,7 +277,7 @@ class LocalBackend(MachineDriver):
                 )
         return entries
 
-    def file_glob(
+    async def file_glob(
         self,
         pattern: str,
         path: str = ".",
@@ -338,7 +338,7 @@ class LocalBackend(MachineDriver):
 
         return FileGlobResult(matches=matches, total_files=total)
 
-    async def file_grep(  # type: ignore[override]
+    async def file_grep(
         self,
         pattern: str,
         path: str = ".",

@@ -31,6 +31,7 @@ class ServiceConfig(BaseModel):
     content_dir: str | None = None
     modes: list[ModeCapability] = Field(default_factory=list)
     agents: list[AgentCapability] = Field(default_factory=list)
+    behaviors: list[str] = Field(default_factory=list)
 
 
 def create_app(config: ServiceConfig) -> FastAPI:
@@ -79,6 +80,7 @@ def create_app(config: ServiceConfig) -> FastAPI:
             content_paths=content_paths,
             modes=config.modes,
             agents=config.agents,
+            behaviors=config.behaviors,
         )
         return response.model_dump()
 

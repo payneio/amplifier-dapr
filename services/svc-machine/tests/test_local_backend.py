@@ -72,11 +72,11 @@ class TestFileRead:
         """Create a LocalBackend with a temporary workspace directory."""
         return LocalBackend(workspace_dir=tmp_path)
 
-    def test_read_file(self, backend: LocalBackend, tmp_path: Path) -> None:
+    async def test_read_file(self, backend: LocalBackend, tmp_path: Path) -> None:
         """file_read() returns content and total_lines for a 3-line file."""
         test_file = tmp_path / "test.txt"
         test_file.write_text("line1\nline2\nline3\n")
-        result = backend.file_read("test.txt")
+        result = await backend.file_read("test.txt")
         assert result is not None
         assert isinstance(result, FileReadResult)
         assert result.total_lines == 3
@@ -84,27 +84,27 @@ class TestFileRead:
         assert "line2" in result.content
         assert "line3" in result.content
 
-    def test_read_with_offset_and_limit(
+    async def test_read_with_offset_and_limit(
         self, backend: LocalBackend, tmp_path: Path
     ) -> None:
         """file_read() respects 1-based offset and line limit."""
         test_file = tmp_path / "test.txt"
         test_file.write_text("line1\nline2\nline3\nline4\nline5\n")
-        result = backend.file_read("test.txt", offset=2, limit=2)
+        result = await backend.file_read("test.txt", offset=2, limit=2)
         assert result is not None
         assert "line2" in result.content
         assert "line3" in result.content
         assert "line1" not in result.content
         assert "line4" not in result.content
 
-    def test_read_nonexistent(self, backend: LocalBackend) -> None:
+    async def test_read_nonexistent(self, backend: LocalBackend) -> None:
         """file_read() returns None for a nonexistent file."""
-        result = backend.file_read("nonexistent.txt")
+        result = await backend.file_read("nonexistent.txt")
         assert result is None
 
-    def test_read_path_traversal(self, backend: LocalBackend) -> None:
+    async def test_read_path_traversal(self, backend: LocalBackend) -> None:
         """file_read() returns None when path escapes the workspace."""
-        result = backend.file_read("../../../etc/passwd")
+        result = await backend.file_read("../../../etc/passwd")
         assert result is None
 
 
@@ -116,31 +116,33 @@ class TestFileWrite:
         """Create a LocalBackend with a temporary workspace directory."""
         return LocalBackend(workspace_dir=tmp_path)
 
-    def test_write_new_file(self, backend: LocalBackend, tmp_path: Path) -> None:
+    async def test_write_new_file(self, backend: LocalBackend, tmp_path: Path) -> None:
         """file_write() creates a new file with given content."""
-        result = backend.file_write("newfile.txt", "hello world\n")
+        result = await backend.file_write("newfile.txt", "hello world\n")
         assert result is True
         assert (tmp_path / "newfile.txt").read_text() == "hello world\n"
 
-    def test_write_overwrites(self, backend: LocalBackend, tmp_path: Path) -> None:
+    async def test_write_overwrites(
+        self, backend: LocalBackend, tmp_path: Path
+    ) -> None:
         """file_write() overwrites an existing file."""
         test_file = tmp_path / "existing.txt"
         test_file.write_text("old content\n")
-        result = backend.file_write("existing.txt", "new content\n")
+        result = await backend.file_write("existing.txt", "new content\n")
         assert result is True
         assert test_file.read_text() == "new content\n"
 
-    def test_write_creates_parent_dirs(
+    async def test_write_creates_parent_dirs(
         self, backend: LocalBackend, tmp_path: Path
     ) -> None:
         """file_write() creates intermediate parent directories."""
-        result = backend.file_write("subdir/nested/file.txt", "data\n")
+        result = await backend.file_write("subdir/nested/file.txt", "data\n")
         assert result is True
         assert (tmp_path / "subdir" / "nested" / "file.txt").read_text() == "data\n"
 
-    def test_write_path_traversal(self, backend: LocalBackend) -> None:
+    async def test_write_path_traversal(self, backend: LocalBackend) -> None:
         """file_write() returns False when path escapes workspace."""
-        result = backend.file_write("../../../tmp/evil.txt", "bad content")
+        result = await backend.file_write("../../../tmp/evil.txt", "bad content")
         assert result is False
 
 
@@ -152,39 +154,41 @@ class TestFileEdit:
         """Create a LocalBackend with a temporary workspace directory."""
         return LocalBackend(workspace_dir=tmp_path)
 
-    def test_edit_replace(self, backend: LocalBackend, tmp_path: Path) -> None:
+    async def test_edit_replace(self, backend: LocalBackend, tmp_path: Path) -> None:
         """file_edit() replaces first occurrence and returns replacements_made=1."""
         test_file = tmp_path / "test.txt"
         test_file.write_text("foo bar foo\n")
-        result = backend.file_edit("test.txt", "foo", "baz")
+        result = await backend.file_edit("test.txt", "foo", "baz")
         assert result is not None
         assert isinstance(result, FileEditResult)
         assert result.replacements_made == 1
         assert result.success is True
         assert test_file.read_text() == "baz bar foo\n"
 
-    def test_edit_replace_all(self, backend: LocalBackend, tmp_path: Path) -> None:
+    async def test_edit_replace_all(
+        self, backend: LocalBackend, tmp_path: Path
+    ) -> None:
         """file_edit() with replace_all=True replaces all occurrences."""
         test_file = tmp_path / "test.txt"
         test_file.write_text("foo bar foo\n")
-        result = backend.file_edit("test.txt", "foo", "baz", replace_all=True)
+        result = await backend.file_edit("test.txt", "foo", "baz", replace_all=True)
         assert result is not None
         assert result.replacements_made == 2
         assert result.success is True
         assert test_file.read_text() == "baz bar baz\n"
 
-    def test_edit_no_match(self, backend: LocalBackend, tmp_path: Path) -> None:
+    async def test_edit_no_match(self, backend: LocalBackend, tmp_path: Path) -> None:
         """file_edit() returns replacements_made=0 when old_string not found."""
         test_file = tmp_path / "test.txt"
         test_file.write_text("hello world\n")
-        result = backend.file_edit("test.txt", "nonexistent", "replacement")
+        result = await backend.file_edit("test.txt", "nonexistent", "replacement")
         assert result is not None
         assert result.replacements_made == 0
         assert result.success is False
 
-    def test_edit_nonexistent_file(self, backend: LocalBackend) -> None:
+    async def test_edit_nonexistent_file(self, backend: LocalBackend) -> None:
         """file_edit() returns None when the file does not exist."""
-        result = backend.file_edit("ghost.txt", "old", "new")
+        result = await backend.file_edit("ghost.txt", "old", "new")
         assert result is None
 
 
@@ -204,20 +208,22 @@ class TestFileList:
         (tmp_path / "subdir").mkdir()
         return tmp_path
 
-    def test_list_directory(self, backend: LocalBackend, populated_dir: Path) -> None:
+    async def test_list_directory(
+        self, backend: LocalBackend, populated_dir: Path
+    ) -> None:
         """file_list() finds a.txt, b.txt, and subdir in the directory."""
-        result = backend.file_list(".")
+        result = await backend.file_list(".")
         assert result is not None
         names = {entry["name"] for entry in result}
         assert "a.txt" in names
         assert "b.txt" in names
         assert "subdir" in names
 
-    def test_list_entries_have_type(
+    async def test_list_entries_have_type(
         self, backend: LocalBackend, populated_dir: Path
     ) -> None:
         """file_list() entries have type 'file' for files and 'dir' for directories."""
-        result = backend.file_list(".")
+        result = await backend.file_list(".")
         assert result is not None
         by_name = {entry["name"]: entry for entry in result}
         assert by_name["a.txt"]["type"] == "file"
@@ -225,9 +231,9 @@ class TestFileList:
         assert "size" in by_name["a.txt"]
         assert isinstance(by_name["a.txt"]["size"], int)
 
-    def test_list_nonexistent(self, backend: LocalBackend) -> None:
+    async def test_list_nonexistent(self, backend: LocalBackend) -> None:
         """file_list() returns None for a nonexistent path."""
-        result = backend.file_list("nonexistent_dir")
+        result = await backend.file_list("nonexistent_dir")
         assert result is None
 
 
@@ -252,57 +258,57 @@ class TestFileGlob:
         (node_modules / "dep.js").write_text("module.exports = {};\n")
         (tmp_path / "mydir").mkdir()
 
-    def test_glob_pattern(self, backend: LocalBackend) -> None:
+    async def test_glob_pattern(self, backend: LocalBackend) -> None:
         """file_glob('*.py') finds .py files but not .txt files."""
-        result = backend.file_glob("*.py")
+        result = await backend.file_glob("*.py")
         assert result is not None
         assert any(p.endswith(".py") for p in result.matches)
         assert not any(p.endswith(".txt") for p in result.matches)
 
-    def test_glob_recursive(self, backend: LocalBackend) -> None:
+    async def test_glob_recursive(self, backend: LocalBackend) -> None:
         """file_glob('**/*.py') finds >=2 files including utils.py."""
-        result = backend.file_glob("**/*.py")
+        result = await backend.file_glob("**/*.py")
         assert result is not None
         assert len(result.matches) >= 2
         assert any("utils.py" in p for p in result.matches)
 
-    def test_glob_excludes_node_modules(self, backend: LocalBackend) -> None:
+    async def test_glob_excludes_node_modules(self, backend: LocalBackend) -> None:
         """file_glob('**/*.js') returns no matches — node_modules excluded by default."""
-        result = backend.file_glob("**/*.js")
+        result = await backend.file_glob("**/*.js")
         assert result is not None
         assert len(result.matches) == 0
 
-    def test_glob_include_ignored(self, backend: LocalBackend) -> None:
+    async def test_glob_include_ignored(self, backend: LocalBackend) -> None:
         """file_glob('**/*.js', include_ignored=True) returns matches in node_modules."""
-        result = backend.file_glob("**/*.js", include_ignored=True)
+        result = await backend.file_glob("**/*.js", include_ignored=True)
         assert result is not None
         assert len(result.matches) >= 1
         assert any("dep.js" in p for p in result.matches)
 
-    def test_glob_exclude_pattern(self, backend: LocalBackend) -> None:
+    async def test_glob_exclude_pattern(self, backend: LocalBackend) -> None:
         """file_glob('*', exclude=['*.txt']) returns no .txt files."""
-        result = backend.file_glob("*", exclude=["*.txt"])
+        result = await backend.file_glob("*", exclude=["*.txt"])
         assert result is not None
         assert not any(p.endswith(".txt") for p in result.matches)
 
-    def test_glob_type_dir(self, backend: LocalBackend) -> None:
+    async def test_glob_type_dir(self, backend: LocalBackend) -> None:
         """file_glob('*', type_filter='dir') returns pkg and mydir but no .py/.txt files."""
-        result = backend.file_glob("*", type_filter="dir")
+        result = await backend.file_glob("*", type_filter="dir")
         assert result is not None
         assert any("pkg" in p for p in result.matches)
         assert any("mydir" in p for p in result.matches)
         assert not any(p.endswith(".py") for p in result.matches)
         assert not any(p.endswith(".txt") for p in result.matches)
 
-    def test_glob_type_file(self, backend: LocalBackend) -> None:
+    async def test_glob_type_file(self, backend: LocalBackend) -> None:
         """file_glob('*', type_filter='file') returns only files."""
-        result = backend.file_glob("*", type_filter="file")
+        result = await backend.file_glob("*", type_filter="file")
         assert result is not None
         assert len(result.matches) > 0
         assert not any("mydir" in p for p in result.matches)
         assert not any("pkg" in p for p in result.matches)
 
-    def test_glob_total_files_accurate_when_capped(
+    async def test_glob_total_files_accurate_when_capped(
         self, backend: LocalBackend, tmp_path: Path
     ) -> None:
         """total_files reflects the real count, not the cap, when results are truncated."""
@@ -311,15 +317,15 @@ class TestFileGlob:
         backend._GLOB_MAX_RESULTS = 3  # type: ignore[assignment]
         for i in range(5):
             (tmp_path / f"cap{i}.dat").write_text("x")
-        result = backend.file_glob("*.dat")
+        result = await backend.file_glob("*.dat")
         backend._GLOB_MAX_RESULTS = original_max  # type: ignore[assignment]
         assert isinstance(result, FileGlobResult)
         assert len(result.matches) == 3  # capped at 3
         assert result.total_files == 5  # real count surfaced
 
-    def test_glob_nonexistent_base(self, backend: LocalBackend) -> None:
+    async def test_glob_nonexistent_base(self, backend: LocalBackend) -> None:
         """file_glob('*.py', path='nonexistent_dir') returns None."""
-        result = backend.file_glob("*.py", path="nonexistent_dir")
+        result = await backend.file_glob("*.py", path="nonexistent_dir")
         assert result is None
 
 

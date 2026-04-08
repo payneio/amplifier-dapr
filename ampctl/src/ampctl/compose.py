@@ -63,6 +63,9 @@ def _make_app_service(entry: ServiceEntry) -> dict[str, Any]:
     if entry.volumes:
         service["volumes"] = list(entry.volumes)
 
+    if entry.extra_hosts:
+        service["extra_hosts"] = list(entry.extra_hosts)
+
     return service
 
 
@@ -104,6 +107,13 @@ def _merge_service(
             if vol not in existing_vols:
                 existing_vols.append(vol)
         existing["volumes"] = existing_vols
+
+    if entry.extra_hosts:
+        existing_hosts: list[str] = existing.get("extra_hosts", [])
+        for host in entry.extra_hosts:
+            if host not in existing_hosts:
+                existing_hosts.append(host)
+        existing["extra_hosts"] = existing_hosts
 
 
 # ---------------------------------------------------------------------------

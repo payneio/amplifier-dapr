@@ -178,7 +178,6 @@ def _create_prompt_session(history_path: str | None):
 
 async def interactive_repl(
     client: SessionClient,
-    session_id: str,
     provider_name: str | None,
     workspace_content: dict[str, str] | None,
     console: Console,
@@ -202,9 +201,8 @@ async def interactive_repl(
         )
         session_id = create_result["session_id"]
     except Exception as exc:
-        console.print(
-            f"[yellow]Warning: session creation failed ({exc}), using local session ID[/yellow]"
-        )
+        console.print(f"[red]Error: session creation failed: {exc}[/red]")
+        return
 
     session = _create_prompt_session(history_path)
     cancellation = CancellationState()

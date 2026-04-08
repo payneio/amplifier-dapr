@@ -163,7 +163,6 @@ class TestReplCallsCreateSession:
         ):
             await interactive_repl(
                 client=mock_client,
-                session_id="local-session-id",
                 provider_name=None,
                 workspace_content=None,
                 console=console,

@@ -41,18 +41,22 @@ class FileGlobResult:
 
 
 class MachineDriver(ABC):
-    """Abstract base class defining the contract for all machine backend drivers."""
+    """Abstract base class defining the contract for all machine backend drivers.
+
+    All methods are async to support both local and remote (SSH) backends
+    through a single uniform interface.
+    """
 
     @abstractmethod
-    def connect(self) -> None:
+    async def connect(self) -> None:
         """Establish a connection to the machine backend."""
 
     @abstractmethod
-    def disconnect(self) -> None:
+    async def disconnect(self) -> None:
         """Close the connection to the machine backend."""
 
     @abstractmethod
-    def exec(
+    async def exec(
         self,
         command: str,
         timeout: int = 30,
@@ -61,7 +65,7 @@ class MachineDriver(ABC):
         """Execute a shell command and return the result."""
 
     @abstractmethod
-    def exec_background(
+    async def exec_background(
         self,
         command: str,
         working_dir: str | None = None,
@@ -69,7 +73,7 @@ class MachineDriver(ABC):
         """Spawn a background process and return its PID and status."""
 
     @abstractmethod
-    def file_read(
+    async def file_read(
         self,
         path: str,
         offset: int = 1,
@@ -78,11 +82,11 @@ class MachineDriver(ABC):
         """Read a file and return its content with line information."""
 
     @abstractmethod
-    def file_write(self, path: str, content: str) -> bool:
+    async def file_write(self, path: str, content: str) -> bool:
         """Write content to a file, returning True on success."""
 
     @abstractmethod
-    def file_edit(
+    async def file_edit(
         self,
         path: str,
         old_string: str,
@@ -92,11 +96,11 @@ class MachineDriver(ABC):
         """Replace string(s) in a file and return the edit result."""
 
     @abstractmethod
-    def file_list(self, path: str = ".") -> list[dict[str, Any]] | None:
+    async def file_list(self, path: str = ".") -> list[dict[str, Any]] | None:
         """List directory entries at the given path."""
 
     @abstractmethod
-    def file_glob(
+    async def file_glob(
         self,
         pattern: str,
         path: str = ".",
@@ -107,7 +111,7 @@ class MachineDriver(ABC):
         """Match files using a glob pattern and return results."""
 
     @abstractmethod
-    def file_grep(
+    async def file_grep(
         self,
         pattern: str,
         path: str = ".",

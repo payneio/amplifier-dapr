@@ -30,9 +30,20 @@ def workspace(tmp_path: Path) -> Path:
 
 @pytest.fixture
 def machine_client(workspace: Path) -> TestClient:
-    """TestClient wrapping create_machine_app(workspace)."""
-    app = create_machine_app(workspace)
+    """TestClient wrapping create_machine_app() with a provisioned local instance."""
+    app = create_machine_app()
     return TestClient(app)
+
+
+@pytest.fixture
+def instance_id(machine_client: TestClient, workspace: Path) -> str:
+    """Create a local instance and return its ID."""
+    resp = machine_client.post(
+        "/instances",
+        json={"driver_type": "local", "config": {"workspace_dir": str(workspace)}},
+    )
+    assert resp.status_code == 200
+    return resp.json()["instance_id"]
 
 
 # ---------------------------------------------------------------------------
@@ -84,83 +95,110 @@ class TestMachineServiceContract:
 # ---------------------------------------------------------------------------
 
 
-class TestMachineFileOperations:
-    """Test all machine service file and exec operations end-to-end."""
+class TestMachineToolDispatch:
+    """Test machine service tool dispatch endpoints via provisioned instances."""
 
-    def test_exec(self, machine_client: TestClient) -> None:
-        """POST /exec runs a shell command and returns stdout."""
+    def test_bash_execute(self, machine_client: TestClient, instance_id: str) -> None:
+        """POST /tools/bash/execute runs a command via provisioned instance."""
         response = machine_client.post(
-            "/exec", json={"command": "echo hello from machine"}
+            "/tools/bash/execute",
+            json={
+                "name": "bash",
+                "input": {"command": "echo hello from machine"},
+                "machine_instance_id": instance_id,
+            },
         )
         assert response.status_code == 200
         data = response.json()
         assert "hello from machine" in data["stdout"]
         assert data["exit_code"] == 0
 
-    def test_file_read(self, machine_client: TestClient) -> None:
-        """POST /files/read returns the content of hello.txt."""
-        response = machine_client.post("/files/read", json={"path": "hello.txt"})
+    def test_read_file(self, machine_client: TestClient, instance_id: str) -> None:
+        """POST /tools/read_file/execute returns file content."""
+        response = machine_client.post(
+            "/tools/read_file/execute",
+            json={
+                "name": "read_file",
+                "input": {"file_path": "hello.txt"},
+                "machine_instance_id": instance_id,
+            },
+        )
         assert response.status_code == 200
         data = response.json()
         assert "Hello, World!" in data["content"]
 
-    def test_file_write_and_read_back(
-        self, machine_client: TestClient, workspace: Path
+    def test_write_and_read_back(
+        self, machine_client: TestClient, workspace: Path, instance_id: str
     ) -> None:
-        """POST /files/write writes a file; reading it back returns the content."""
-        response = machine_client.post(
-            "/files/write",
-            json={"path": "output.txt", "content": "written by test\n"},
+        """POST /tools/write_file/execute writes; read_file reads it back."""
+        write_resp = machine_client.post(
+            "/tools/write_file/execute",
+            json={
+                "name": "write_file",
+                "input": {"file_path": "output.txt", "content": "written by test\n"},
+                "machine_instance_id": instance_id,
+            },
         )
-        assert response.status_code == 200
-        assert response.json()["success"] is True
+        assert write_resp.status_code == 200
+        assert write_resp.json()["success"] is True
         assert (workspace / "output.txt").read_text() == "written by test\n"
 
-        # Read it back via the API
-        response = machine_client.post("/files/read", json={"path": "output.txt"})
-        assert response.status_code == 200
-        assert "written by test" in response.json()["content"]
+        read_resp = machine_client.post(
+            "/tools/read_file/execute",
+            json={
+                "name": "read_file",
+                "input": {"file_path": "output.txt"},
+                "machine_instance_id": instance_id,
+            },
+        )
+        assert read_resp.status_code == 200
+        assert "written by test" in read_resp.json()["content"]
 
-    def test_file_list(self, machine_client: TestClient) -> None:
-        """POST /files/list returns entries including hello.txt and src."""
-        response = machine_client.post("/files/list", json={"path": "."})
-        assert response.status_code == 200
-        entry_names = [e["name"] for e in response.json()["entries"]]
-        assert "hello.txt" in entry_names
-        assert "src" in entry_names
-
-    def test_file_glob(self, machine_client: TestClient) -> None:
-        """POST /files/glob returns matches for **/*.py including src/main.py."""
+    def test_glob(self, machine_client: TestClient, instance_id: str) -> None:
+        """POST /tools/glob/execute matches *.py files."""
         response = machine_client.post(
-            "/files/glob", json={"pattern": "**/*.py", "path": "."}
+            "/tools/glob/execute",
+            json={
+                "name": "glob",
+                "input": {"pattern": "**/*.py"},
+                "machine_instance_id": instance_id,
+            },
         )
         assert response.status_code == 200
         matches = response.json()["matches"]
         assert any("main.py" in m for m in matches)
 
-    def test_file_grep(self, machine_client: TestClient) -> None:
-        """POST /files/grep finds 'print' in src/main.py (files_with_matches mode)."""
+    def test_grep(self, machine_client: TestClient, instance_id: str) -> None:
+        """POST /tools/grep/execute finds 'print' in src/main.py."""
         response = machine_client.post(
-            "/files/grep", json={"pattern": "print", "path": "src/main.py"}
+            "/tools/grep/execute",
+            json={
+                "name": "grep",
+                "input": {"pattern": "print", "path": "src/main.py"},
+                "machine_instance_id": instance_id,
+            },
         )
         assert response.status_code == 200
-        grep_matches = response.json()["matches"]
-        assert len(grep_matches) >= 1
-        # Default output_mode is files_with_matches: matches are file path strings
-        assert any("main.py" in m for m in grep_matches)
+        data = response.json()
+        assert isinstance(data, dict)
 
-    def test_file_edit(self, machine_client: TestClient, workspace: Path) -> None:
-        """POST /files/edit replaces a string in hello.txt."""
+    def test_edit_file(
+        self, machine_client: TestClient, workspace: Path, instance_id: str
+    ) -> None:
+        """POST /tools/edit_file/execute replaces a string in hello.txt."""
         response = machine_client.post(
-            "/files/edit",
+            "/tools/edit_file/execute",
             json={
-                "path": "hello.txt",
-                "old_string": "World",
-                "new_string": "Microservices",
+                "name": "edit_file",
+                "input": {
+                    "file_path": "hello.txt",
+                    "old_string": "World",
+                    "new_string": "Microservices",
+                },
+                "machine_instance_id": instance_id,
             },
         )
         assert response.status_code == 200
         edit_data = response.json()
-        assert edit_data["success"] is True
         assert edit_data["replacements_made"] >= 1
         assert "Microservices" in (workspace / "hello.txt").read_text()

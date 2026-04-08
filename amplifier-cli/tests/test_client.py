@@ -385,5 +385,5 @@ class TestCreateSession:
         machine_config = captured_body["machine_config"]
         assert machine_config is not None
         assert machine_config["type"] == "ssh"
-        assert machine_config["host"] == "localhost"
+        assert machine_config["host"] == "host.docker.internal"
         assert "working_dir" in machine_config

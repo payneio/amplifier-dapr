@@ -491,25 +491,33 @@ def create_session_app(dapr_url: str | None = None) -> FastAPI:
             context_app_id=context_app_id,
         )
 
-        # Optionally provision a machine instance
+        # Provision a machine instance (required for tool calls)
         machine_instance_id: str | None = None
         if request.machine_config is not None:
             machine_app_id: str | None = routing_table_dict.get("_behaviors", {}).get(
                 "machine"
             )
-            if machine_app_id:
-                invoke_url = (
-                    f"{_dapr_url}/v1.0/invoke/{machine_app_id}/method/instances"
+            if not machine_app_id:
+                raise HTTPException(
+                    status_code=503,
+                    detail="machine_config provided but no machine service found in agent definition",
                 )
-                machine_config = request.machine_config
-                body = {
-                    "driver_type": machine_config.get("type"),
-                    "config": machine_config,
-                }
+            invoke_url = f"{_dapr_url}/v1.0/invoke/{machine_app_id}/method/instances"
+            machine_config = request.machine_config
+            body = {
+                "driver_type": machine_config.get("type"),
+                "config": machine_config,
+            }
+            try:
                 async with httpx.AsyncClient() as client:
                     response = await client.post(invoke_url, json=body, timeout=30.0)
                     response.raise_for_status()
                     machine_instance_id = response.json().get("instance_id")
+            except Exception as exc:
+                raise HTTPException(
+                    status_code=503,
+                    detail=f"Failed to provision machine instance: {exc}",
+                ) from exc
 
         # Store session state
         _sessions[session_id] = {

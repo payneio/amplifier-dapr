@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import os
-from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, HTTPException
@@ -15,7 +13,6 @@ from amplifier_service_sdk.service import ServiceConfig, create_app
 
 from svc_machine.driver import MachineDriver
 from svc_machine.instance_manager import InstanceManager, InstanceNotFoundError
-from svc_machine.local_backend import LocalBackend
 from svc_machine.safety import SafetyValidator
 from svc_machine.truncation import truncate_output
 
@@ -129,7 +126,7 @@ async def _run_exec(
 
     Shared implementation for both the flat /exec endpoint and the
     instance-scoped /instances/{id}/exec endpoint. The only difference between
-    the two callers is the driver they supply (global backend vs instance driver).
+    the two callers is the driver they supply (per-instance vs per-route).
     """
     allowed, reason = safety.validate(request.command)
     if not allowed:
@@ -140,7 +137,7 @@ async def _run_exec(
 
     if request.run_in_background:
         try:
-            result_bg = await driver.exec_background(  # type: ignore[misc]
+            result_bg = await driver.exec_background(
                 command=request.command,
                 working_dir=request.working_dir,
             )
@@ -149,7 +146,7 @@ async def _run_exec(
         return JSONResponse(content=result_bg)
 
     try:
-        result = await driver.exec(  # type: ignore[misc]
+        result = await driver.exec(
             command=request.command,
             timeout=request.timeout,
             working_dir=request.working_dir,
@@ -168,20 +165,20 @@ async def _run_exec(
     )
 
 
-def create_machine_app(workspace_dir: Path) -> FastAPI:
+def create_machine_app() -> FastAPI:
     """Create the svc-machine FastAPI application.
 
     Registers SDK standard endpoints (/healthz, /describe) and the
-    machine-specific /exec endpoint.
-
-    Args:
-        workspace_dir: Root directory for all subprocess execution.
+    machine-specific tool execution endpoints.  All tool calls must be
+    associated with a provisioned machine instance — there is no global
+    fallback.
 
     Returns:
         Configured FastAPI application.
     """
     config = ServiceConfig(
         name="svc-machine",
+        behaviors=["machine"],
         tools=[
             ToolCapability(
                 name="bash",
@@ -267,7 +264,6 @@ def create_machine_app(workspace_dir: Path) -> FastAPI:
     )
     app = create_app(config)
 
-    backend = LocalBackend(workspace_dir=workspace_dir)
     safety = SafetyValidator()
     instance_manager = InstanceManager()
 
@@ -310,10 +306,10 @@ def create_machine_app(workspace_dir: Path) -> FastAPI:
         return await _run_exec(_get_driver(instance_id), request, safety)
 
     @app.post("/instances/{instance_id}/files/read")
-    def instance_read_file(instance_id: str, request: FileReadRequest) -> dict:
+    async def instance_read_file(instance_id: str, request: FileReadRequest) -> dict:
         """Read a file on a specific instance."""
         driver = _get_driver(instance_id)
-        result = driver.file_read(
+        result = await driver.file_read(
             request.path, offset=request.offset, limit=request.limit
         )
         if result is None:
@@ -321,19 +317,19 @@ def create_machine_app(workspace_dir: Path) -> FastAPI:
         return {"content": result.content, "total_lines": result.total_lines}
 
     @app.post("/instances/{instance_id}/files/write")
-    def instance_write_file(instance_id: str, request: FileWriteRequest) -> dict:
+    async def instance_write_file(instance_id: str, request: FileWriteRequest) -> dict:
         """Write content to a file on a specific instance."""
         driver = _get_driver(instance_id)
-        success = driver.file_write(request.path, request.content)
+        success = await driver.file_write(request.path, request.content)
         if not success:
             raise HTTPException(status_code=403, detail="Path escapes workspace")
         return {"success": True}
 
     @app.post("/instances/{instance_id}/files/edit")
-    def instance_edit_file(instance_id: str, request: FileEditRequest) -> dict:
+    async def instance_edit_file(instance_id: str, request: FileEditRequest) -> dict:
         """Replace string(s) in a file on a specific instance."""
         driver = _get_driver(instance_id)
-        result = driver.file_edit(
+        result = await driver.file_edit(
             request.path, request.old_string, request.new_string, request.replace_all
         )
         if result is None:
@@ -344,10 +340,10 @@ def create_machine_app(workspace_dir: Path) -> FastAPI:
         }
 
     @app.post("/instances/{instance_id}/files/list")
-    def instance_list_files(instance_id: str, request: FileListRequest) -> dict:
+    async def instance_list_files(instance_id: str, request: FileListRequest) -> dict:
         """List directory entries on a specific instance."""
         driver = _get_driver(instance_id)
-        entries = driver.file_list(request.path)
+        entries = await driver.file_list(request.path)
         if entries is None:
             raise HTTPException(
                 status_code=404, detail="Path not found or not a directory"
@@ -355,10 +351,10 @@ def create_machine_app(workspace_dir: Path) -> FastAPI:
         return {"entries": entries}
 
     @app.post("/instances/{instance_id}/files/glob")
-    def instance_glob_files(instance_id: str, request: FileGlobRequest) -> dict:
+    async def instance_glob_files(instance_id: str, request: FileGlobRequest) -> dict:
         """Match files using a glob pattern on a specific instance."""
         driver = _get_driver(instance_id)
-        result = driver.file_glob(
+        result = await driver.file_glob(
             request.pattern,
             request.path,
             exclude=request.exclude,
@@ -373,90 +369,7 @@ def create_machine_app(workspace_dir: Path) -> FastAPI:
     async def instance_grep_files(instance_id: str, request: FileGrepRequest) -> dict:
         """Search file contents with a regex pattern on a specific instance."""
         driver = _get_driver(instance_id)
-        result = await driver.file_grep(  # type: ignore[misc]
-            pattern=request.pattern,
-            path=request.path,
-            output_mode=request.output_mode,
-            glob_pattern=request.glob,
-            file_type=request.type,
-            after_context=request.after_context,
-            before_context=request.before_context,
-            context=request.context,
-            case_insensitive=request.case_insensitive,
-            line_numbers=request.line_numbers,
-            head_limit=request.head_limit,
-            offset=request.offset,
-            include_ignored=request.include_ignored,
-            multiline=request.multiline,
-        )
-        if result is None:
-            raise HTTPException(status_code=404, detail="Path not found")
-        return result
-
-    @app.post("/exec", response_model=None)
-    async def exec_command(request: ExecRequest) -> ExecResponse | JSONResponse:
-        """Execute a shell command within the workspace directory."""
-        return await _run_exec(backend, request, safety)
-
-    @app.post("/files/read")
-    def read_file(request: FileReadRequest) -> dict:
-        """Read a file within the workspace."""
-        result = backend.file_read(
-            request.path, offset=request.offset, limit=request.limit
-        )
-        if result is None:
-            raise HTTPException(status_code=404, detail="File not found")
-        return {"content": result.content, "total_lines": result.total_lines}
-
-    @app.post("/files/write")
-    def write_file(request: FileWriteRequest) -> dict:
-        """Write content to a file within the workspace."""
-        success = backend.file_write(request.path, request.content)
-        if not success:
-            raise HTTPException(status_code=403, detail="Path escapes workspace")
-        return {"success": True}
-
-    @app.post("/files/edit")
-    def edit_file(request: FileEditRequest) -> dict:
-        """Replace string(s) in a file within the workspace."""
-        result = backend.file_edit(
-            request.path, request.old_string, request.new_string, request.replace_all
-        )
-        if result is None:
-            raise HTTPException(status_code=404, detail="File not found")
-        return {
-            "success": result.success,
-            "replacements_made": result.replacements_made,
-        }
-
-    @app.post("/files/list")
-    def list_files(request: FileListRequest) -> dict:
-        """List directory entries within the workspace."""
-        entries = backend.file_list(request.path)
-        if entries is None:
-            raise HTTPException(
-                status_code=404, detail="Path not found or not a directory"
-            )
-        return {"entries": entries}
-
-    @app.post("/files/glob")
-    def glob_files(request: FileGlobRequest) -> dict:
-        """Match files using a glob pattern within the workspace."""
-        result = backend.file_glob(
-            request.pattern,
-            request.path,
-            exclude=request.exclude,
-            type_filter=request.type,
-            include_ignored=request.include_ignored,
-        )
-        if result is None:
-            raise HTTPException(status_code=404, detail="Base path not found")
-        return {"matches": result.matches, "total_files": result.total_files}
-
-    @app.post("/files/grep")
-    async def grep_files(request: FileGrepRequest) -> dict:
-        """Search file contents with a regex pattern within the workspace."""
-        result = await backend.file_grep(
+        result = await driver.file_grep(
             pattern=request.pattern,
             path=request.path,
             output_mode=request.output_mode,
@@ -483,18 +396,27 @@ def create_machine_app(workspace_dir: Path) -> FastAPI:
     # ------------------------------------------------------------------
 
     def _resolve_driver(machine_instance_id: str | None) -> MachineDriver:
-        """Return the driver for the given instance, or the global backend.
+        """Return the driver for the given machine instance.
 
-        If ``machine_instance_id`` is provided but the instance is not found,
-        fall back silently to the global backend so that callers without a
-        provisioned instance still get a working driver.
+        Raises HTTP 400 if no instance ID is provided, or HTTP 404 if the
+        instance is not found.  There is no global fallback — every tool
+        call must be associated with a provisioned machine instance.
         """
-        if machine_instance_id is not None:
-            try:
-                return instance_manager.get_driver(machine_instance_id)
-            except InstanceNotFoundError:
-                pass
-        return backend
+        if machine_instance_id is None:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "machine_instance_id is required. "
+                    "Provision an instance via POST /instances first."
+                ),
+            )
+        try:
+            return instance_manager.get_driver(machine_instance_id)
+        except InstanceNotFoundError:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Machine instance {machine_instance_id!r} not found.",
+            )
 
     @app.post("/tools/bash/execute", response_model=None)
     async def tool_bash_execute(
@@ -522,16 +444,16 @@ def create_machine_app(workspace_dir: Path) -> FastAPI:
         driver = _resolve_driver(request.machine_instance_id)
         # Try reading as a file first; directories raise IsADirectoryError.
         try:
-            result = driver.file_read(file_path, offset=offset, limit=limit)
+            result = await driver.file_read(file_path, offset=offset, limit=limit)
         except IsADirectoryError:
             result = None
-            entries = driver.file_list(file_path)
+            entries = await driver.file_list(file_path)
             if entries is None:
                 raise HTTPException(status_code=404, detail="Path not found")
             return {"entries": entries}
         if result is None:
             # Path doesn't exist or escapes workspace — check if it's a directory.
-            entries = driver.file_list(file_path)
+            entries = await driver.file_list(file_path)
             if entries is not None:
                 return {"entries": entries}
             raise HTTPException(status_code=404, detail="File not found")
@@ -551,7 +473,7 @@ def create_machine_app(workspace_dir: Path) -> FastAPI:
                 detail=str(exc),
             ) from exc
         driver = _resolve_driver(request.machine_instance_id)
-        success = driver.file_write(write_req.path, write_req.content)
+        success = await driver.file_write(write_req.path, write_req.content)
         if not success:
             raise HTTPException(status_code=403, detail="Path escapes workspace")
         return {"success": True}
@@ -569,7 +491,7 @@ def create_machine_app(workspace_dir: Path) -> FastAPI:
         except (KeyError, ValidationError) as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         driver = _resolve_driver(request.machine_instance_id)
-        result = driver.file_edit(
+        result = await driver.file_edit(
             edit_req.path,
             edit_req.old_string,
             edit_req.new_string,
@@ -590,7 +512,7 @@ def create_machine_app(workspace_dir: Path) -> FastAPI:
         except ValidationError as exc:
             raise HTTPException(status_code=422, detail=exc.errors()) from exc
         driver = _resolve_driver(request.machine_instance_id)
-        result = driver.file_glob(
+        result = await driver.file_glob(
             glob_req.pattern,
             glob_req.path,
             exclude=glob_req.exclude,
@@ -609,7 +531,7 @@ def create_machine_app(workspace_dir: Path) -> FastAPI:
         except ValidationError as exc:
             raise HTTPException(status_code=422, detail=exc.errors()) from exc
         driver = _resolve_driver(request.machine_instance_id)
-        result = await driver.file_grep(  # type: ignore[misc]
+        result = await driver.file_grep(
             pattern=grep_req.pattern,
             path=grep_req.path,
             output_mode=grep_req.output_mode,
@@ -632,5 +554,4 @@ def create_machine_app(workspace_dir: Path) -> FastAPI:
     return app
 
 
-_workspace = Path(os.environ.get("WORKSPACE_DIR", "/workspace"))
-app = create_machine_app(workspace_dir=_workspace)
+app = create_machine_app()

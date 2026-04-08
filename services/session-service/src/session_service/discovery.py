@@ -57,6 +57,7 @@ def build_routing_table(
     tool_specs: list[dict[str, Any]] = []
     modes: list[dict[str, Any]] = []
     agents: list[dict[str, Any]] = []
+    behaviors: dict[str, str] = {}  # behavior_name -> app_id
 
     for app_id, describe in describe_results.items():
         # Map tools: tool_name -> app_id
@@ -73,6 +74,10 @@ def build_routing_table(
         # Collect agents advertised by this service
         for agent in describe.get("agents", []):
             agents.append(agent)
+
+        # Map behaviors: behavior_name -> app_id
+        for behavior_name in describe.get("behaviors", []):
+            behaviors[behavior_name] = app_id
 
         # Map providers: provider_name -> app_id
         for provider in describe.get("providers", []):
@@ -118,6 +123,7 @@ def build_routing_table(
         "_tool_specs": tool_specs,
         "_modes": modes,
         "_agents": agents,
+        "_behaviors": behaviors,
         "_content_services": content_services,
         "context": context_app_id,
     }

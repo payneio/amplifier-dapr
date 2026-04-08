@@ -62,6 +62,9 @@ class TestJsonModeStreamError:
 
         mock_client = MagicMock()
         mock_client.stream_turn = mock_stream
+        mock_client.create_session = AsyncMock(
+            return_value={"session_id": "test-session", "machine_instance_id": "mi-1"}
+        )
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=None)
         mock_client_class = MagicMock(return_value=mock_client)

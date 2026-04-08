@@ -23,10 +23,10 @@ agent:
   behaviors:
     machine:
       build: ./services/svc-machine
-      environment:
-        WORKSPACE_DIR: /workspace
+      extra_hosts:
+        - "host.docker.internal:host-gateway"
       volumes:
-        - "${WORKSPACE_PATH:-.}:/workspace"
+        - "${HOME:-.}/.ssh:/root/.ssh:ro"
 
     web:
       build: ./services/svc-web

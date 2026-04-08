@@ -335,6 +335,91 @@ def test_compose_session_service_mounts_service_map() -> None:
     )
 
 
+def test_compose_extra_hosts_passthrough() -> None:
+    """extra_hosts from ServiceEntry appear in the compose service extra_hosts list."""
+    agent = AgentDefinition(
+        ref="test/hosts-agent",
+        orchestrator=ServiceEntry(image="ghcr.io/example/orchestrator:latest"),
+        context_manager=ServiceEntry(image="ctx:latest"),
+        providers=ServiceEntry(image="prov:latest"),
+        behaviors={
+            "machine": ServiceEntry(
+                build="./services/svc-machine",
+                extra_hosts=["host.docker.internal:host-gateway"],
+                volumes=["${HOME:-.}/.ssh:/root/.ssh:ro"],
+            ),
+        },
+    )
+    sme = build_service_map_entry(agent)
+    result = generate_compose({"test/hosts-agent": (agent, sme)})
+    services = result["services"]
+
+    machine_name = sme.behaviors["machine"]
+    machine_svc = services[machine_name]
+    assert "extra_hosts" in machine_svc, (
+        f"Expected extra_hosts in machine service, got keys: {list(machine_svc.keys())}"
+    )
+    assert "host.docker.internal:host-gateway" in machine_svc["extra_hosts"], (
+        f"Expected host.docker.internal:host-gateway in extra_hosts, "
+        f"got: {machine_svc['extra_hosts']}"
+    )
+    # Volumes should also be present alongside extra_hosts
+    assert "${HOME:-.}/.ssh:/root/.ssh:ro" in machine_svc["volumes"]
+
+
+def test_compose_extra_hosts_merge_deduplication() -> None:
+    """extra_hosts are merged without duplicates when the same service appears twice."""
+    shared_build = "./services/svc-machine"
+    agent1 = AgentDefinition(
+        ref="test/merge-agent1",
+        orchestrator=ServiceEntry(image="orch:latest"),
+        context_manager=ServiceEntry(image="ctx:latest"),
+        providers=ServiceEntry(image="prov:latest"),
+        behaviors={
+            "machine": ServiceEntry(
+                build=shared_build,
+                extra_hosts=["host.docker.internal:host-gateway"],
+            ),
+        },
+    )
+    agent2 = AgentDefinition(
+        ref="test/merge-agent2",
+        orchestrator=ServiceEntry(image="orch2:latest"),
+        context_manager=ServiceEntry(image="ctx2:latest"),
+        providers=ServiceEntry(image="prov2:latest"),
+        behaviors={
+            "machine": ServiceEntry(
+                build=shared_build,
+                extra_hosts=["host.docker.internal:host-gateway"],  # same entry
+            ),
+        },
+    )
+    sme1 = build_service_map_entry(agent1)
+    sme2 = build_service_map_entry(agent2)
+
+    result = generate_compose(
+        {
+            "test/merge-agent1": (agent1, sme1),
+            "test/merge-agent2": (agent2, sme2),
+        }
+    )
+    services = result["services"]
+
+    # Both agents hash to the same machine service name
+    machine_name = sme1.behaviors["machine"]
+    assert machine_name == sme2.behaviors["machine"], (
+        "Same build path must produce same hashed service name"
+    )
+    machine_svc = services[machine_name]
+    # The host entry must appear exactly once (no duplicates after merge)
+    host_count = machine_svc.get("extra_hosts", []).count(
+        "host.docker.internal:host-gateway"
+    )
+    assert host_count == 1, (
+        f"Expected exactly one host.docker.internal entry after dedup, got {host_count}"
+    )
+
+
 def test_write_compose(tmp_path: Path) -> None:
     """write_compose writes the compose dict to a valid YAML file."""
     compose = {

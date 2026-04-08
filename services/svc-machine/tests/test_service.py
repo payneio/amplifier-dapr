@@ -1,7 +1,5 @@
 """Tests for svc-machine FastAPI service endpoints."""
 
-import os
-from collections.abc import Generator
 from pathlib import Path
 
 import pytest
@@ -25,40 +23,8 @@ class TestModuleLevelApp:
 @pytest.fixture
 def client(tmp_path: Path) -> TestClient:
     """Create a TestClient for the machine service."""
-    app = create_machine_app(workspace_dir=tmp_path)
+    app = create_machine_app()
     return TestClient(app)
-
-
-class TestExecEndpoint:
-    """Tests for POST /exec endpoint."""
-
-    def test_echo(self, client: TestClient) -> None:
-        """POST /exec executes a command and returns stdout/stderr/exit_code."""
-        response = client.post(
-            "/exec",
-            json={"command": "echo hello_world"},
-        )
-        assert response.status_code == 200
-        data = response.json()
-        assert "hello_world" in data["stdout"]
-        assert data["exit_code"] == 0
-        assert "stderr" in data
-
-    def test_missing_command(self, client: TestClient) -> None:
-        """POST /exec returns 422 when command field is missing."""
-        response = client.post("/exec", json={})
-        assert response.status_code == 422
-
-    def test_working_dir_outside_workspace_returns_422(
-        self, client: TestClient
-    ) -> None:
-        """POST /exec returns 422 with error detail when working_dir escapes workspace."""
-        response = client.post(
-            "/exec",
-            json={"command": "echo hi", "working_dir": "/etc"},
-        )
-        assert response.status_code == 422
-        assert "outside workspace" in response.json()["detail"]
 
 
 class TestHealthz:
@@ -104,150 +70,6 @@ class TestDescribe:
         )
 
 
-class TestFileReadEndpoint:
-    """Tests for POST /files/read endpoint."""
-
-    @pytest.fixture
-    def workspace(self, tmp_path: Path) -> Path:
-        """Provide the workspace directory."""
-        return tmp_path
-
-    @pytest.fixture
-    def client(self, workspace: Path) -> TestClient:
-        """Create a TestClient with a known workspace directory."""
-        app = create_machine_app(workspace_dir=workspace)
-        return TestClient(app)
-
-    def test_read_file(self, client: TestClient, workspace: Path) -> None:
-        """POST /files/read returns content and total_lines for an existing file."""
-        (workspace / "hello.txt").write_text("line1\nline2\nline3\n")
-        response = client.post("/files/read", json={"path": "hello.txt"})
-        assert response.status_code == 200
-        data = response.json()
-        assert "line1" in data["content"]
-        assert data["total_lines"] == 3
-
-    def test_read_missing_file(self, client: TestClient) -> None:
-        """POST /files/read returns 404 when file does not exist."""
-        response = client.post("/files/read", json={"path": "missing.txt"})
-        assert response.status_code == 404
-
-
-class TestFileWriteEndpoint:
-    """Tests for POST /files/write endpoint."""
-
-    @pytest.fixture
-    def workspace(self, tmp_path: Path) -> Path:
-        """Provide the workspace directory."""
-        return tmp_path
-
-    @pytest.fixture
-    def client(self, workspace: Path) -> TestClient:
-        """Create a TestClient with a known workspace directory."""
-        app = create_machine_app(workspace_dir=workspace)
-        return TestClient(app)
-
-    def test_write_file(self, client: TestClient, workspace: Path) -> None:
-        """POST /files/write creates file and returns success."""
-        response = client.post(
-            "/files/write",
-            json={"path": "output.txt", "content": "written content\n"},
-        )
-        assert response.status_code == 200
-        data = response.json()
-        assert data["success"] is True
-        assert (workspace / "output.txt").read_text() == "written content\n"
-
-
-class TestFileEditEndpoint:
-    """Tests for POST /files/edit endpoint."""
-
-    @pytest.fixture
-    def workspace(self, tmp_path: Path) -> Path:
-        """Provide the workspace directory."""
-        return tmp_path
-
-    @pytest.fixture
-    def client(self, workspace: Path) -> TestClient:
-        """Create a TestClient with a known workspace directory."""
-        app = create_machine_app(workspace_dir=workspace)
-        return TestClient(app)
-
-    def test_edit_file(self, client: TestClient, workspace: Path) -> None:
-        """POST /files/edit replaces a string and returns replacements_made=1."""
-        (workspace / "edit_me.txt").write_text("hello world\n")
-        response = client.post(
-            "/files/edit",
-            json={"path": "edit_me.txt", "old_string": "world", "new_string": "earth"},
-        )
-        assert response.status_code == 200
-        data = response.json()
-        assert data["replacements_made"] == 1
-        assert (workspace / "edit_me.txt").read_text() == "hello earth\n"
-
-
-@pytest.fixture
-def safety_client(tmp_path: Path) -> Generator[TestClient, None, None]:
-    """Create a TestClient with SAFETY_PROFILE=strict env var, yields then cleans up."""
-    prev = os.environ.get("SAFETY_PROFILE")
-    os.environ["SAFETY_PROFILE"] = "strict"
-    try:
-        app = create_machine_app(workspace_dir=tmp_path)
-        yield TestClient(app)
-    finally:
-        if prev is None:
-            os.environ.pop("SAFETY_PROFILE", None)
-        else:
-            os.environ["SAFETY_PROFILE"] = prev
-
-
-class TestExecSafety:
-    """Tests for safety validation on POST /exec."""
-
-    def test_blocked_command_returns_403(self, safety_client: TestClient) -> None:
-        """POST /exec with rm -rf / returns 403 with denied=True and reason present."""
-        response = safety_client.post("/exec", json={"command": "rm -rf /"})
-        assert response.status_code == 403
-        detail = response.json()["detail"]
-        assert detail["denied"] is True
-        assert "reason" in detail
-
-    def test_allowed_command_passes(self, safety_client: TestClient) -> None:
-        """POST /exec with echo safe returns 200 with 'safe' in stdout."""
-        response = safety_client.post("/exec", json={"command": "echo safe"})
-        assert response.status_code == 200
-        assert "safe" in response.json()["stdout"]
-
-
-class TestExecTruncation:
-    """Tests for output truncation on POST /exec."""
-
-    def test_large_output_is_truncated(self, client: TestClient) -> None:
-        """POST /exec with 200k-char output returns 200 with truncated=True."""
-        response = client.post(
-            "/exec",
-            json={"command": "python3 -c \"print('x' * 200_000)\"", "timeout": 10},
-        )
-        assert response.status_code == 200
-        data = response.json()
-        assert data["truncated"] is True
-
-
-class TestExecBackground:
-    """Tests for background execution on POST /exec."""
-
-    def test_background_returns_pid(self, client: TestClient) -> None:
-        """POST /exec with run_in_background=True returns int pid and status 'running'."""
-        response = client.post(
-            "/exec",
-            json={"command": "sleep 60", "run_in_background": True},
-        )
-        assert response.status_code == 200
-        data = response.json()
-        assert isinstance(data["pid"], int)
-        assert data["status"] == "running"
-
-
 class TestInstanceLifecycle:
     """Tests for instance lifecycle endpoints: POST/DELETE /instances."""
 
@@ -259,7 +81,7 @@ class TestInstanceLifecycle:
     @pytest.fixture
     def client(self, workspace: Path) -> TestClient:
         """Create a TestClient with a known workspace directory."""
-        app = create_machine_app(workspace_dir=workspace)
+        app = create_machine_app()
         return TestClient(app)
 
     def test_create_instance_returns_instance_id(
@@ -307,7 +129,7 @@ class TestInstanceExec:
     @pytest.fixture
     def client(self, workspace: Path) -> TestClient:
         """Create a TestClient with a known workspace directory."""
-        app = create_machine_app(workspace_dir=workspace)
+        app = create_machine_app()
         return TestClient(app)
 
     @pytest.fixture
@@ -353,7 +175,7 @@ class TestInstanceFileOps:
     @pytest.fixture
     def client(self, workspace: Path) -> TestClient:
         """Create a TestClient with a known workspace directory."""
-        app = create_machine_app(workspace_dir=workspace)
+        app = create_machine_app()
         return TestClient(app)
 
     @pytest.fixture
@@ -410,34 +232,63 @@ class TestToolDispatchBash:
     """Tests for POST /tools/bash/execute — standard orchestrator dispatch route."""
 
     @pytest.fixture
-    def client(self, tmp_path: Path) -> TestClient:
-        """Create a TestClient with a known workspace directory."""
-        app = create_machine_app(workspace_dir=tmp_path)
+    def client(self) -> TestClient:
+        """Create a TestClient."""
+        app = create_machine_app()
         return TestClient(app)
 
-    def test_bash_execute_runs_command(self, client: TestClient) -> None:
+    @pytest.fixture
+    def instance_id(self, client: TestClient, tmp_path: Path) -> str:
+        """Create a local instance and return its ID."""
+        resp = client.post(
+            "/instances",
+            json={"driver_type": "local", "config": {"workspace_dir": str(tmp_path)}},
+        )
+        assert resp.status_code == 200
+        return resp.json()["instance_id"]
+
+    def test_bash_execute_runs_command(
+        self, client: TestClient, instance_id: str
+    ) -> None:
         """POST /tools/bash/execute accepts orchestrator payload and runs the command."""
         response = client.post(
             "/tools/bash/execute",
-            json={"name": "bash", "input": {"command": "echo dispatch_ok"}},
+            json={
+                "name": "bash",
+                "input": {"command": "echo dispatch_ok"},
+                "machine_instance_id": instance_id,
+            },
         )
         assert response.status_code == 200
         data = response.json()
         assert "dispatch_ok" in data["stdout"]
         assert data["exit_code"] == 0
 
-    def test_bash_execute_missing_command_returns_422(self, client: TestClient) -> None:
+    def test_bash_execute_missing_command_returns_422(
+        self, client: TestClient, instance_id: str
+    ) -> None:
         """POST /tools/bash/execute with empty input returns 422."""
         response = client.post(
             "/tools/bash/execute",
-            json={"name": "bash", "input": {}},
+            json={"name": "bash", "input": {}, "machine_instance_id": instance_id},
         )
         assert response.status_code == 422
 
-    def test_bash_execute_with_unknown_instance_falls_back_to_global(
+    def test_bash_execute_without_instance_returns_400(
         self, client: TestClient
     ) -> None:
-        """POST /tools/bash/execute with unknown machine_instance_id uses global backend."""
+        """POST /tools/bash/execute without machine_instance_id returns 400."""
+        response = client.post(
+            "/tools/bash/execute",
+            json={"name": "bash", "input": {"command": "echo nope"}},
+        )
+        assert response.status_code == 400
+        assert "machine_instance_id" in response.json()["detail"].lower()
+
+    def test_bash_execute_with_unknown_instance_returns_404(
+        self, client: TestClient
+    ) -> None:
+        """POST /tools/bash/execute with unknown machine_instance_id returns 404."""
         response = client.post(
             "/tools/bash/execute",
             json={
@@ -446,30 +297,7 @@ class TestToolDispatchBash:
                 "machine_instance_id": "nonexistent-instance-id",
             },
         )
-        assert response.status_code == 200
-        assert "fallback" in response.json()["stdout"]
-
-    def test_bash_execute_with_valid_instance_uses_instance_driver(
-        self, client: TestClient, tmp_path: Path
-    ) -> None:
-        """POST /tools/bash/execute with valid machine_instance_id uses instance driver."""
-        create_resp = client.post(
-            "/instances",
-            json={"driver_type": "local", "config": {"workspace_dir": str(tmp_path)}},
-        )
-        assert create_resp.status_code == 200
-        instance_id = create_resp.json()["instance_id"]
-
-        response = client.post(
-            "/tools/bash/execute",
-            json={
-                "name": "bash",
-                "input": {"command": "echo instance_used"},
-                "machine_instance_id": instance_id,
-            },
-        )
-        assert response.status_code == 200
-        assert "instance_used" in response.json()["stdout"]
+        assert response.status_code == 404
 
 
 class TestToolDispatchReadFile:
@@ -481,43 +309,63 @@ class TestToolDispatchReadFile:
         return tmp_path
 
     @pytest.fixture
-    def client(self, workspace: Path) -> TestClient:
-        """Create a TestClient with a known workspace directory."""
-        app = create_machine_app(workspace_dir=workspace)
+    def client(self) -> TestClient:
+        app = create_machine_app()
         return TestClient(app)
 
+    @pytest.fixture
+    def instance_id(self, client: TestClient, workspace: Path) -> str:
+        resp = client.post(
+            "/instances",
+            json={"driver_type": "local", "config": {"workspace_dir": str(workspace)}},
+        )
+        assert resp.status_code == 200
+        return resp.json()["instance_id"]
+
     def test_read_file_execute_returns_content(
-        self, client: TestClient, workspace: Path
+        self, client: TestClient, workspace: Path, instance_id: str
     ) -> None:
         """POST /tools/read_file/execute returns file content for existing file."""
         (workspace / "test.txt").write_text("tool dispatch content\n")
         response = client.post(
             "/tools/read_file/execute",
-            json={"name": "read_file", "input": {"file_path": "test.txt"}},
+            json={
+                "name": "read_file",
+                "input": {"file_path": "test.txt"},
+                "machine_instance_id": instance_id,
+            },
         )
         assert response.status_code == 200
         data = response.json()
         assert "tool dispatch content" in data["content"]
 
     def test_read_file_execute_missing_path_returns_422(
-        self, client: TestClient
+        self, client: TestClient, instance_id: str
     ) -> None:
         """POST /tools/read_file/execute with no file_path returns 422."""
         response = client.post(
             "/tools/read_file/execute",
-            json={"name": "read_file", "input": {}},
+            json={
+                "name": "read_file",
+                "input": {},
+                "machine_instance_id": instance_id,
+            },
         )
         assert response.status_code == 422
 
     def test_read_file_execute_directory_returns_entries(
-        self, client: TestClient, workspace: Path
+        self, client: TestClient, workspace: Path, instance_id: str
     ) -> None:
         """POST /tools/read_file/execute on a directory returns entries list."""
         (workspace / "subdir").mkdir()
         (workspace / "subdir" / "a.txt").write_text("a")
         response = client.post(
             "/tools/read_file/execute",
-            json={"name": "read_file", "input": {"file_path": "subdir"}},
+            json={
+                "name": "read_file",
+                "input": {"file_path": "subdir"},
+                "machine_instance_id": instance_id,
+            },
         )
         assert response.status_code == 200
         data = response.json()
@@ -529,17 +377,24 @@ class TestToolDispatchWriteFile:
 
     @pytest.fixture
     def workspace(self, tmp_path: Path) -> Path:
-        """Provide the workspace directory."""
         return tmp_path
 
     @pytest.fixture
-    def client(self, workspace: Path) -> TestClient:
-        """Create a TestClient with a known workspace directory."""
-        app = create_machine_app(workspace_dir=workspace)
+    def client(self) -> TestClient:
+        app = create_machine_app()
         return TestClient(app)
 
+    @pytest.fixture
+    def instance_id(self, client: TestClient, workspace: Path) -> str:
+        resp = client.post(
+            "/instances",
+            json={"driver_type": "local", "config": {"workspace_dir": str(workspace)}},
+        )
+        assert resp.status_code == 200
+        return resp.json()["instance_id"]
+
     def test_write_file_execute_creates_file(
-        self, client: TestClient, workspace: Path
+        self, client: TestClient, workspace: Path, instance_id: str
     ) -> None:
         """POST /tools/write_file/execute creates file and returns success."""
         response = client.post(
@@ -547,6 +402,7 @@ class TestToolDispatchWriteFile:
             json={
                 "name": "write_file",
                 "input": {"file_path": "created.txt", "content": "dispatch write\n"},
+                "machine_instance_id": instance_id,
             },
         )
         assert response.status_code == 200
@@ -555,12 +411,16 @@ class TestToolDispatchWriteFile:
         assert (workspace / "created.txt").read_text() == "dispatch write\n"
 
     def test_write_file_execute_missing_fields_returns_422(
-        self, client: TestClient
+        self, client: TestClient, instance_id: str
     ) -> None:
         """POST /tools/write_file/execute with no file_path returns 422."""
         response = client.post(
             "/tools/write_file/execute",
-            json={"name": "write_file", "input": {}},
+            json={
+                "name": "write_file",
+                "input": {},
+                "machine_instance_id": instance_id,
+            },
         )
         assert response.status_code == 422
 
@@ -570,17 +430,24 @@ class TestToolDispatchEditFile:
 
     @pytest.fixture
     def workspace(self, tmp_path: Path) -> Path:
-        """Provide the workspace directory."""
         return tmp_path
 
     @pytest.fixture
-    def client(self, workspace: Path) -> TestClient:
-        """Create a TestClient with a known workspace directory."""
-        app = create_machine_app(workspace_dir=workspace)
+    def client(self) -> TestClient:
+        app = create_machine_app()
         return TestClient(app)
 
+    @pytest.fixture
+    def instance_id(self, client: TestClient, workspace: Path) -> str:
+        resp = client.post(
+            "/instances",
+            json={"driver_type": "local", "config": {"workspace_dir": str(workspace)}},
+        )
+        assert resp.status_code == 200
+        return resp.json()["instance_id"]
+
     def test_edit_file_execute_replaces_string(
-        self, client: TestClient, workspace: Path
+        self, client: TestClient, workspace: Path, instance_id: str
     ) -> None:
         """POST /tools/edit_file/execute replaces a string in a file."""
         (workspace / "source.txt").write_text("hello world\n")
@@ -593,6 +460,7 @@ class TestToolDispatchEditFile:
                     "old_string": "world",
                     "new_string": "dispatch",
                 },
+                "machine_instance_id": instance_id,
             },
         )
         assert response.status_code == 200
@@ -601,12 +469,16 @@ class TestToolDispatchEditFile:
         assert (workspace / "source.txt").read_text() == "hello dispatch\n"
 
     def test_edit_file_execute_missing_fields_returns_422(
-        self, client: TestClient
+        self, client: TestClient, instance_id: str
     ) -> None:
         """POST /tools/edit_file/execute with missing required fields returns 422."""
         response = client.post(
             "/tools/edit_file/execute",
-            json={"name": "edit_file", "input": {"file_path": "x.txt"}},
+            json={
+                "name": "edit_file",
+                "input": {"file_path": "x.txt"},
+                "machine_instance_id": instance_id,
+            },
         )
         assert response.status_code == 422
 
@@ -616,35 +488,52 @@ class TestToolDispatchGlob:
 
     @pytest.fixture
     def workspace(self, tmp_path: Path) -> Path:
-        """Provide the workspace directory."""
         return tmp_path
 
     @pytest.fixture
-    def client(self, workspace: Path) -> TestClient:
-        """Create a TestClient with a known workspace directory."""
-        app = create_machine_app(workspace_dir=workspace)
+    def client(self) -> TestClient:
+        app = create_machine_app()
         return TestClient(app)
 
+    @pytest.fixture
+    def instance_id(self, client: TestClient, workspace: Path) -> str:
+        resp = client.post(
+            "/instances",
+            json={"driver_type": "local", "config": {"workspace_dir": str(workspace)}},
+        )
+        assert resp.status_code == 200
+        return resp.json()["instance_id"]
+
     def test_glob_execute_returns_matches(
-        self, client: TestClient, workspace: Path
+        self, client: TestClient, workspace: Path, instance_id: str
     ) -> None:
         """POST /tools/glob/execute returns list of matching file paths."""
         (workspace / "file_a.py").write_text("# a")
         (workspace / "file_b.py").write_text("# b")
         response = client.post(
             "/tools/glob/execute",
-            json={"name": "glob", "input": {"pattern": "*.py"}},
+            json={
+                "name": "glob",
+                "input": {"pattern": "*.py"},
+                "machine_instance_id": instance_id,
+            },
         )
         assert response.status_code == 200
         data = response.json()
         assert "matches" in data
         assert len(data["matches"]) == 2
 
-    def test_glob_execute_missing_pattern_returns_422(self, client: TestClient) -> None:
+    def test_glob_execute_missing_pattern_returns_422(
+        self, client: TestClient, instance_id: str
+    ) -> None:
         """POST /tools/glob/execute with no pattern returns 422."""
         response = client.post(
             "/tools/glob/execute",
-            json={"name": "glob", "input": {}},
+            json={
+                "name": "glob",
+                "input": {},
+                "machine_instance_id": instance_id,
+            },
         )
         assert response.status_code == 422
 
@@ -654,34 +543,50 @@ class TestToolDispatchGrep:
 
     @pytest.fixture
     def workspace(self, tmp_path: Path) -> Path:
-        """Provide the workspace directory."""
         return tmp_path
 
     @pytest.fixture
-    def client(self, workspace: Path) -> TestClient:
-        """Create a TestClient with a known workspace directory."""
-        app = create_machine_app(workspace_dir=workspace)
+    def client(self) -> TestClient:
+        app = create_machine_app()
         return TestClient(app)
 
+    @pytest.fixture
+    def instance_id(self, client: TestClient, workspace: Path) -> str:
+        resp = client.post(
+            "/instances",
+            json={"driver_type": "local", "config": {"workspace_dir": str(workspace)}},
+        )
+        assert resp.status_code == 200
+        return resp.json()["instance_id"]
+
     def test_grep_execute_returns_results(
-        self, client: TestClient, workspace: Path
+        self, client: TestClient, workspace: Path, instance_id: str
     ) -> None:
         """POST /tools/grep/execute returns files containing pattern."""
         (workspace / "match.txt").write_text("the target phrase\n")
         (workspace / "no_match.txt").write_text("nothing here\n")
         response = client.post(
             "/tools/grep/execute",
-            json={"name": "grep", "input": {"pattern": "target phrase"}},
+            json={
+                "name": "grep",
+                "input": {"pattern": "target phrase"},
+                "machine_instance_id": instance_id,
+            },
         )
         assert response.status_code == 200
         data = response.json()
-        # Result dict varies by output_mode; files_with_matches mode returns 'results'
         assert isinstance(data, dict)
 
-    def test_grep_execute_missing_pattern_returns_422(self, client: TestClient) -> None:
+    def test_grep_execute_missing_pattern_returns_422(
+        self, client: TestClient, instance_id: str
+    ) -> None:
         """POST /tools/grep/execute with no pattern returns 422."""
         response = client.post(
             "/tools/grep/execute",
-            json={"name": "grep", "input": {}},
+            json={
+                "name": "grep",
+                "input": {},
+                "machine_instance_id": instance_id,
+            },
         )
         assert response.status_code == 422

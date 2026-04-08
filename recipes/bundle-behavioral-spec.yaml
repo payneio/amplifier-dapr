@@ -1,0 +1,168 @@
+# =============================================================================
+# BUNDLE BEHAVIORAL SPECIFICATION RECIPE
+# =============================================================================
+#
+# Analyzes a resolved Amplifier bundle's full transitive composition and
+# produces a scenario-driven behavioral specification document.
+#
+# Usage:
+#   recipes(
+#     operation="execute",
+#     recipe_path="recipes/bundle-behavioral-spec.yaml",
+#     context={
+#       "bundle_name": "foundation",
+#       "registry_path": "~/.amplifier/registry.json",
+#       "output_path": "docs/bundle-behavioral-spec-foundation.md"
+#     }
+#   )
+#
+# =============================================================================
+
+name: "bundle-behavioral-spec"
+description: "Analyze a bundle's full composition and produce a behavioral specification document"
+version: "1.0.0"
+tags: ["bundle", "analysis", "documentation", "behavioral-spec"]
+
+context:
+  bundle_name: ""       # Required: Name of the bundle to analyze (e.g. "foundation")
+  registry_path: ""     # Required: Path to registry.json (e.g. "~/.amplifier/registry.json")
+  output_path: ""       # Required: Output file path for the spec document
+
+steps:
+  # ==========================================================================
+  # Step 1: Deterministic Parse
+  # Read registry.json, walk dependency tree, parse all component files,
+  # output JSON manifest with ParsedManifest per file + triage flags.
+  # ==========================================================================
+  - id: "parse-composition"
+    type: "bash"
+    timeout: 60
+    parse_json: true
+    output: "manifest"
+    command: |
+      set -euo pipefail
+      cd "$(git rev-parse --show-toplevel)"
+      uv run python recipes/scripts/parse_bundle_composition.py \
+        "{{bundle_name}}" "{{registry_path}}"
+
+  # ==========================================================================
+  # Step 2: LLM Extraction (parallel)
+  # For each prose-heavy file flagged by triage, extract 6 behavioral fields.
+  # ==========================================================================
+  - id: "extract-behaviors"
+    agent: "foundation:explorer"
+    foreach: "{{manifest.llm_targets}}"
+    as: "target"
+    parallel: 5
+    max_iterations: 200
+    collect: "extractions"
+    on_error: "continue"
+    timeout: 120
+    model_role: fast
+    prompt: |
+      You are a behavioral extraction agent. You read Amplifier component files
+      and extract structured behavioral information.
+
+      ## Input
+
+      File: {{target.file_path}}
+      Component type: {{target.component_type}}
+      Bundle: {{target.bundle_origin}}
+      Description: {{target.description}}
+
+      Read the file at the path above and extract the following 6 fields.
+      Return ONLY a JSON object with these fields, no other text:
+
+      ```json
+      {
+        "file_path": "{{target.file_path}}",
+        "component_type": "{{target.component_type}}",
+        "purpose": "One sentence: what does this component do?",
+        "behavioral_directives": ["List of things this component tells the LLM to do or not do"],
+        "trigger_conditions": ["When this component activates or should be used"],
+        "exit_conditions": ["When this component finishes or transitions away"],
+        "prose_references": [{"type": "delegation|skill|mode|recipe|tool", "target": "name", "when": "condition"}],
+        "workflow_phases": ["Ordered phases or steps described in the prose"]
+      }
+      ```
+
+      Rules:
+      - Be specific and concrete, not generic
+      - Extract actual names from @mentions and delegation targets
+      - For modes: focus on tool restrictions, transition rules, and the hybrid pattern
+      - For agents: focus on the meta.description triggers and body methodology
+      - For skills: focus on workflow phases, tables, and behavioral logic
+      - For context files: focus on behavioral directives and cross-cutting concerns
+      - If a field has no content, use an empty list []
+
+  # ==========================================================================
+  # Step 3: Synthesis
+  # Combine all ParsedManifests + LLM extractions into the final behavioral
+  # specification document.
+  # ==========================================================================
+  - id: "synthesize-spec"
+    agent: "foundation:zen-architect"
+    timeout: 600
+    model_role: reasoning
+    output: "spec_result"
+    prompt: |
+      You are a behavioral specification synthesizer. You receive the complete
+      structural analysis and behavioral extractions for an Amplifier bundle
+      and produce a comprehensive behavioral specification document.
+
+      ## Bundle: {{bundle_name}}
+
+      ## Structural Manifest
+      Dependency tree: {{manifest.dependency_tree}}
+      Skipped bundles (no local_path): {{manifest.skipped_bundles}}
+      Skills sources: {{manifest.skills_sources}}
+
+      ### All Parsed Manifests
+      {{manifest.manifests}}
+
+      ### LLM Behavioral Extractions
+      {{extractions}}
+
+      ## Your Task
+
+      Write a comprehensive behavioral specification document to the file:
+      {{output_path}}
+
+      The document MUST have these three parts:
+
+      ### Part 1: Component Inventory
+      Flat reference tables:
+      - **Bundles** table: name, type (root/behavior), includes chain, description
+      - **Modes** table: name, shortcut, default action, tool restrictions summary, transitions
+      - **Agents** table: name, model role, trigger summary (from extraction), tools
+      - **Skills** table: name, context mode, invocable, purpose
+      - **Recipes** table: name, execution mode, step count, has approval gates
+
+      ### Part 2: Relationship Graph
+      - **Mode transition state machine**: text diagram showing all mode-to-mode transitions
+      - **Delegation map**: which agents are delegated to, by whom, under what conditions
+      - **Context loading chain**: always-loaded vs mode-activated vs on-demand context files
+
+      ### Part 3: Expected Behavioral Logic (Scenarios)
+      Organized by user intent (not by mechanism type). For each common scenario:
+      - Entry conditions (what the user says/does)
+      - Expected sequence with numbered steps
+      - Each step shows: mechanism used, tool restrictions, expected behavior
+      - Exit conditions and transition targets
+      - Decision points with branching
+
+      Example scenarios to cover:
+      - User wants to build a new feature (brainstorm to plan to execute to finish)
+      - User reports a bug (debug mode flow)
+      - User asks a question about the codebase (exploration/delegation)
+      - User wants to run a recipe
+      - Small task (< 20 lines, skip modes)
+
+      ## Quality Requirements
+      - Use actual component names from the manifests, not generic placeholders
+      - Cross-reference: if a mode says "delegate to X", confirm X exists in agents
+      - Note composition order (later includes override earlier)
+      - Distinguish always-loaded context from mode-activated context
+      - Flag any orphaned components (referenced but not found) or conflicts
+
+      Write the complete document now.

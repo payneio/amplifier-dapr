@@ -183,12 +183,12 @@ def _make_conn_with_sftp(mock_sftp: MagicMock) -> AsyncMock:
 
 
 async def test_file_read_async_returns_file_read_result() -> None:
-    """file_read_async() returns a FileReadResult with content and total_lines."""
+    """file_read() returns a FileReadResult with content and total_lines."""
     driver = SSHDriver(host="localhost", working_dir="/workspace")
     mock_sftp = _make_sftp_mock(read_data=b"line1\nline2\nline3\n")
     driver._conn = _make_conn_with_sftp(mock_sftp)
 
-    result = await driver.file_read_async("/workspace/test.txt")
+    result = await driver.file_read("/workspace/test.txt")
 
     assert isinstance(result, FileReadResult)
     assert result.total_lines == 3
@@ -197,13 +197,13 @@ async def test_file_read_async_returns_file_read_result() -> None:
 
 
 async def test_file_read_async_applies_offset_and_limit() -> None:
-    """file_read_async() applies 1-based offset and optional limit to lines."""
+    """file_read() applies 1-based offset and optional limit to lines."""
     driver = SSHDriver(host="localhost", working_dir="/workspace")
     mock_sftp = _make_sftp_mock(read_data=b"a\nb\nc\nd\ne\n")
     driver._conn = _make_conn_with_sftp(mock_sftp)
 
     # offset=2 → skip line 1 ("a"), limit=2 → take lines 2,3 ("b","c")
-    result = await driver.file_read_async("/workspace/test.txt", offset=2, limit=2)
+    result = await driver.file_read("/workspace/test.txt", offset=2, limit=2)
 
     assert result is not None
     assert result.total_lines == 5
@@ -215,12 +215,12 @@ async def test_file_read_async_applies_offset_and_limit() -> None:
 
 
 async def test_file_read_async_returns_none_on_oserror() -> None:
-    """file_read_async() returns None when the file does not exist (OSError)."""
+    """file_read() returns None when the file does not exist (OSError)."""
     driver = SSHDriver(host="localhost", working_dir="/workspace")
     mock_sftp = _make_sftp_mock(raise_on_open=OSError("No such file"))
     driver._conn = _make_conn_with_sftp(mock_sftp)
 
-    result = await driver.file_read_async("/workspace/nonexistent.txt")
+    result = await driver.file_read("/workspace/nonexistent.txt")
 
     assert result is None
 
@@ -229,12 +229,12 @@ async def test_file_read_async_returns_none_on_oserror() -> None:
 
 
 async def test_file_write_async_writes_content_and_returns_true() -> None:
-    """file_write_async() writes content via SFTP and returns True."""
+    """file_write() writes content via SFTP and returns True."""
     driver = SSHDriver(host="localhost", working_dir="/workspace")
     mock_sftp = _make_sftp_mock()
     driver._conn = _make_conn_with_sftp(mock_sftp)
 
-    result = await driver.file_write_async("/workspace/test.txt", "hello world\n")
+    result = await driver.file_write("/workspace/test.txt", "hello world\n")
 
     assert result is True
     # The mock file's write() should have been called with encoded content
@@ -245,12 +245,12 @@ async def test_file_write_async_writes_content_and_returns_true() -> None:
 
 
 async def test_file_edit_async_replaces_string() -> None:
-    """file_edit_async() replaces old_string with new_string and returns FileEditResult."""
+    """file_edit() replaces old_string with new_string and returns FileEditResult."""
     driver = SSHDriver(host="localhost", working_dir="/workspace")
     mock_sftp = _make_sftp_mock(read_data=b"hello world\n")
     driver._conn = _make_conn_with_sftp(mock_sftp)
 
-    result = await driver.file_edit_async(
+    result = await driver.file_edit(
         "/workspace/test.txt", old_string="world", new_string="earth"
     )
 
@@ -260,12 +260,12 @@ async def test_file_edit_async_replaces_string() -> None:
 
 
 async def test_file_edit_async_returns_none_for_missing_file() -> None:
-    """file_edit_async() returns None when the target file does not exist."""
+    """file_edit() returns None when the target file does not exist."""
     driver = SSHDriver(host="localhost", working_dir="/workspace")
     mock_sftp = _make_sftp_mock(raise_on_open=OSError("No such file"))
     driver._conn = _make_conn_with_sftp(mock_sftp)
 
-    result = await driver.file_edit_async(
+    result = await driver.file_edit(
         "/workspace/missing.txt", old_string="a", new_string="b"
     )
 
@@ -381,33 +381,3 @@ def test_resolve_path_relative() -> None:
     """_resolve_path joins relative paths with working_dir."""
     driver = SSHDriver(host="localhost", working_dir="/workspace")
     assert driver._resolve_path("config.json") == "/workspace/config.json"
-
-
-# ── Sync methods raise NotImplementedError with async guidance ────────────────
-
-
-def test_file_read_sync_raises_not_implemented() -> None:
-    """file_read() raises NotImplementedError and mentions async variant."""
-    import pytest
-
-    driver = SSHDriver(host="localhost", working_dir="/workspace")
-    with pytest.raises(NotImplementedError, match="file_read_async"):
-        driver.file_read("/workspace/test.txt")
-
-
-def test_file_write_sync_raises_not_implemented() -> None:
-    """file_write() raises NotImplementedError and mentions async variant."""
-    import pytest
-
-    driver = SSHDriver(host="localhost", working_dir="/workspace")
-    with pytest.raises(NotImplementedError, match="file_write_async"):
-        driver.file_write("/workspace/test.txt", "content")
-
-
-def test_file_glob_sync_raises_not_implemented() -> None:
-    """file_glob() raises NotImplementedError and mentions async variant."""
-    import pytest
-
-    driver = SSHDriver(host="localhost", working_dir="/workspace")
-    with pytest.raises(NotImplementedError, match="file_glob_async"):
-        driver.file_glob("*.py", path=".")

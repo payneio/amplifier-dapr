@@ -92,6 +92,7 @@ class DescribeResponse(BaseModel):
     content_paths: list[str] = Field(default_factory=list)
     modes: list[ModeCapability] = Field(default_factory=list)
     agents: list[AgentCapability] = Field(default_factory=list)
+    behaviors: list[str] = Field(default_factory=list)
 
 
 class HealthResponse(BaseModel):

@@ -20,6 +20,9 @@ def _make_mock_client(events: list[SSEEvent]) -> MagicMock:
 
     mock = MagicMock()
     mock.stream_turn = mock_stream
+    mock.create_session = AsyncMock(
+        return_value={"session_id": "test-session", "machine_instance_id": "mi-1"}
+    )
     mock.__aenter__ = AsyncMock(return_value=mock)
     mock.__aexit__ = AsyncMock(return_value=None)
     return mock
@@ -45,6 +48,9 @@ class TestAgentFlag:
 
         mock_client = MagicMock()
         mock_client.stream_turn = capturing_stream
+        mock_client.create_session = AsyncMock(
+            return_value={"session_id": "test-session", "machine_instance_id": "mi-1"}
+        )
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=None)
 
@@ -66,6 +72,9 @@ class TestAgentFlag:
 
         mock_client = MagicMock()
         mock_client.stream_turn = capturing_stream
+        mock_client.create_session = AsyncMock(
+            return_value={"session_id": "test-session", "machine_instance_id": "mi-1"}
+        )
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=None)
 
@@ -87,6 +96,9 @@ class TestAgentFlag:
 
         mock_client = MagicMock()
         mock_client.stream_turn = capturing_stream
+        mock_client.create_session = AsyncMock(
+            return_value={"session_id": "test-session", "machine_instance_id": "mi-1"}
+        )
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=None)
 
@@ -108,6 +120,9 @@ class TestAgentFlag:
 
         mock_client = MagicMock()
         mock_client.stream_turn = capturing_stream
+        mock_client.create_session = AsyncMock(
+            return_value={"session_id": "test-session", "machine_instance_id": "mi-1"}
+        )
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=None)
 

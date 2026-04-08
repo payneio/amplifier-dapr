@@ -48,7 +48,7 @@ class SSHDriver(MachineDriver):
         self._conn: Any | None = None
         self._sftp: Any | None = None
 
-    async def connect(self) -> None:  # type: ignore[override]
+    async def connect(self) -> None:
         """Establish an SSH connection using asyncssh."""
         if self._conn is not None:
             raise RuntimeError(
@@ -61,7 +61,7 @@ class SSHDriver(MachineDriver):
             username=self.username,
         )
 
-    async def disconnect(self) -> None:  # type: ignore[override]
+    async def disconnect(self) -> None:
         """Close the SSH connection."""
         if self._conn is not None:
             self._conn.close()
@@ -85,7 +85,7 @@ class SSHDriver(MachineDriver):
             self._sftp = await self._conn.start_sftp_client()  # type: ignore[union-attr]
         return self._sftp
 
-    async def exec(  # type: ignore[override]
+    async def exec(
         self,
         command: str,
         timeout: int = 30,
@@ -109,7 +109,7 @@ class SSHDriver(MachineDriver):
             exit_code=result.returncode if result.returncode is not None else -1,
         )
 
-    async def exec_background(  # type: ignore[override]
+    async def exec_background(
         self,
         command: str,
         working_dir: str | None = None,
@@ -127,9 +127,9 @@ class SSHDriver(MachineDriver):
             pid = -1
         return {"pid": pid, "status": "running"}
 
-    # ── Async file operations ─────────────────────────────────────────────────
+    # —— File operations ————————————————————————————————————————————————
 
-    async def file_read_async(
+    async def file_read(
         self,
         path: str,
         offset: int = 1,
@@ -158,7 +158,7 @@ class SSHDriver(MachineDriver):
         except OSError:
             return None
 
-    async def file_write_async(self, path: str, content: str) -> bool:
+    async def file_write(self, path: str, content: str) -> bool:
         """Create parent dirs (mkdir -p) and write content via SFTP. Returns True on success."""
         if self._conn is None:
             raise RuntimeError("SSHDriver is not connected — call connect() first")
@@ -177,10 +177,10 @@ class SSHDriver(MachineDriver):
         except (OSError, _AsyncSSHError):
             return False
         except Exception:
-            logger.exception("Unexpected error in file_write_async")
+            logger.exception("Unexpected error in file_write")
             return False
 
-    async def file_edit_async(
+    async def file_edit(
         self,
         path: str,
         old_string: str,
@@ -191,7 +191,7 @@ class SSHDriver(MachineDriver):
         if self._conn is None:
             raise RuntimeError("SSHDriver is not connected — call connect() first")
         try:
-            read_result = await self.file_read_async(path)
+            read_result = await self.file_read(path)
             if read_result is None:
                 return None
             count = read_result.content.count(old_string)
@@ -200,15 +200,15 @@ class SSHDriver(MachineDriver):
             else:
                 new_content = read_result.content.replace(old_string, new_string, 1)
                 count = min(count, 1)
-            success = await self.file_write_async(path, new_content)
+            success = await self.file_write(path, new_content)
             return FileEditResult(success=success, replacements_made=count)
         except (OSError, _AsyncSSHError):
             return None
         except Exception:
-            logger.exception("Unexpected error in file_edit_async")
+            logger.exception("Unexpected error in file_edit")
             return None
 
-    async def file_list_async(self, path: str = ".") -> list[dict[str, Any]] | None:
+    async def file_list(self, path: str = ".") -> list[dict[str, Any]] | None:
         """List directory entries via SFTP readdir(). Returns sorted list of dicts."""
         if self._conn is None:
             raise RuntimeError("SSHDriver is not connected — call connect() first")
@@ -240,10 +240,10 @@ class SSHDriver(MachineDriver):
         except (OSError, _AsyncSSHError):
             return None
         except Exception:
-            logger.exception("Unexpected error in file_list_async")
+            logger.exception("Unexpected error in file_list")
             return None
 
-    async def file_glob_async(
+    async def file_glob(
         self,
         pattern: str,
         path: str = ".",
@@ -274,10 +274,10 @@ class SSHDriver(MachineDriver):
         except (OSError, _AsyncSSHError):
             return None
         except Exception:
-            logger.exception("Unexpected error in file_glob_async")
+            logger.exception("Unexpected error in file_glob")
             return None
 
-    async def file_grep(  # type: ignore[override]
+    async def file_grep(
         self,
         pattern: str,
         path: str = ".",
@@ -394,48 +394,3 @@ class SSHDriver(MachineDriver):
             else:
                 result.append({"file": "", "line": 0, "content": line})
         return result
-
-    # ── Sync ABC wrappers (use async variants for SSH operations) ─────────────
-
-    def file_read(  # type: ignore[override]
-        self,
-        path: str,
-        offset: int = 1,
-        limit: int | None = None,
-    ) -> FileReadResult | None:
-        raise NotImplementedError(
-            "SSHDriver.file_read() — use file_read_async() for SSH file operations"
-        )
-
-    def file_write(self, path: str, content: str) -> bool:  # type: ignore[override]
-        raise NotImplementedError(
-            "SSHDriver.file_write() — use file_write_async() for SSH file operations"
-        )
-
-    def file_edit(  # type: ignore[override]
-        self,
-        path: str,
-        old_string: str,
-        new_string: str,
-        replace_all: bool = False,
-    ) -> FileEditResult | None:
-        raise NotImplementedError(
-            "SSHDriver.file_edit() — use file_edit_async() for SSH file operations"
-        )
-
-    def file_list(self, path: str = ".") -> list[dict[str, Any]] | None:  # type: ignore[override]
-        raise NotImplementedError(
-            "SSHDriver.file_list() — use file_list_async() for SSH file operations"
-        )
-
-    def file_glob(  # type: ignore[override]
-        self,
-        pattern: str,
-        path: str = ".",
-        exclude: list[str] | None = None,
-        type_filter: str = "file",
-        include_ignored: bool = False,
-    ) -> FileGlobResult | None:
-        raise NotImplementedError(
-            "SSHDriver.file_glob() — use file_glob_async() for SSH file operations"
-        )

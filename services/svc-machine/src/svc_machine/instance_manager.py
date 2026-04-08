@@ -38,7 +38,7 @@ class InstanceManager:
             ValueError: If driver_type is not recognised.
         """
         driver = self._create_driver(driver_type, config)
-        await driver.connect()  # type: ignore[misc]
+        await driver.connect()
         instance_id = uuid.uuid4().hex[:12]
         self._instances[instance_id] = driver
         return instance_id
@@ -71,7 +71,7 @@ class InstanceManager:
         if instance_id not in self._instances:
             raise InstanceNotFoundError(instance_id)
         driver = self._instances.pop(instance_id)
-        await driver.disconnect()  # type: ignore[misc]
+        await driver.disconnect()
 
     def _create_driver(self, driver_type: str, config: dict[str, Any]) -> MachineDriver:
         """Factory: instantiate the correct driver for driver_type.
@@ -91,10 +91,16 @@ class InstanceManager:
         if driver_type == "ssh":
             from svc_machine.ssh_driver import SSHDriver  # lazy import
 
+            host = config.get("host")
+            if not host:
+                raise ValueError(
+                    "SSH driver requires 'host' in config "
+                    "(e.g. 'host.docker.internal' for Docker containers)"
+                )
             return SSHDriver(
-                host=config["host"],
+                host=host,
                 port=config.get("port", 22),
-                username=config["username"],
+                username=config.get("username"),
                 working_dir=config.get("working_dir", "."),
             )
         raise ValueError(f"Unknown driver type: {driver_type!r}")
